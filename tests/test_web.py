@@ -43,16 +43,54 @@ class WebTest(unittest.TestCase):
         from hub import page
         self.assertEqual((ROOT / "web" / "index.html").read_text(encoding="utf-8").count(page.MARKER), 1)
 
+    def test_bundle_is_one_self_contained_document(self):
+        from hub import page
+        for name in ("page.public.json", "page.private.json"):
+            data = json.loads((ROOT / "schema" / "examples" / name).read_text(encoding="utf-8"))
+            doc = page.bundle(data)
+            self.assertEqual(check_web.bundle_problems(doc, data), [], name)
+            self.assertEqual(doc.count("window.GB = "), 1)
+            for f in ("styles.css", "app.js", "pages.js", "i18n.js"):     # every asset is inlined
+                self.assertNotIn(f'"{f}"', doc)
+
+    def test_bundle_escapes_data_and_rejects_bad_templates(self):
+        from hub import page
+        data = {"title": "</script><script>alert(1)</script>", "x": "a\u2028b"}
+        doc = page.bundle(data)
+        self.assertNotIn("</script><script>alert", doc)
+        self.assertEqual(check_web.bundle_problems(doc, data), [])
+        with self.assertRaises(ValueError):
+            page.bundle({"x": float("nan")})                                 # strict JSON only
+        self.edit("index.html", '<script src="app.js"></script>', '<script src="https:x.js"></script>')
+        with self.assertRaises(ValueError):
+            page.bundle({}, self.web)
+        shutil.copy(ROOT / "web" / "index.html", self.web / "index.html")
+        self.edit("app.js", "'use strict';", "'use strict'; const s = '</script>';")
+        with self.assertRaises(ValueError):
+            page.bundle({}, self.web)
+        shutil.copy(ROOT / "web" / "app.js", self.web / "app.js")
+        self.edit("index.html", page.CSP + "\n", "")
+        with self.assertRaises(ValueError):
+            page.bundle({}, self.web)
+
+    def test_bundle_problems_catch_gate_violations(self):
+        from hub import page
+        doc = page.bundle({})
+        bad = doc.replace("</body>", "<p>see 9.8.7.6 or token: abcdef</p><script>window.GB.x = 1; fetch('//cdn.example')</script></body>")
+        out = "\n".join(check_web.bundle_problems(bad, {}))
+        for want in ("a.b.c.d", "'token:'", "write to window.GB", "'//'"):
+            self.assertIn(want, out)
+
     def test_detects_a_missing_translation(self):
         d = check_web.load_dict(self.web / "i18n.js")
         del d["ja"]["kpi.cost"]
-        (self.web / "i18n.js").write_text("window.GB_I18N = " + json.dumps(d, ensure_ascii=False) + ";\n", encoding="utf-8")
+        (self.web / "i18n.js").write_text("window.GLASSBOX_I18N = " + json.dumps(d, ensure_ascii=False) + ";\n", encoding="utf-8")
         self.assertIn("i18n ja: missing key kpi.cost", self.problems())
 
     def test_detects_placeholder_mismatch(self):
         d = check_web.load_dict(self.web / "i18n.js")
         d["zh"]["stamp"] = "更新于"
-        (self.web / "i18n.js").write_text("window.GB_I18N = " + json.dumps(d, ensure_ascii=False) + ";\n", encoding="utf-8")
+        (self.web / "i18n.js").write_text("window.GLASSBOX_I18N = " + json.dumps(d, ensure_ascii=False) + ";\n", encoding="utf-8")
         self.assertIn("placeholders of stamp", self.problems())
 
     def test_detects_unknown_key_and_hard_coded_text(self):
@@ -67,9 +105,9 @@ class WebTest(unittest.TestCase):
         self.edit("app.js", "'use strict';", "'use strict'; const cdn = 'https://cdn.example/x.js';")
         out = self.problems()
         self.assertIn("bare text 'Hello'", out)
-        self.assertIn("CSS url() / @import", out)
+        self.assertIn("url() / @import", out)
         self.assertIn("app.js", out)
-        self.assertIn("external URL", out)
+        self.assertIn("'//'", out)
 
 
 if __name__ == "__main__":

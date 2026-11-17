@@ -1,5 +1,5 @@
-/* glassbox interface text: zh / ja / en. The object below is strict JSON (scripts/check_i18n.py parses it). */
-window.GB_I18N = {
+/* glassbox interface text: zh / ja / en. The object below is strict JSON (scripts/check_web.py parses it). */
+window.GLASSBOX_I18N = {
  "zh": {
   "brand": "glassbox",
   "app.title": "glassbox 驾驶舱",
@@ -19,7 +19,7 @@ window.GB_I18N = {
   "view.private": "私有视图",
   "view.public": "公开快照",
   "stamp": "更新于 {t}",
-  "nodata": "没有页面数据（window.GB 不存在）",
+  "nodata": "没有页面数据",
   "none": "无",
   "empty": "暂无数据",
   "yes": "是",
@@ -331,7 +331,7 @@ window.GB_I18N = {
   "view.private": "プライベート",
   "view.public": "公開スナップショット",
   "stamp": "更新 {t}",
-  "nodata": "ページデータがありません（window.GB がありません）",
+  "nodata": "ページデータがありません",
   "none": "なし",
   "empty": "データなし",
   "yes": "はい",
@@ -643,7 +643,7 @@ window.GB_I18N = {
   "view.private": "Private view",
   "view.public": "Public snapshot",
   "stamp": "Updated {t}",
-  "nodata": "No page data (window.GB is missing)",
+  "nodata": "No page data",
   "none": "None",
   "empty": "No data",
   "yes": "Yes",

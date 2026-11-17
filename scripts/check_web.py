@@ -11,8 +11,11 @@ i18n (S10c):
   - no CJK / kana / Hangul / full-width text outside web/i18n.js, so interface text cannot be
     hard-coded around the dictionary;
   - index.html has no bare text nodes (digits and punctuation aside) and no literal title / aria-label / placeholder attributes.
-Self-contained page (PLAN §3, S12): no "://" anywhere in web/ (fonts, CDNs, images, analytics),
-no CSS url() or @import.
+Self-contained page (PLAN §3, S12; the publish gate's rules): in web/ sources no "://" or "//"
+(absolute or protocol-relative URLs), no CSS url() or @import, no a.b.c.d numbers, no
+"token:" / "password=" followed by a value, and no writes to window.GB. bundle_problems() applies
+the same rules to a bundled page (hub.page.bundle) outside its data script, and checks the CSP
+meta comes first, nothing is loaded by src / link, and the data is one strict-JSON script.
 """
 import json
 import re
@@ -29,9 +32,55 @@ LITERAL = re.compile(r"'((?:[^'\\\n]|\\.)*)'")
 PREFIX = re.compile(r"'([a-z][A-Za-z]*(?:\.[A-Za-z0-9-]+)*\.)'\s*(?:\+|,)")
 
 
+FOUR = re.compile(r"(?<![\d.])\d+\.\d+\.\d+\.\d+(?![\d.])")
+SECRETISH = re.compile(r"(?:token\s*:|password\s*=)\s*\S{4,}", re.I)
+GB_WRITE = re.compile(r"\bGB\s*(?:\.\s*\w+\s*|\[[^\]]*\]\s*)(?:[-+*/]?=(?!=)|\+\+|--)|\bwindow\s*\.\s*GB\s*=(?!=)|globalThis\s*\.\s*GB\b")
+
+
+def code_problems(name, src):
+    """URL, number, secret-shaped and GB-write rules for one source text."""
+    out = []
+    for n, line in enumerate(src.splitlines(), 1):
+        if "//" in line:
+            out.append(f"{name}:{n}: '//' (absolute or protocol-relative URL)")
+        if re.search(r"url\(|@import", line, re.I):
+            out.append(f"{name}:{n}: url() / @import")
+        if FOUR.search(line):
+            out.append(f"{name}:{n}: a.b.c.d number")
+        if SECRETISH.search(line):
+            out.append(f"{name}:{n}: 'token:' / 'password=' with a value")
+        if GB_WRITE.search(line):
+            out.append(f"{name}:{n}: write to window.GB")
+    return out
+
+
+def bundle_problems(doc, page):
+    """Checks on a bundled document (hub.page.bundle) for the given page data."""
+    from hub.page import CSP
+    out = []
+    head = doc.split("<head>", 1)[1].lstrip() if "<head>" in doc else ""
+    if not head.startswith(CSP):
+        out.append("bundle: CSP meta is not the first element of <head>")
+    if re.search(r"<script\b[^>]*\bsrc=|<link\b", doc, re.I):
+        out.append("bundle: loads a file (script src / link)")
+    data = re.findall(r"<script>window\.GB = (.*?);</script>", doc, re.S)
+    if len(data) != 1:
+        out.append(f"bundle: {len(data)} window.GB scripts (want 1)")
+    else:
+        try:
+            if json.loads(data[0], parse_constant=lambda c: (_ for _ in ()).throw(ValueError(c))) != page:
+                out.append("bundle: embedded data differs from the input")
+        except ValueError as e:
+            out.append(f"bundle: embedded data is not strict JSON ({e})")
+    rest = re.sub(r"<script>window\.GB = .*?;</script>", "", doc, flags=re.S)
+    rest = rest.replace(CSP, "")
+    out += code_problems("bundle", rest)
+    return out
+
+
 def load_dict(path=I18N):
     text = path.read_text(encoding="utf-8")
-    start = text.index("window.GB_I18N = ") + len("window.GB_I18N = ")
+    start = text.index("window.GLASSBOX_I18N = ") + len("window.GLASSBOX_I18N = ")
     body = text[start:].rstrip().rstrip(";")
     return json.loads(body)
 
@@ -120,11 +169,7 @@ def check(web=WEB):
                 m = WIDE.search(line)
                 if m:
                     problems.append(f"{rel}:{n}: hard-coded wide text {line[max(0, m.start() - 10):m.start() + 20].strip()!r}")
-        for n, line in enumerate(src.splitlines(), 1):
-            if "://" in line:
-                problems.append(f"{rel}:{n}: external URL (the page must not load anything from outside)")
-            if p.suffix == ".css" and re.search(r"url\(|@import", line):
-                problems.append(f"{rel}:{n}: CSS url() / @import")
+        problems += code_problems(rel, src)
     return problems
 
 

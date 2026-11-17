@@ -1,8 +1,8 @@
 /* glassbox front end core: i18n, data normalisation, formatters, shared components, background, router.
-   Reads only window.GB (glassbox.page/1, schema/CONTRACT.md §2). Every key may be missing or null. */
+   Reads the page data only (glassbox.page/1, schema/CONTRACT.md §2). Every key may be missing or null. */
 (function(){
 'use strict';
-const G = window.GBX = {pages: {}};
+const G = window.GLASSBOX_APP = {pages: {}};
 const Q = new URLSearchParams(location.search);
 const FROZEN = Q.has('t') && isFinite(parseFloat(Q.get('t'))) ? parseFloat(Q.get('t')) : null;
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -10,9 +10,9 @@ G.STATIC = FROZEN !== null || REDUCE;
 const $ = G.$ = id => document.getElementById(id);
 
 /* ------------------------------------------------------------------ i18n */
-const DICT = window.GB_I18N || {};
+const DICT = window.GLASSBOX_I18N || {};
 const LANGS = ['zh', 'ja', 'en'], LOCALE = {zh: 'zh-CN', ja: 'ja-JP', en: 'en-US'};
-const missing = window.GB_I18N_MISSING = new Set();
+const missing = window.GLASSBOX_I18N_MISSING = new Set();
 function store(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } return null; }
 function pickLang(){
   const q = (Q.get('lang') || '').toLowerCase();
@@ -187,7 +187,7 @@ G.T = v => v && typeof v === 'object'
   : esc(v == null ? '—' : v);
 G.Tplain = v => v && typeof v === 'object' ? (v.group === 'private' ? t('text.private') : t('text.masked')) : (v == null ? '—' : String(v));
 G.Tkey = v => v && typeof v === 'object' ? (v.group === 'private' ? '\u0000private' : '\u0000masked') : String(v == null ? '' : v);
-G.safeUrl = u => typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u) ? u : null;
+G.safeLink = u => typeof u === 'string' && /^https:[/][/][^\s"'<>]+$/.test(u) ? u : null;
 const BLUE = '#6c97d6', HI = '#efeadd', OR = '#dba843', BAD = '#e0645a', OK = '#79b98a', WARN = '#e3894d', VIO = '#a48ee0', DIM = '#a6a297';
 G.C = {BLUE, HI, OR, BAD, OK, WARN, VIO, DIM};
 const COL = G.COL = [BLUE, HI, OR, BAD, OK, WARN, VIO, DIM];

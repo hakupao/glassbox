@@ -2,7 +2,7 @@
    through t() (web/i18n.js); data text (project names, commit titles, model names) is shown as is. */
 (function(){
 'use strict';
-const G = window.GBX, D = G.D, P = G.pages, F = G.F, t = G.t, esc = G.esc, T = G.T, bd = G.bd, C = G.C;
+const G = window.GLASSBOX_APP, D = G.D, P = G.pages, F = G.F, t = G.t, esc = G.esc, T = G.T, bd = G.bd, C = G.C;
 const sum = G.sum, max = G.max;
 const PUBLIC = D.view === 'public';
 const AGENTS = ['claude-code', 'codex'];
@@ -115,7 +115,7 @@ function commitItem(a){
     <li class="xd" id="xd-${key}" hidden><div class="box" data-slot></div></li>`;
 }
 function commitDetail(a){
-  const url = G.safeUrl(a.url);
+  const url = G.safeLink(a.url);
   const rows = [['commit.title', esc(a.title)], ['commit.repo', T(a.repo)], ['commit.source', srcBadge(a.source)],
     ['commit.time', esc(F.full(a.t))], ['commit.branch', a.branch ? esc(a.branch) : '—'], ['commit.hash', a.hash ? `<span class="m">${esc(a.hash)}</span>` : '—'],
     ['commit.machine', a.machine ? G.code(a.machine) : '—'], ['commit.pushed', esc(t(a.pushed ? 'yes' : 'no'))],

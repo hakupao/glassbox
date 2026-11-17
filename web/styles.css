@@ -1,4 +1,4 @@
-/* glassbox front end. Visual base: design/mockups/c-v9.html (slate). No external resources. */
+/* glassbox front end (c-v9 design, slate). No external resources: hub.page.bundle inlines this file. */
 :root{
   --bg:#14171c; --panel:rgba(53,60,72,.75); --blur:3px;
   --fg:#6c97d6; --hi:#efeadd; --text:#d8d3c4; --dim:#a6a297; --or:#dba843;

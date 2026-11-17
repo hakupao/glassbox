@@ -15,6 +15,7 @@ Optional hub config used here:
 """
 import json
 import re
+from pathlib import Path
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -399,13 +400,47 @@ def build(conn, cfg, now=None):
     }
 
 
+WEB = Path(__file__).resolve().parent.parent / "web"
 MARKER = '<script id="gb-data"></script>'      # in web/index.html; replaced by the page data
+# First element of <head> on every page, private and public (the publish gate checks it verbatim).
+CSP = ('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; '
+       'style-src \'unsafe-inline\'; img-src data:; font-src data:; connect-src \'none\'; base-uri \'none\'; '
+       'form-action \'none\'">')
+_LINK = re.compile(r'<link rel="stylesheet" href="([a-z0-9-]+\.css)">')
+_SCRIPT = re.compile(r'<script src="([a-z0-9-]+\.js)"></script>')
+_CLOSE = re.compile(r"</(script|style)", re.I)
 
 
 def html(page, template):
-    """web/index.html with the page data inlined as window.GB (CONTRACT §2). The public snapshot uses
-    the same template and marker."""
-    data = json.dumps(page, ensure_ascii=False).replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-    if MARKER not in template:
-        raise ValueError("template has no gb-data script tag")
-    return template.replace(MARKER, f'<script id="gb-data">window.GB={data};</script>', 1)
+    """The template with the page data inlined as its own script, `window.GB = <strict JSON>;`
+    (CONTRACT §2). "<" and the JS line separators are escaped, which keeps the JSON valid."""
+    data = json.dumps(page, ensure_ascii=False, allow_nan=False)
+    data = data.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    if template.count(MARKER) != 1:
+        raise ValueError("template must have exactly one gb-data script tag")
+    return template.replace(MARKER, f"<script>window.GB = {data};</script>", 1)
+
+
+def bundle(page, web=WEB):
+    """One self-contained HTML document for page/1 data: web/index.html with every stylesheet and
+    script inlined and the data injected. Used for the private view and the public snapshot alike;
+    the CSP allows inline code only, so nothing may be loaded from a file or URL."""
+    web = Path(web)
+    template = (web / "index.html").read_text(encoding="utf-8")
+    head = template.split("<head>", 1)[1].lstrip() if "<head>" in template else ""
+    if not head.startswith(CSP):
+        raise ValueError("web/index.html: the CSP meta must be the first element of <head>")
+
+    def inline(kind):
+        def sub(m):
+            text = (web / m.group(1)).read_text(encoding="utf-8")
+            if _CLOSE.search(text):
+                raise ValueError(f"web/{m.group(1)} contains a closing script/style tag")
+            return f"<{kind}>\n{text}</{kind}>"
+        return sub
+
+    out = _LINK.sub(inline("style"), template)
+    out = _SCRIPT.sub(inline("script"), out)
+    if re.search(r"<link\b|<script\b[^>]*\bsrc=", out, re.I):
+        raise ValueError("web/index.html references a file the bundler cannot inline")
+    return html(page, out)

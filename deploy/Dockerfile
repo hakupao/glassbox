@@ -11,8 +11,8 @@ RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin glas
 WORKDIR /app
 COPY hub/ /app/hub/
 # Runtime dependencies of the hub besides hub/: the price table (probe/pricing.py, pricing.json,
-# imported by hub/page.py; all of probe/ is copied) and the front end web/, which hub/server.py
-# serves from <repo root>/web (index.html is the private-view template, the rest static assets).
+# imported by hub/page.py; all of probe/ is copied) and the front end web/, which hub/page.py
+# bundles from <repo root>/web into the single inlined page that / serves.
 COPY probe/ /app/probe/
 COPY web/ /app/web/
 COPY deploy/entrypoint.sh /usr/local/bin/glassbox-entrypoint
