@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>glassbox · 网点纸面 v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=Noto+Serif+SC:wght@600;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#ebe7db; --ink:#16140f; --ink2:#5d584b; --red:#d9291c;
+  --serif:"Noto Serif SC","Songti SC","STSong","Source Han Serif SC",serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--paper)}
+body{background:var(--paper);color:var(--ink);font:400 14px/1.6 var(--mono);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.wrap{max-width:1360px;margin:0 auto;padding:0 16px}
+@media(min-width:900px){.wrap{padding:0 32px}}
+.small{font-size:11px;line-height:1.5;color:var(--ink2)}
+.red{color:var(--red)}
+:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+svg{display:block}
+.cellsvg{shape-rendering:crispEdges}
+
+.mast{border-bottom:4px double var(--ink);padding:14px 0 10px}
+.mast .row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.brand{font:900 30px/1 var(--serif);letter-spacing:-.02em}
+.brand i{font-style:normal;color:var(--red)}
+.snap{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--ink);padding:2px 8px;font-size:11px}
+.snap b{width:6px;height:6px;background:var(--red);display:inline-block}
+.mast .meta{display:flex;justify-content:space-between;margin-top:8px;gap:12px;flex-wrap:wrap}
+
+/* hero: 方块格点背景，标题按字形让位 */
+.hero{position:relative;border-bottom:1px solid var(--ink);height:400px;overflow:hidden}
+@media(min-width:900px){.hero{height:540px}}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero h1{position:absolute;left:0;bottom:16px;right:0;font:900 clamp(34px,7.4vw,104px)/1.06 var(--serif);letter-spacing:-.03em;text-wrap:balance;max-width:14em}
+.hero h1 em{font-style:normal;color:var(--red)}
+.hero .cap{position:absolute;right:0;top:12px;text-align:right;padding:2px 0 2px 8px}
+@media(max-width:600px){.hero .cap{display:none}}
+
+.sec{padding:22px 0;border-bottom:1px solid var(--ink)}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.sec-h h2{font:900 21px/1.2 var(--serif)}
+.sec-h h2 span{font:500 11px var(--mono);color:var(--red);margin-right:8px}
+
+.kpis{display:grid;grid-template-columns:1fr;gap:0}
+@media(min-width:700px){.kpis{grid-template-columns:1fr 1fr}}
+@media(min-width:1100px){.kpis{grid-template-columns:.8fr 1.5fr 1fr 1fr}}
+.kpi{padding:14px 0;border-top:1px solid var(--ink);min-width:0}
+.kpi:first-child{border-top:0}
+@media(min-width:700px){.kpi{padding:4px 18px;border-top:0;border-left:1px solid var(--ink)}.kpi:nth-child(odd){border-left:0;padding-left:0}.kpi:nth-child(n+3){border-top:1px solid var(--ink);padding-top:16px;margin-top:12px}}
+@media(min-width:1100px){.kpi:nth-child(n+3){border-top:0;margin-top:0;padding-top:4px}.kpi:nth-child(odd){border-left:1px solid var(--ink);padding-left:18px}.kpi:first-child{border-left:0;padding-left:0}}
+.kpi .lab{font-size:12px;color:var(--ink2)}
+.kpi .big{font:900 46px/1.1 var(--serif);letter-spacing:-.02em;margin:2px 0}
+.kpi .big small{font:500 13px var(--mono);letter-spacing:0;color:var(--ink2);margin-left:4px}
+.stamp{display:inline-block;border:1.5px solid var(--red);color:var(--red);padding:0 6px;font-size:11px;transform:rotate(-2deg);margin-top:4px}
+.bar{margin:8px 0}
+.tok-list{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px;font-size:12px}
+.tok-list div{display:flex;justify-content:space-between;gap:6px}
+.tok-list b{font-weight:500}
+.sw{display:inline-block;width:6px;height:6px;margin-right:6px;vertical-align:1px;background:var(--ink)}
+
+.two{display:grid;gap:28px}
+@media(min-width:1000px){.two{grid-template-columns:1.55fr 1fr}}
+.axis{display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid var(--ink);padding-top:3px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+
+.quotas{display:grid;gap:0}
+@media(min-width:900px){.quotas{grid-template-columns:repeat(3,1fr)}}
+.q{padding:14px 0;border-top:1px solid var(--ink);min-width:0}
+.q:first-child{border-top:0}
+@media(min-width:900px){.q{border-top:0;border-left:1px solid var(--ink);padding:4px 20px}.q:first-child{border-left:0;padding-left:0}.q:last-child{padding-right:0}}
+.q h3{font:900 17px/1.2 var(--serif)}
+.q h3 span{font:400 12px var(--mono);color:var(--ink2);margin-left:6px}
+.q .pct{font:900 54px/1 var(--serif);margin:8px 0 6px;letter-spacing:-.03em}
+.q .pct small{font-size:20px}
+.q dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:12px;margin:8px 0 10px}
+.q dt{color:var(--ink2)}
+.q dd{text-align:right}
+
+.feed{list-style:none}
+.feed li{display:grid;grid-template-columns:92px 1fr;gap:4px 16px;padding:9px 0;border-top:1px dotted var(--ink2)}
+.feed li:first-child{border-top:0}
+@media(min-width:900px){.feed li{grid-template-columns:110px 220px 1fr 170px;gap:16px;align-items:baseline}}
+.feed .t{font-size:12px;color:var(--ink2)}
+.feed .repo{font-weight:700}
+.feed .priv{font-weight:700;background:var(--ink);color:var(--paper);padding:0 6px;display:inline-block}
+.feed .tt{font-family:var(--serif);font-weight:600;font-size:15px;grid-column:2}
+@media(min-width:900px){.feed .tt{grid-column:auto}}
+.feed .ref{font-size:11px;color:var(--ink2);grid-column:2}
+@media(min-width:900px){.feed .ref{grid-column:auto;text-align:right}}
+.foot{padding:18px 0 40px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div class="row">
+      <div class="brand">glass<i>box</i></div>
+      <div class="snap"><b></b><span id="snap"></span></div>
+    </div>
+    <div class="meta small"><span id="issue"></span><span>AI 开发驾驶舱 · Claude Code / Codex</span></div>
+  </header>
+
+  <section class="hero" id="heroBox" aria-label="今日概览主视觉">
+    <canvas id="hero" role="img" aria-label="由近 30 天费用生成的方块格点地形，起伏越高代表当天费用越高，最右侧红色是今天"></canvas>
+    <div class="cap small mask" id="heroCap"></div>
+    <h1 id="headline" class="mask"></h1>
+  </section>
+
+  <section class="sec" aria-labelledby="h-today">
+    <div class="sec-h"><h2 id="h-today"><span>图 1</span>今日用量</h2><span class="small" id="todaySub"></span></div>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="sec two">
+    <div>
+      <div class="sec-h"><h2><span>图 2</span>近 30 天费用</h2><span class="small">API 等价估算 · 每列一天</span></div>
+      <div id="trend" role="img" aria-label="近 30 天每日 API 等价费用方块柱状图"></div>
+      <div class="axis small"><span id="trL"></span><span id="trM"></span><span id="trR" class="red"></span></div>
+      <div class="legend small"><span><i class="sw"></i>Claude Code</span><span><i class="sw" style="opacity:.28"></i>Codex</span><span><i class="sw" style="background:var(--red)"></i>今天</span></div>
+    </div>
+    <div id="byAgent">
+      <div class="sec-h"><h2><span>表 1</span>今日分布</h2></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="h-quota">
+    <div class="sec-h"><h2 id="h-quota"><span>图 3</span>额度</h2><span class="small">配速为正，表示用得比匀速更快</span></div>
+    <div class="quotas" id="quotas"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><h2><span>图 4</span>GitHub 贡献</h2><span class="small" id="contribSub"></span></div>
+    <div id="heat" role="img" aria-label="近 53 周 GitHub 贡献方块热力图"></div>
+    <div class="small" style="margin-top:8px;display:flex;gap:6px;align-items:center">少 <span id="legend" style="display:flex;gap:3px"></span> 多</div>
+  </section>
+
+  <section class="sec" style="border-bottom:0">
+    <div class="sec-h"><h2><span>图 5</span>最近活动</h2><span class="small">私有项目只显示「私有项目」，不带仓库名、分支和哈希</span></div>
+    <ul class="feed" id="feed"></ul>
+  </section>
+
+  <footer class="foot small" style="border-top:4px double var(--ink)">
+    <span>只读快照，不会写入任何数据</span><span>费用均为按公开价格折算的 API 等价估算，并非实际账单</span>
+  </footer>
+</div>
+
+<script src="sample-data.js"></script>
+<script>
+(function(){
+const G = window.GB, $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('en-US');
+const M = n => (n/1e6).toFixed(2)+'M';
+const snapT = new Date(G.generatedAt);
+const p2 = n => String(n).padStart(2,'0');
+const stamp = d => `${d.getMonth()+1}月${d.getDate()}日 ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+const INK='#16140f', RED='#d9291c';
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const qs = new URLSearchParams(location.search);
+const frozenT = qs.has('t') ? parseFloat(qs.get('t')) : null;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+$('snap').textContent = `只读快照 · 更新于 ${stamp(snapT)}`;
+const doy = Math.round((Date.UTC(2026,10,17)-Date.UTC(2026,0,0))/864e5);
+$('issue').textContent = `2026 年第 ${doy} 日 · @${G.owner}`;
+
+const T = G.today, tr = G.trend30d, trC = G.trend30dCodex;
+const maxV = Math.max(...tr), avg = tr.reduce((a,b)=>a+b,0)/tr.length;
+$('headline').innerHTML = `今天又写下 <em>${fmt(T.requests)}</em> 次请求，<br>花费高于近 30 天均值`;
+$('heroCap').innerHTML = `图 0 · 地形由近 30 天费用生成<br>每 1/30 宽 = 一天，红色 = 今天`;
+$('todaySub').textContent = `${T.sessions} 个会话 · 近 30 天日均 $${avg.toFixed(1)}`;
+
+/* ---------- 细方块 SVG：点径固定，按明度分级，靠列数铺满 ---------- */
+// fn(c,r) -> [alpha, color] | null ; 返回 svg 字符串
+function cellsSVG(nc, nr, pitch, fn, size){
+  const sz = size || Math.min(5.4, pitch*.82), off=(pitch-sz)/2; let o='';
+  for(let c=0;c<nc;c++)for(let r=0;r<nr;r++){
+    const v=fn(c,r); if(!v) continue;
+    o+=`<rect x="${(c*pitch+off).toFixed(2)}" y="${(r*pitch+off).toFixed(2)}" width="${sz.toFixed(2)}" height="${sz.toFixed(2)}" fill="${v[1]||INK}" fill-opacity="${v[0].toFixed(2)}"/>`;
+  }
+  const w=nc*pitch,h=nr*pitch;
+  return `<svg class="cellsvg" width="${w.toFixed(1)}" height="${h.toFixed(1)}" viewBox="0 0 ${w.toFixed(1)} ${h.toFixed(1)}" aria-hidden="true">${o}</svg>`;
+}
+// 一行/几行的横条：segs = [[份额, alpha, color]]
+function barSVG(W, rows, segs){
+  const nc=Math.floor(W/6), pitch=W/nc, tot=segs.reduce((a,s)=>a+s[0],0); const edge=[]; let acc=0, used=0;
+  segs.forEach((s,k)=>{acc+=s[0]; edge.push(k===segs.length-1?nc:Math.round(acc/tot*nc));});
+  return cellsSVG(nc,rows,pitch,c=>{let k=0;while(c>=edge[k])k++;const s=segs[k];return s[1]?[s[1],s[2]]:null;});
+}
+const wOf = el => el.clientWidth || el.parentNode.clientWidth;
+
+/* ---------- KPI ---------- */
+const tk=T.tokens, tkTotal=tk.input+tk.output+tk.cacheRead+tk.cacheWrite;
+const tokSegs=[[tk.cacheRead,.22],[tk.cacheWrite,.45],[tk.input,.75],[tk.output,1,RED]];
+$('kpis').innerHTML = `
+ <div class="kpi"><div class="lab">请求数</div><div class="big">${fmt(T.requests)}</div><div class="small">${T.sessions} 个会话，平均每会话 ${Math.round(T.requests/T.sessions)} 次</div></div>
+ <div class="kpi"><div class="lab">Token 拆分 · 共 ${M(tkTotal)}</div><div class="bar" id="tokBar"></div>
+   <div class="tok-list">
+     <div><span><i class="sw" style="opacity:.22"></i>缓存读取</span><b>${M(tk.cacheRead)}</b></div><div><span><i class="sw" style="opacity:.75"></i>输入</span><b>${M(tk.input)}</b></div>
+     <div><span><i class="sw" style="opacity:.45"></i>缓存写入</span><b>${M(tk.cacheWrite)}</b></div><div><span class="red"><i class="sw" style="background:var(--red)"></i>输出</span><b>${M(tk.output)}</b></div>
+     <div class="small"><span>推理（含在输出内）</span><b>${M(tk.reasoning)}</b></div></div></div>
+ <div class="kpi"><div class="lab">缓存命中率</div><div class="big">${(T.cacheHitRate*100).toFixed(1)}<small>%</small></div><div class="bar" id="hitBar"></div></div>
+ <div class="kpi"><div class="lab">今日费用</div><div class="big">$${T.costUsdApiEquivalent.toFixed(2)}</div><span class="stamp">API 等价估算</span></div>`;
+
+(function(){
+  const box=$('byAgent'); let h='';
+  const tot=T.byAgent.reduce((a,b)=>a+b.cost,0);
+  T.byAgent.forEach((a,i)=>{
+    h+=`<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between"><b>${a.agent}</b><span>$${a.cost.toFixed(1)}</span></div>
+    <div class="bar agentBar" data-i="${i}"></div>
+    <div class="small">${fmt(a.requests)} 次请求 · ${M(a.tokens)} token</div></div>`;});
+  h+='<div style="border-top:1px solid var(--ink);padding-top:10px">';
+  T.byModel.forEach(m=>{h+=`<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px"><span>${m.model}</span><span>${fmt(m.requests)} 次 · $${m.cost.toFixed(1)}</span></div>`;});
+  box.insertAdjacentHTML('beforeend',h+'</div>');
+})();
+
+/* ---------- 趋势：方块柱，Claude 在下、Codex 叠在上 ---------- */
+const d0=new Date(snapT); d0.setDate(d0.getDate()-29);
+$('trL').textContent=`${d0.getMonth()+1}月${d0.getDate()}日`;
+$('trM').textContent=`峰值 $${maxV.toFixed(1)}`;
+$('trR').textContent=`今天 $${tr[29].toFixed(1)}`;
+function drawTrend(){
+  const box=$('trend'), W=wOf(box); if(!W) return;
+  const per=Math.max(2,Math.floor(W/5.2/30)), nc=per*30, pitch=W/nc, NR=Math.round(clamp(W/9,34,22*1.7));
+  const bw = per>=3 ? per-1 : per-(per>2?0:1) ;
+  box.innerHTML=cellsSVG(nc,NR,pitch,(c,r)=>{
+    const d=Math.floor(c/per), within=c%per; if(within>=bw) return null;
+    const rowFromBottom=NR-1-r, tot=tr[d]/maxV*NR, cl=(tr[d]-trC[d])/maxV*NR, today=d===29;
+    if(rowFromBottom+0.0>=tot) return null;
+    const frac=Math.min(1,tot-rowFromBottom);
+    if(rowFromBottom<cl){return [(0.5+0.5*(rowFromBottom/NR)/ (cl/NR||1)*.9)*Math.min(1,cl-rowFromBottom>0?1:0), today?RED:INK];}
+    return [.3*frac+(today?.15:0), today?RED:INK];
+  });
+}
+
+/* ---------- 额度：已过时间、配速由数据算出 ---------- */
+function cd(ms){const m=Math.round(ms/6e4),d=Math.floor(m/1440),h=Math.floor(m%1440/60),mm=m%60;return d?`${d} 天 ${h} 小时`:`${h} 小时 ${mm} 分`;}
+const winMs = w => w==='5 小时'?5*3600e3:7*864e5;
+const Q = G.quota.map(q=>{const wm=winMs(q.window), rem=new Date(q.resetsAt)-snapT, el=clamp(1-rem/wm,.001,1);
+  return Object.assign({},q,{rem,el,pace:q.usedPct/100/el-1});});
+$('quotas').innerHTML = Q.map((q,i)=>{const pace=Math.round(q.pace*100), fast=pace>0;
+  return `<div class="q"><h3>${q.agent}<span>${q.window}窗口</span></h3>
+  <div class="pct">${q.usedPct}<small>%</small></div>
+  <div class="bar qbar" data-i="${i}"></div>
+  <dl><dt>已过窗口</dt><dd>${Math.round(q.el*100)}%</dd><dt>重置倒计时</dt><dd>${cd(q.rem)}</dd>
+  <dt>配速</dt><dd class="${fast?'red':''}">${fast?'▲ 快于匀速 +':'▽ 慢于匀速 −'}${Math.abs(pace)}%</dd></dl>
+  <div class="burn" data-i="${i}" role="img" aria-label="${q.agent} ${q.window}燃尽图"></div></div>`;}).join('');
+function drawQuota(){
+  document.querySelectorAll('.qbar').forEach(b=>{const q=Q[+b.dataset.i],W=wOf(b); if(!W) return;
+    const nc=Math.floor(W/6), pitch=W/nc, used=Math.round(q.usedPct/100*nc), el=Math.round(q.el*nc);
+    b.innerHTML=cellsSVG(nc,2,pitch,c=>c<used?[.35+.65*c/Math.max(1,used-1),(q.pace>0&&c>=el)?RED:INK]:(c===el?[1,INK]:[.1,INK]));});
+  document.querySelectorAll('.burn').forEach(b=>{const q=Q[+b.dataset.i],W=wOf(b); if(!W) return;
+    const nc=Math.floor(W/6), pitch=W/nc, NR=11, h=q.history, ne=Math.max(2,Math.round(q.el*nc));
+    const val=c=>{ if(c>=ne) return null; const x=c/(ne-1)*(h.length-1), a=Math.floor(x), f=x-a; return (h[a]*(1-f)+(h[Math.min(a+1,h.length-1)])*f)/100; };
+    b.innerHTML=cellsSVG(nc,NR,pitch,(c,r)=>{
+      const rb=NR-1-r, ideal=Math.round(c/(nc-1)*(NR-1));
+      const v=val(c);
+      if(v!==null && rb<v*NR) return [.3+.7*(rb/NR),(c===ne-1)?RED:INK];
+      if(rb===ideal) return [.45,INK];       // 匀速线
+      return null;
+    });});
+}
+
+/* ---------- 热力图：每天一小块方块，按明度和点数分级 ---------- */
+const C=G.contrib, HW=53;
+const lv=v=>v===0?0:v<4?1:v<10?2:v<20?3:4;
+const ALPHA=[.08,.3,.52,.78,1];
+const ORDER=[4,1,3,5,7,0,2,6,8]; // 3x3 抖动顺序（中心先亮）
+function drawHeat(){
+  const box=$('heat'), W=wOf(box); if(!W) return;
+  const wpr = W<700?27:HW, bw=Math.max(1,Math.floor(W/(wpr*5))), pitch=W/(wpr*bw), k=bw>1?bw-1:1, rowsN=Math.ceil(HW/wpr);
+  const sun=new Date(snapT); sun.setHours(0,0,0,0); sun.setDate(sun.getDate()-sun.getDay());
+  let out='';
+  for(let pr=0;pr<rowsN;pr++){
+    const nc=wpr*bw, nr=7*bw+0;
+    out+=`<div style="margin-bottom:${pr<rowsN-1?10:0}px">`+cellsSVG(nc,nr,pitch,(c,r)=>{
+      const w=pr*wpr+Math.floor(c/bw), d=Math.floor(r/bw), cx=c%bw, cy=r%bw;
+      if(w>=HW||cx>=k||cy>=k) return null;
+      if(w===HW-1&&d>snapT.getDay()) return null;
+      const v=C[w][d], l=lv(v);
+      if(k===1) return [ALPHA[l],l===4?RED:INK];
+      if(k!==3) return [ALPHA[l],l===4?RED:INK];
+      return [ALPHA[l],l===4?RED:INK]; // 整块同一明度，避免点亮顺序拼出十字形
+    })+'</div>';
+  }
+  box.innerHTML=out;
+}
+(function(){const s=$('legend');[0,1,2,3,4].forEach(l=>{const i=document.createElement('i');
+  i.style.cssText=`width:6px;height:6px;display:block;background:${l===4?RED:INK};opacity:${ALPHA[l]}`;s.appendChild(i);});})();
+$('contribSub').textContent=`近 53 周共 ${fmt(G.contributions.total)} 次贡献 · 红色 = 单日 20 次以上`;
+
+/* ---------- 活动 ---------- */
+$('feed').innerHTML=G.activity.map(a=>{
+  const d=new Date(a.t), t=`${d.getMonth()+1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  return `<li><span class="t">${t}</span>
+   <span class="repo">${a.public?a.repo:'<span class="priv">私有项目</span>'}</span>
+   <span class="tt">${a.title}</span>
+   <span class="ref">${a.public?`${a.branch} · ${a.hash}`:'&nbsp;'}</span></li>`;}).join('');
+
+function drawBars(){
+  const tb=$('tokBar'); if(tb&&wOf(tb)) tb.innerHTML=barSVG(wOf(tb),2,tokSegs);
+  const hb=$('hitBar'); if(hb&&wOf(hb)) hb.innerHTML=barSVG(wOf(hb),2,[[T.cacheHitRate,1],[1-T.cacheHitRate,.1]]);
+  const tot=T.byAgent.reduce((a,b)=>a+b.cost,0);
+  document.querySelectorAll('.agentBar').forEach(b=>{const a=T.byAgent[+b.dataset.i];if(wOf(b))
+    b.innerHTML=barSVG(wOf(b),1,[[a.cost/tot,.9],[1-a.cost/tot,.1]]);});
+}
+
+/* ---------- 首屏：方块格点地形（费用 → 起伏），t 的纯函数 ---------- */
+const cv=$('hero'), cx=cv.getContext('2d'), heroBox=$('heroBox');
+let CW=0,CH=0,dpr=1,S=5,mask=null,mW=0,mH=0;
+const ms=0.5;
+const norm=tr.map(v=>Math.max(.14,v/maxV));
+function vday0(u){ const x=clamp(u,0,1)*29, a=Math.floor(x), b=Math.min(29,a+1), f=(1-Math.cos((x-a)*Math.PI))/2; return norm[a]*(1-f)+norm[b]*f; }
+
+function buildMask(){
+  mask=null; if(!CW) return;
+  mW=Math.ceil(CW*ms); mH=Math.ceil(CH*ms);
+  const m1=document.createElement('canvas'); m1.width=mW; m1.height=mH;
+  const g=m1.getContext('2d'); g.fillStyle='#fff';
+  const hr=heroBox.getBoundingClientRect();
+  const el=$('headline'), walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT), r=document.createRange();
+  while(walker.nextNode()){
+    const n=walker.currentNode, st=getComputedStyle(n.parentElement), fs=parseFloat(st.fontSize);
+    g.font=`${st.fontWeight} ${fs*ms}px ${st.fontFamily}`; g.textAlign='center'; g.textBaseline='middle'; g.lineJoin='round';
+    g.strokeStyle='#fff'; g.lineWidth=(fs*0.2+14)*ms;      // 字形外扩一圈留白
+    for(let i=0;i<n.length;i++){
+      if(/\s/.test(n.data[i])) continue;
+      r.setStart(n,i); r.setEnd(n,i+1);
+      for(const b of r.getClientRects()){
+        const x=(b.left-hr.left+b.width/2)*ms, y=(b.top-hr.top+b.height/2)*ms;
+        g.fillText(n.data[i],x,y); g.strokeText(n.data[i],x,y);
+      }
+    }
+  }
+  const cap=$('heroCap'); if(getComputedStyle(cap).display!=='none'){
+    const b=cap.getBoundingClientRect(); g.fillRect((b.left-hr.left-10)*ms,(b.top-hr.top-8)*ms,(b.width+20)*ms,(b.height+16)*ms);}
+  const m2=document.createElement('canvas'); m2.width=mW; m2.height=mH;
+  const g2=m2.getContext('2d'); g2.filter='blur(5px)'; g2.drawImage(m1,0,0); g2.drawImage(m1,0,0);
+  const d=g2.getImageData(0,0,mW,mH).data; mask=new Float32Array(mW*mH);
+  for(let i=0;i<mask.length;i++) mask[i]=d[i*4+3]/255;
+}
+function sizeHero(){
+  dpr=Math.min(devicePixelRatio||1,2);
+  const r=heroBox.getBoundingClientRect(); CW=r.width; CH=r.height;
+  cv.width=Math.round(CW*dpr); cv.height=Math.round(CH*dpr);
+  S=CW<600?4:5;
+}
+function vday(u){let a=0;for(let k=-2;k<=2;k++)a+=vday0(u+k*0.03)*(1-Math.abs(k)*0.2);return a/3;}
+const BAY=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+const AMP=4.2;
+function Hf(u,z,t){
+  const ph=z*0.5 - t*0.9 + u*11 + 1.6*Math.sin(u*5+t*0.2+z*0.05);
+  return AMP*(0.45+0.85*vday(u))*(0.3+0.7*(0.5+0.5*Math.sin(ph))) + 0.4*Math.sin(z*0.17+t*0.25+u*2);
+}
+function frameHero(t){
+  if(!CW) return;
+  cx.setTransform(dpr,0,0,dpr,0,0); cx.clearRect(0,0,CW,CH);
+  const cols=Math.floor(CW/S), rows=Math.floor(CH/S), ox=(CW-cols*S)/2;
+  const horizon=rows*0.14, zmin=1.5, zmax=64, camH=10, f=(rows*1.04-horizon)*zmin/camH;
+  for(let i=0;i<cols;i++){
+    const u=(i+.5)/cols, today=u>=29/30; let last=rows;
+    for(let z=zmin; z<zmax && last>0; z+=0.1+z*0.04){
+      const h=Hf(u,z,t), y=horizon+(camH-h)*f/z;
+      if(y>=last) continue;
+      const s=(Hf(u,z+0.6,t)-h)/0.6, hx=(Hf(u+0.01,z,t)-h)/0.01;
+      // 受光面（朝向观察者的坡）更亮 = 墨更少；背光面更暗
+      let dark=clamp(0.6-0.8*s+0.1*hx,0.05,1);
+      dark*=0.62+0.38*(0.5+0.5*Math.cos(h*7.5+z*0.08)); // 等高线条纹
+      dark*=1-0.92*Math.pow(z/zmax,0.55);
+      dark*=Math.pow(clamp((y-horizon)/(rows*0.3),0,1),0.8); // 远处溶解在纸里
+      const j0=Math.max(0,Math.ceil(y));
+      for(let j=j0;j<last;j++){
+        let dk=dark*(0.82+0.36*(BAY[(j&3)*4+(i&3)]+.5)/16); if(j===j0) dk=Math.min(1,dk+0.3*(1-z/zmax));
+        const px=ox+i*S+S/2, py=j*S+S/2;
+        if(mask){const mx=Math.min(mW-1,(px*ms)|0), my=Math.min(mH-1,(py*ms)|0); const m=mask[my*mW+mx];
+          if(m>0.04) dk*=1-clamp((m-0.04)/0.5,0,1);}
+        if(dk<0.07) continue;
+        const sz=S*(0.16+0.8*dk);
+        cx.globalAlpha=0.55+0.45*dk; cx.fillStyle=today?RED:INK;
+        cx.fillRect(px-sz/2,py-sz/2,sz,sz);
+      }
+      last=Math.min(last,j0);
+    }
+  }
+  cx.globalAlpha=1;
+}
+
+/* 调度：静止 / 冻结 / 动画 */
+let rafId=0, visible=true, t0=performance.now();
+const curT = ()=> frozenT!==null ? frozenT : (performance.now()-t0)/1000;
+function tick(ts){
+  rafId=0; if(!visible||reduce||frozenT!==null) return;
+  frameHero(curT()); setTimeout(()=>{ if(!rafId&&visible) rafId=requestAnimationFrame(tick); },1000/15-4);
+}
+function layout(){
+  sizeHero(); buildMask(); drawTrend(); drawQuota(); drawHeat(); drawBars();
+  frameHero(frozenT!==null?frozenT:(reduce?6:curT()));
+}
+let rz; addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(layout,80);});
+layout();
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(layout);
+if(!reduce&&frozenT===null){
+  rafId=requestAnimationFrame(tick);
+  new IntersectionObserver(es=>{visible=es[0].isIntersecting; if(visible&&!rafId) rafId=requestAnimationFrame(tick);}).observe(heroBox);
+}
+})();
+</script>
+</body>
+</html>

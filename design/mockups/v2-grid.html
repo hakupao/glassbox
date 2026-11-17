@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>glassbox · v2 格点</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter+Tight:wght@200;300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070809;
+    --bg2: #0b0c0e;
+    --fg: #e8eaed;
+    --dim: #80858d;
+    --faint: #4a4e55;
+    --line: rgba(255,255,255,.085);
+    --line2: rgba(255,255,255,.16);
+    --accent: #ff9a52;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: "Inter Tight", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+    --pad: 32px;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: var(--mono); }
+  .cap { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+
+  /* ---------- 顶栏 ---------- */
+  .nav { position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 var(--pad); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; letter-spacing: .04em; }
+  .brand i { width: 8px; height: 8px; background: var(--fg); display: inline-block; }
+  .brand span { color: var(--dim); }
+  .navr { display: flex; align-items: center; gap: 18px; }
+  .live { display: flex; align-items: center; gap: 8px; }
+  .live b { width: 6px; height: 6px; background: var(--accent); display: inline-block; box-shadow: 0 0 8px var(--accent); }
+  .toggle { display: flex; border: 1px solid var(--line2); }
+  .toggle a { padding: 4px 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; color: var(--dim); }
+  .toggle a + a { border-left: 1px solid var(--line2); }
+  .toggle a.on { background: var(--fg); color: var(--bg); }
+
+  /* ---------- 首屏 ---------- */
+  .hero { position: relative; height: clamp(560px, 88vh, 860px); overflow: hidden; border-bottom: 1px solid var(--line); }
+  .hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .hero-text { position: absolute; left: var(--pad); top: 21%; z-index: 2; max-width: 980px; }
+  .kicker { margin-bottom: 22px; }
+  .kicker span { color: var(--fg); }
+  h1 { margin: 0; font-weight: 300; font-size: clamp(44px, 8.4vw, 128px); line-height: .98; letter-spacing: -.035em; }
+  h1 em { font-style: normal; font-weight: 200; font-variant-numeric: tabular-nums; }
+  .sub { margin-top: 26px; font-family: var(--mono); font-size: 13px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 6px 22px; }
+  .sub b { color: var(--fg); font-weight: 400; }
+  .tag { display: inline-block; padding: 0 6px; border: 1px solid var(--line2); font-size: 10px; letter-spacing: .1em; color: var(--dim); margin-left: 6px; vertical-align: 1px; }
+  .legend { position: absolute; left: var(--pad); bottom: 22px; z-index: 2; max-width: 620px; line-height: 1.9; }
+  .legend .sw { display: inline-block; width: 7px; height: 7px; margin: 0 6px 0 2px; vertical-align: 0; }
+  .meter { position: absolute; right: var(--pad); bottom: 22px; z-index: 2; text-align: right; }
+
+  /* ---------- 内容区：工程制图式框架 ---------- */
+  .frame { position: relative; max-width: 1280px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  section { position: relative; border-bottom: 1px solid var(--line); }
+  section::before, section::after { content: "+"; position: absolute; bottom: -9px; font: 300 14px/1 var(--mono); color: var(--faint); }
+  section::before { left: -5px; } section::after { right: -5px; }
+  .sh { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 18px var(--pad); border-bottom: 1px solid var(--line); }
+  .sh h2 { margin: 0; font-weight: 400; font-size: 15px; letter-spacing: .01em; }
+  .sh h2 .cap { margin-right: 14px; color: var(--faint); }
+  .grid { display: grid; }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .cell { padding: 22px var(--pad) 26px; border-right: 1px solid var(--line); min-width: 0; }
+  .cell:last-child { border-right: 0; }
+  .big { font-weight: 200; font-size: 52px; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; margin: 14px 0 12px; }
+  .big small { font-size: 18px; font-weight: 300; color: var(--dim); margin-left: 4px; letter-spacing: 0; }
+  .note { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  .note b { color: var(--fg); font-weight: 400; }
+  .bar { margin-top: 14px; display: block; max-width: 100%; height: auto; }
+  .leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+  .leg i { display: inline-block; width: 7px; height: 7px; margin-right: 6px; }
+  .pace { color: var(--fg); }
+  .pace.fast { color: var(--accent); }
+  .chart { padding: 22px var(--pad) 18px; }
+  .chart svg { display: block; max-width: 100%; height: auto; }
+  .axis { display: flex; justify-content: space-between; margin-top: 10px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px 28px; padding: 0 var(--pad) 22px; }
+  .hatch { background: repeating-linear-gradient(135deg, var(--line2) 0 1px, transparent 1px 5px); }
+
+  .log { list-style: none; margin: 0; padding: 0; }
+  .log li { display: grid; grid-template-columns: 116px 210px 1fr auto; gap: 16px; align-items: baseline; padding: 13px var(--pad); border-bottom: 1px solid var(--line); }
+  .log li:last-child { border-bottom: 0; }
+  .log .t { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .log .r { font-family: var(--mono); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log .r.priv { color: var(--dim); }
+  .log .r.priv i { display: inline-block; width: 22px; height: 9px; margin-right: 8px; vertical-align: -1px; }
+  .log .m { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log .h { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  footer { max-width: 1280px; margin: 0 auto; padding: 22px var(--pad) 40px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
+
+  @media (max-width: 900px) {
+    :root { --pad: 18px; }
+    .g4 { grid-template-columns: 1fr 1fr; }
+    .g4 .cell:nth-child(2) { border-right: 0; }
+    .g4 .cell:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+    .g3 { grid-template-columns: 1fr; }
+    .g3 .cell { border-right: 0; border-bottom: 1px solid var(--line); }
+    .g3 .cell:last-child { border-bottom: 0; }
+    .log li { grid-template-columns: 1fr auto; gap: 2px 12px; }
+    .log .t { order: 2; text-align: right; }
+    .log .r { order: 1; }
+    .log .m { order: 3; grid-column: 1 / -1; white-space: normal; }
+    .log .h { display: none; }
+    .navr .live { display: none; }
+  }
+  @media (max-width: 520px) {
+    .hero { height: 680px; }
+    .hero-text { top: 15%; right: var(--pad); }
+    .big { font-size: 40px; }
+    .cell { padding: 18px var(--pad) 20px; }
+    .legend { right: var(--pad); bottom: 54px; font-size: 10px; }
+    .meter { bottom: 18px; left: var(--pad); right: auto; text-align: left; }
+    .sh { flex-direction: column; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="brand"><i></i>glassbox <span>/ 概览</span></div>
+  <div class="navr">
+    <div class="live cap"><b></b><span id="snap">只读快照</span></div>
+    <div class="toggle" id="toggle"></div>
+  </div>
+</nav>
+
+<header class="hero" id="hero">
+  <canvas id="cv"></canvas>
+  <div class="hero-text mask">
+    <div class="kicker cap" id="kicker"></div>
+    <h1 id="title"></h1>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="legend cap mask" id="legend"></div>
+  <div class="meter cap mask" id="meter"></div>
+</header>
+
+<main class="frame">
+  <section>
+    <div class="sh"><h2><span class="cap">01</span>今日用量</h2><span class="cap" id="todayMeta"></span></div>
+    <div class="grid g4" id="today"></div>
+  </section>
+  <section>
+    <div class="sh"><h2><span class="cap">02</span>额度与配速</h2><span class="cap">实线格 = 实际已用 · 暗点 = 匀速应在位置</span></div>
+    <div class="grid g3" id="quota"></div>
+  </section>
+  <section>
+    <div class="sh"><h2><span class="cap">03</span>近 30 天费用</h2><span class="cap">API 等价估算 · 美元 / 天</span></div>
+    <div class="chart" id="trend"></div>
+    <div class="stats note" id="trendStats"></div>
+  </section>
+  <section>
+    <div class="sh"><h2><span class="cap">04</span>GitHub 贡献</h2><span class="cap" id="contribMeta"></span></div>
+    <div class="chart" id="contrib"></div>
+  </section>
+  <section>
+    <div class="sh"><h2><span class="cap">05</span>最近活动</h2><span class="cap">私有仓库只显示提交标题</span></div>
+    <ul class="log" id="log"></ul>
+  </section>
+</main>
+<footer class="cap"><span>glassbox · 只读快照 · 数据为虚构样稿</span><span id="foot"></span></footer>
+
+<script src="sample-data.js"></script>
+<script>
+(() => {
+const GB = window.GB;
+const Q = new URLSearchParams(location.search);
+const SHAPE = Q.get('cell') === 'dot' ? 'dot' : 'square'; // 用户偏好方块，默认方块
+const MAP = Q.get('map') === 'light' ? 'light' : 'size';
+const FROZEN = Q.has('t') ? parseFloat(Q.get('t')) || 0 : null;
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const FG = css('--fg'), ACC = css('--accent'), BG = css('--bg');
+const $ = id => document.getElementById(id);
+const nf = n => Math.round(n).toLocaleString('en-US');
+const M = n => (n / 1e6).toFixed(n >= 1e7 ? 1 : 2) + 'M';
+const t0 = Date.parse(GB.generatedAt);
+const stamp = GB.generatedAt.slice(5, 10) + ' ' + GB.generatedAt.slice(11, 16);
+const T = GB.today, TK = T.tokens;
+const totalTok = TK.input + TK.output + TK.cacheRead + TK.cacheWrite;
+
+/* ---------- 顶栏与切换 ---------- */
+$('snap').textContent = '只读快照 · ' + stamp;
+const link = (k, v, label) => { const p = new URLSearchParams(location.search); p.set(k, v); return `<a href="?${p}" class="${(k === 'cell' ? SHAPE : MAP) === v ? 'on' : ''}">${label}</a>`; };
+$('toggle').innerHTML = link('cell', 'dot', 'DOT') + link('cell', 'square', 'SQUARE');
+$('foot').textContent = `cell=${SHAPE} · map=${MAP}`;
+
+/* ---------- 首屏文字 ---------- */
+const claude = T.byAgent[0], codex = T.byAgent[1];
+const codexShare = codex.requests / T.requests;
+$('kicker').innerHTML = `GLASSBOX <span>/</span> ${GB.generatedAt.slice(0, 10)} <span>/</span> CLAUDE CODE + CODEX`;
+$('title').innerHTML = `今天 <em>${nf(T.requests)}</em> 次请求`;
+$('sub').innerHTML = `<span><b>${(totalTok / 1e6).toFixed(1)}M</b> tokens</span><span>缓存命中 <b>${(T.cacheHitRate * 100).toFixed(1)}%</b></span><span><b>$${T.costUsdApiEquivalent.toFixed(2)}</b><span class="tag">API 等价估算</span></span>`;
+$('legend').innerHTML = `FIG.0 两条光带的起伏 = 各自近 30 天的每日费用 · 最右端 = 今天<br><i class="sw" style="background:${FG}"></i>Claude Code <i class="sw" style="background:${ACC};margin-left:14px"></i>Codex（宽度按请求占比 ${(codexShare * 100).toFixed(0)}%）`;
+
+/* ---------- 首屏格点场 ---------- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+const hero = $('hero');
+const LEVELS = 24;
+let W = 0, H = 0, dpr = 1, cs = 10, cols = 0, rows = 0, ox = 0, oy = 0, atlas = null, mask = null, maskW = 0, maskH = 0;
+
+const trend = GB.trend30d, tMax = Math.max(...trend);
+// 首屏用高斯平滑后的趋势（σ≈1.6 天），只取走势，不逐日跳动；图表区仍用原始值
+function series(arr) { // 返回 f(0..1) -> 0..1，高斯平滑 + 余弦插值
+  const sm = arr.map((_, i) => { let s = 0, w = 0; for (let j = 0; j < arr.length; j++) { const k = Math.exp(-((i - j) ** 2) / (2 * 1.6 * 1.6)); s += arr[j] * k; w += k; } return s / w; });
+  const hi = Math.max(...sm), lo = Math.min(...sm), n = v => (v - lo) / (hi - lo || 1);
+  return f => {
+    const x = Math.min(Math.max(f, 0), 1) * (arr.length - 1), i = Math.floor(x), k = x - i;
+    const a = n(sm[i]), b = n(sm[Math.min(i + 1, arr.length - 1)]), m = (1 - Math.cos(k * Math.PI)) / 2;
+    return a + (b - a) * m;
+  };
+}
+const codexTrend = GB.trend30dCodex, claudeTrend = trend.map((v, i) => v - codexTrend[i]);
+
+function buildAtlas() { // 2 种颜色 × LEVELS 级
+  atlas = document.createElement('canvas');
+  atlas.width = cs * LEVELS; atlas.height = cs * 2;
+  const a = atlas.getContext('2d');
+  [FG, ACC].forEach((col, ci) => {
+    for (let L = 1; L <= LEVELS; L++) {
+      const v = L / LEVELS, x0 = (L - 1) * cs, y0 = ci * cs, c = cs / 2;
+      let size, alpha;
+      if (MAP === 'size') { size = 0.16 + 0.84 * Math.sqrt(v); alpha = 0.55 + 0.45 * v; }
+      else { size = 0.86; alpha = Math.pow(v, 1.15); }
+      a.globalAlpha = alpha; a.fillStyle = col;
+      if (SHAPE === 'dot') { a.beginPath(); a.arc(x0 + c, y0 + c, cs * 0.42 * size, 0, Math.PI * 2); a.fill(); }
+      else { const h = cs * 0.40 * size; a.fillRect(x0 + c - h, y0 + c - h, h * 2, h * 2); }
+    }
+  });
+}
+
+function buildMask() { // 标题与图注的逐字外框 → 模糊 → 作为让位遮罩
+  const s = 0.5; maskW = Math.ceil(W * s); maskH = Math.ceil(H * s);
+  const m1 = document.createElement('canvas'); m1.width = maskW; m1.height = maskH;
+  const g = m1.getContext('2d'); g.fillStyle = '#fff';
+  const hr = hero.getBoundingClientRect();
+  document.querySelectorAll('.mask').forEach(el => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const r = document.createRange();
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      for (let i = 0; i < n.length; i++) {
+        if (/\s/.test(n.data[i])) continue;
+        r.setStart(n, i); r.setEnd(n, i + 1);
+        // 用同一字体把字形画进遮罩，再描粗边：留白贴着字形走，而不是一整块矩形
+        const st = getComputedStyle(n.parentElement), fs = parseFloat(st.fontSize);
+        g.font = `${st.fontWeight} ${fs * s}px ${st.fontFamily}`;
+        g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+        g.strokeStyle = '#fff'; g.lineWidth = (fs * 0.16 + 9) * s;
+        for (const b of r.getClientRects()) {
+          const x = (b.left - hr.left + b.width / 2) * s, y = (b.top - hr.top + b.height / 2) * s;
+          g.fillText(n.data[i], x, y); g.strokeText(n.data[i], x, y);
+        }
+      }
+    }
+  });
+  document.querySelectorAll('.mask .tag').forEach(el => { // 带边框的标签整块让位
+    const b = el.getBoundingClientRect();
+    g.fillRect((b.left - hr.left - 8) * s, (b.top - hr.top - 8) * s, (b.width + 16) * s, (b.height + 16) * s);
+  });
+  const m2 = document.createElement('canvas'); m2.width = maskW; m2.height = maskH;
+  const g2 = m2.getContext('2d'); g2.filter = 'blur(4px)'; g2.drawImage(m1, 0, 0); g2.drawImage(m1, 0, 0);
+  const d = g2.getImageData(0, 0, maskW, maskH).data;
+  mask = new Float32Array(maskW * maskH);
+  for (let i = 0; i < mask.length; i++) mask[i] = d[i * 4 + 3] / 255;
+}
+
+function resize() {
+  const r = hero.getBoundingClientRect();
+  W = r.width; H = r.height; dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  cs = Math.max(6, Math.round((W < 520 ? 4.6 : 5) * dpr));
+  cols = Math.floor(cv.width / cs); rows = Math.floor(cv.height / cs);
+  ox = Math.floor((cv.width - cols * cs) / 2); oy = Math.floor((cv.height - rows * cs) / 2);
+  $('meter').dataset.grid = `${cols}×${rows} CELLS`;
+  $('meter').textContent = `${$('meter').dataset.grid} · t=00.0s · ${SHAPE.toUpperCase()} / ${MAP.toUpperCase()}`;
+  buildAtlas(); buildMask();
+}
+
+const F = 3.2, D = 3.2;
+const ampK = () => W < 520 ? 0.42 : 1;
+function hash(i, j) { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); }
+const smooth = (a, b, x) => { const k = Math.min(Math.max((x - a) / (b - a), 0), 1); return k * k * (3 - 2 * k); };
+
+// 一条扭转的光带：返回 [亮度, 深度]，没命中返回 null
+function ribbon(px, py, t, o) {
+  const aspect = W / H, xr = aspect * (W < 520 ? 1.15 : 0.94);
+  let X = px;
+  let Zc = 0;
+  for (let k = 0; k < 3; k++) { Zc = o.z + o.za * Math.sin(0.7 * X - 0.3 * t + o.ph); X = px * (Zc + D) / F; }
+  const f = (X + xr) / (2 * xr);
+  if (f < -0.08 || f > 1.02) return null;
+  const v = o.at(f);
+  const Yc = o.y + o.amp * ampK() * (v - 0.45) + 0.05 * Math.sin(1.4 * X + 0.6 * t + o.ph);
+  const th = 0.62 * X + 0.38 * t + o.ph + 0.45 * Math.sin(0.45 * X + 0.19 * t);
+  const c = Math.cos(th), s = Math.sin(th);
+  const yW = py * (Zc + D) / F;
+  const eps = 0.018 * (Zc + D) / F * (H < 600 ? 1.2 : 1);
+  const ow = o.w * (W < 520 ? 0.68 : 1), half = ow * Math.abs(c);
+  const d = Math.abs(yW - Yc);
+  if (d > half + eps) return null;
+  const sv = c !== 0 ? (yW - Yc) / (ow * c) : 0; // 横截面参数 -1..1
+  const diffuse = Math.abs(-s * 0.45 + c * -0.89);    // 法线 (0,-s,c) · 光 (0,.45,-.89)
+  let b = 0.12 + 0.88 * Math.pow(diffuse, 1.4);
+  b *= 0.72 + 0.28 * Math.cos(sv * Math.PI * 5);       // 横向条纹，读出扭转
+  b *= 0.82 + 0.18 * Math.sin(X * 10 - t * 2.1);       // 沿长度方向流动
+  b += 0.35 * smooth(0.82, 1, Math.abs(sv)) * (1 - Math.abs(c)); // 侧缘高光
+  b *= Math.min(1, Math.max(0.42, 1.15 - 0.42 * (Zc + 0.8)));  // 远处变暗
+  b *= 1 + 0.45 * smooth(0.93, 0.99, f);                      // 越靠近今天越亮
+  b *= smooth(-0.08, 0.10, f) * (1 - smooth(0.985, 1.02, f)); // 两端淡入淡出
+  b *= smooth(0, eps, half + eps - d);
+  return [Math.min(b * o.gain, 1), Zc];
+}
+
+const R1 = { at: series(claudeTrend), y: 0.02, amp: 0.66, w: 0.26, z: 0.0, za: 0.8, ph: 0.0, gain: 1.0 };
+const R2 = { at: series(codexTrend), y: -0.56, amp: 0.36, w: 0.26 * Math.sqrt(codexShare / (1 - codexShare)), z: 0.6, za: 0.35, ph: 1.9, gain: 0.95 };
+
+function todayPoint(o, t) { // 今天那一端在屏幕上的位置（用于辉光）
+  const aspect = W / H, xr = aspect * (W < 520 ? 1.15 : 0.94), X = xr * 0.97;
+  const Zc = o.z + o.za * Math.sin(0.7 * X - 0.3 * t + o.ph);
+  const Yc = o.y + o.amp * ampK() * (o.at(0.97) - 0.45) + 0.05 * Math.sin(1.4 * X + 0.6 * t + o.ph);
+  const sx = X * F / (Zc + D), sy = Yc * F / (Zc + D);
+  return [(sx / aspect / 2 + 0.5) * cv.width, (0.5 - sy / 2) * cv.height];
+}
+
+function draw(t) {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, cv.width, cv.height);
+  // 辉光只点在今天的两个端点
+  ctx.globalCompositeOperation = 'lighter';
+  [[R1, 'rgba(232,234,237,', 0.12], [R2, 'rgba(255,154,82,', 0.10]].forEach(([o, col, a0]) => {
+    const [x, y] = todayPoint(o, t), r = 130 * dpr;
+    const hit = ribbon(((x / cv.width) - 0.5) * 2 * (W / H), (0.5 - y / cv.height) * 2, t, o);
+    const a = a0 * (hit ? hit[0] : 0); if (a < 0.01) return;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, col + a + ')'); g.addColorStop(1, col + '0)');
+    ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  });
+  ctx.globalCompositeOperation = 'source-over';
+  const aspect = W / H;
+  for (let j = 0; j < rows; j++) {
+    const cyPx = oy + (j + 0.5) * cs, py = (0.5 - cyPx / cv.height) * 2;
+    const my = Math.min(maskH - 1, Math.floor(cyPx / dpr * maskH / H));
+    for (let i = 0; i < cols; i++) {
+      const cxPx = ox + (i + 0.5) * cs, px = ((cxPx / cv.width) - 0.5) * 2 * aspect;
+      const mv = mask[my * maskW + Math.min(maskW - 1, Math.floor(cxPx / dpr * maskW / W))];
+      if (mv > 0.42) continue;
+      let b = 0, ci = 0;
+      const a1 = ribbon(px, py, t, R1), a2 = ribbon(px, py, t, R2);
+      if (a1 && a2) { if (a2[1] < a1[1] - 0.05) { b = a2[0]; ci = 1; } else { b = Math.max(a1[0], a2[0] * 0.35); } }
+      else if (a1) b = a1[0];
+      else if (a2) { b = a2[0]; ci = 1; }
+      else {
+        const h = hash(i, j);
+        if (h < 0.0035) b = 0.06 + 0.08 * (0.5 + 0.5 * Math.sin(t * 1.1 + h * 1700));
+      }
+      b *= 1 - smooth(0.08, 0.42, mv);
+      if (b < 0.045) continue;
+      const L = Math.min(LEVELS, Math.max(1, Math.round(b * LEVELS)));
+      ctx.drawImage(atlas, (L - 1) * cs, ci * cs, cs, cs, ox + i * cs, oy + j * cs, cs, cs);
+    }
+  }
+  $('meter').textContent = `${$('meter').dataset.grid} · t=${t.toFixed(1)}s · ${SHAPE.toUpperCase()} / ${MAP.toUpperCase()}`;
+}
+
+let start = performance.now(), last = 0, visible = true, raf = 0;
+function frame(now) {
+  raf = requestAnimationFrame(frame);
+  if (!visible || document.hidden) return;
+  if (now - last < 33) return; last = now;
+  draw((now - start) / 1000 + 6);
+}
+function boot() {
+  resize();
+  if (FROZEN !== null) { draw(FROZEN); return; }
+  if (REDUCE) { draw(8); return; }
+  draw(6); raf = requestAnimationFrame(frame);
+}
+new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(hero);
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { resize(); if (FROZEN !== null || REDUCE) draw(FROZEN ?? 8); }, 150); });
+
+/* ---------- 数据组件：细小格点，按明度分级 ---------- */
+function cellsSVG(nc, nr, level, opt = {}) { // level(c,r) -> [0..1, colorIdx] 或 null
+  const p = opt.pitch || 10, sz = opt.size || 0.62, out = [];
+  const w = nc * p, h = nr * p;
+  for (let c = 0; c < nc; c++) for (let r = 0; r < nr; r++) {
+    const v = level(c, r); if (!v) continue;
+    const [a, ci] = v; const col = ci ? ACC : FG;
+    const cx = c * p + p / 2, cy = r * p + p / 2, half = p * sz / 2;
+    out.push(SHAPE === 'dot'
+      ? `<circle cx="${cx}" cy="${cy}" r="${half}" fill="${col}" fill-opacity="${a.toFixed(3)}"/>`
+      : `<rect x="${cx - half}" y="${cy - half}" width="${half * 2}" height="${half * 2}" fill="${col}" fill-opacity="${a.toFixed(3)}"/>`);
+  }
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMin meet">${out.join('')}</svg>`;
+}
+const swatch = (a, ci) => `<i style="background:${ci ? ACC : FG};opacity:${a}${SHAPE === 'dot' ? ';border-radius:50%' : ''}"></i>`;
+
+/* 01 今日 */
+$('todayMeta').textContent = `${GB.generatedAt.slice(0, 10)} · ${T.sessions} 个会话`;
+const parts = [['缓存读', TK.cacheRead, 0.22, 0], ['缓存写', TK.cacheWrite, 0.45, 0], ['输入', TK.input, 0.75, 0], ['输出', TK.output, 1, 0]];
+const NT = 48; let acc = 0; const seg = [];
+parts.forEach(([, v], k) => { const n = k === parts.length - 1 ? NT - acc : Math.max(1, Math.round(v / totalTok * NT)); seg.push(n); acc += n; });
+const tokBar = cellsSVG(NT, 1, c => { let s = 0; for (let k = 0; k < seg.length; k++) { s += seg[k]; if (c < s) return [parts[k][2], 0]; } return null; }, { pitch: 10, size: 0.7 });
+const hit = Math.round(T.cacheHitRate * 40);
+const hitBar = cellsSVG(40, 1, c => c < hit ? [0.92, 0] : [0.12, 0], { pitch: 10, size: 0.7 });
+const agentBar = cellsSVG(40, 1, c => c < Math.round((1 - codexShare) * 40) ? [0.9, 0] : [0.9, 1], { pitch: 10, size: 0.7 });
+$('today').innerHTML = `
+  <div class="cell"><div class="cap">请求</div><div class="big">${nf(T.requests)}</div>
+    <div class="note">Claude Code <b>${nf(claude.requests)}</b> · Codex <b>${nf(codex.requests)}</b></div>${agentBar.replace('<svg', '<svg class="bar"')}</div>
+  <div class="cell"><div class="cap">Token</div><div class="big">${(totalTok / 1e6).toFixed(1)}<small>M</small></div>
+    <div class="note">输入 <b>${M(TK.input)}</b> · 输出 <b>${M(TK.output)}</b> · 推理 <b>${M(TK.reasoning)}</b></div>${tokBar.replace('<svg', '<svg class="bar"')}
+    <div class="leg">${parts.map(p => `<span>${swatch(p[2], 0)}${p[0]}</span>`).join('')}</div></div>
+  <div class="cell"><div class="cap">缓存命中</div><div class="big">${(T.cacheHitRate * 100).toFixed(1)}<small>%</small></div>
+    <div class="note">缓存读 <b>${M(TK.cacheRead)}</b> / 全部输入侧</div>${hitBar.replace('<svg', '<svg class="bar"')}</div>
+  <div class="cell"><div class="cap">费用 <span class="tag">API 等价估算</span></div><div class="big">$${T.costUsdApiEquivalent.toFixed(2)}</div>
+    <div class="note">${T.byModel.map(m => `${m.model} <b>$${m.cost.toFixed(1)}</b>`).join('<br>')}</div></div>`;
+
+/* 02 额度 */
+const winH = w => /小时/.test(w) ? parseInt(w) : parseInt(w) * 24;
+function cd(ms) { const m = Math.max(0, Math.round(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60), mm = m % 60; return d ? `${d} 天 ${h} 时` : `${h} 时 ${mm} 分`; }
+$('quota').innerHTML = GB.quota.map(q => {
+  const remain = Date.parse(q.resetsAt) - t0, total = winH(q.window) * 36e5, e = Math.min(1, Math.max(0.02, 1 - remain / total));
+  const NC = 28, NR = 10, hist = q.history;
+  const usedAt = f => { const x = f / e * (hist.length - 1), i = Math.floor(x), k = x - i; return hist[Math.min(i, hist.length - 1)] + ((hist[Math.min(i + 1, hist.length - 1)] - hist[Math.min(i, hist.length - 1)]) * k); };
+  const ci = q.agent === 'Codex' ? 1 : 0;
+  const chart = cellsSVG(NC, NR, (c, r) => {
+    const f = (c + 0.5) / NC, rowFromBottom = NR - 1 - r, rowPct = (rowFromBottom + 0.5) / NR * 100;
+    const ideal = Math.round(f * 100 / 100 * (NR - 1));
+    if (f <= e) {
+      const u = usedAt(f); const top = Math.round(u / 100 * (NR - 1));
+      if (rowFromBottom === top) return [1, ci];
+      if (rowFromBottom < top) return [0.4, ci];
+    }
+    if (rowFromBottom === ideal) return [0.13, 0];
+    return [0.035, 0];
+  }, { pitch: 10, size: 0.62 });
+  const pace = q.usedPct / (e * 100) - 1, fast = pace > 0;
+  return `<div class="cell"><div class="cap">${q.agent} · ${q.window}</div>
+    <div class="big">${q.usedPct}<small>% 已用</small></div>
+    <div class="note">重置 <b>${cd(remain)}</b> 后 · <span class="pace ${fast ? 'fast' : ''}">${fast ? '比匀速快' : '比匀速慢'} ${Math.abs(Math.round(pace * 100))}%</span></div>
+    ${chart.replace('<svg', '<svg class="bar"')}
+    <div class="axis cap" style="position:relative">${e < 0.12 ? '<span>▲ 现在 · 窗口刚开始</span>' : `<span>窗口开始</span><span style="position:absolute;left:${(e * 100).toFixed(1)}%;transform:translateX(${e > 0.85 ? '-100%' : '-50%'})">▲ 现在</span>`}<span>重置</span></div></div>`;
+}).join('');
+
+/* 03 近 30 天 / 04 贡献：固定点径（≤6px），靠列数铺满宽度，resize 时重画 */
+const sum = trend.reduce((a, b) => a + b, 0), avg7 = trend.slice(-7).reduce((a, b) => a + b, 0) / 7;
+const cMax = Math.max(...GB.contrib.flat());
+const lv = n => n === 0 ? 0.06 : 0.2 + 0.8 * Math.pow(n / cMax, 0.6);
+const inner = el => el.clientWidth - 2 * parseFloat(getComputedStyle(el).paddingLeft);
+function renderCharts() {
+  const P = 8, NRT = 22, cw = inner($('trend'));
+  const perDay = Math.max(2, Math.floor(cw / P / trend.length)), avgRow = Math.round(avg7 / tMax * NRT);
+  $('trend').innerHTML = cellsSVG(perDay * trend.length - 1, NRT, (c, r) => {
+    if (c % perDay === perDay - 1) return null;
+    const d = Math.floor(c / perDay), h = Math.max(1, Math.round(trend[d] / tMax * NRT)), rb = NRT - 1 - r;
+    const hc = Math.round(codexTrend[d] / tMax * NRT);
+    if (rb < h) return [d === trend.length - 1 ? 1 : 0.25 + 0.6 * (rb + 1) / NRT, rb < hc ? 1 : 0];
+    if (rb === avgRow - 1) return [0.22, 0];
+    return [0.035, 0];
+  }, { pitch: P, size: 0.62 }) + `<div class="axis cap" style="max-width:${(perDay * trend.length - 1) * P}px"><span>${new Date(t0 - 29 * 864e5).toISOString().slice(5, 10)}</span><span>${new Date(t0 - 15 * 864e5).toISOString().slice(5, 10)}</span><span>今天</span></div>`;
+
+  const k = innerWidth < 640 ? 2 : 3, MP = 5, gw = inner($('contrib'));
+  const weeks = Math.min(GB.contrib.length, Math.floor(gw / ((k + 1) * MP))), w0 = GB.contrib.length - weeks;
+  $('contribMeta').textContent = `近一年 ${nf(GB.contributions.total)} 次 · 显示近 ${weeks} 周`;
+  $('contrib').innerHTML = cellsSVG(weeks * (k + 1), 7 * (k + 1), (c, r) => {
+    if (c % (k + 1) === k || r % (k + 1) === k) return null;
+    return [lv(GB.contrib[w0 + Math.floor(c / (k + 1))][Math.floor(r / (k + 1))]), 0];
+  }, { pitch: MP, size: 0.72 }) +
+    `<div class="axis cap" style="max-width:${weeks * (k + 1) * MP}px"><span>${weeks} 周前</span><span class="leg" style="margin:0">少 ${[0, 3, 10, 20, 40].map(n => swatch(lv(n), 0)).join('')} 多</span><span>本周</span></div>`;
+}
+renderCharts();
+let rc; addEventListener('resize', () => { clearTimeout(rc); rc = setTimeout(renderCharts, 150); });
+$('trendStats').innerHTML = `<span>合计 <b>$${sum.toFixed(2)}</b></span><span>其中 Codex <b>$${codexTrend.reduce((a, b) => a + b, 0).toFixed(2)}</b>（橙色格）</span><span>近 7 日均 <b>$${avg7.toFixed(2)}</b>（暗点线）</span><span>峰值 <b>$${tMax.toFixed(2)}</b></span><span>今天 <b>$${trend[trend.length - 1].toFixed(2)}</b></span>`;
+
+/* 05 活动 */
+const esc = v => String(v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+const rel = iso => { const m = Math.round((t0 - Date.parse(iso)) / 60000); return m < 60 ? `${m} 分钟前` : m < 1440 ? `${Math.round(m / 60)} 小时前` : `昨天 ${iso.slice(11, 16)}`; };
+$('log').innerHTML = GB.activity.map(a => `<li><span class="t">${rel(a.t)}</span>
+  ${a.public ? `<span class="r">${esc(a.repo)}</span>` : `<span class="r priv"><i class="hatch"></i>私有项目</span>`}
+  <span class="m">${esc(a.title)}</span><span class="h">${a.public ? `${esc(a.branch)}@${esc(a.hash)}` : ''}</span></li>`).join('');
+
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(boot);
+})();
+</script>
+</body>
+</html>

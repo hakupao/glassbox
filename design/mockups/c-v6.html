@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="slate">
+<script>(function(){var t=new URLSearchParams(location.search).get("theme");if(t)document.documentElement.dataset.theme=t;})();</script>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>glassbox 驾驶舱 v6</title>
+<!--
+  C-v6：信息优先。
+  - 今日画作从首屏移到页面底部，固定在视口底边、向上渐隐，作为背景层。
+  - 正文改为「一块面板 = 一件事」，统一三级字号：标签 13 / 数值 28 等宽 / 补充行 12 等宽。
+  - 默认去掉扫描线、暗角、滚动亮带、文字光晕和底部状态条；?fx=crt 可加回对比。
+  - ?theme=ink|graphite|slate 切换底色深浅（默认 slate）。
+  - ?t=秒 冻结帧；数据来自 sample-data.js（虚构）。
+-->
+<style>
+  :root{
+    --bg:#0f1218; --panel:rgba(17,21,29,.78); --fg:#6c97d6; --hi:#efeadd; --text:#d8d3c4; --dim:#8f8b80; --or:#dba843;
+    --line:rgba(216,211,196,.12); --soft:rgba(216,211,196,.07);
+    --sans:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei","Helvetica Neue",system-ui,sans-serif;
+    --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  /* 底色档位：?theme=ink（原墨底）| graphite（石墨灰）| slate（默认，板岩灰） */
+  :root[data-theme="slate"]{--bg:#1d2129;--panel:rgba(37,42,52,.72);--dim:#9b978c;--line:rgba(216,211,196,.14);--soft:rgba(216,211,196,.08)}
+  :root[data-theme="slate"]{--bg:#272c35;--panel:rgba(48,54,65,.7);--dim:#a6a297;--line:rgba(216,211,196,.16);--soft:rgba(216,211,196,.09)}
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{margin:0;min-height:100vh;color:var(--text);font:14px/1.55 var(--sans);overflow-x:hidden;background:var(--bg);-webkit-font-smoothing:antialiased}
+  svg{display:block}
+  .in{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:0 24px}
+  @media (max-width:640px){.in{padding:0 16px}}
+
+  /* 背景画作：固定在视口底部，向上渐隐 */
+  #art{position:fixed;left:0;right:0;bottom:0;width:100%;height:62vh;z-index:0;pointer-events:none;
+    -webkit-mask-image:linear-gradient(to top,#000 0%,#000 30%,transparent 100%);mask-image:linear-gradient(to top,#000 0%,#000 30%,transparent 100%)}
+
+  .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 0}
+  .brand{font:700 19px var(--mono);color:var(--hi);letter-spacing:.02em}
+  .meta{display:flex;gap:8px;align-items:center;font:12px var(--mono);color:var(--dim);flex-wrap:wrap}
+  .chip{color:var(--bg);background:var(--fg);padding:2px 8px;font-weight:600}
+  .chip.line{background:none;color:var(--dim);border:1px solid var(--line);font-weight:400}
+
+  /* 面板：直角细线，半透明底，轻模糊背景 */
+  .pn{background:var(--panel);border:1px solid var(--line);padding:16px 18px 18px;margin-bottom:14px;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);min-width:0}
+  .ph{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+  .ph h2{margin:0;font:600 15px var(--sans);color:var(--hi)}
+  .ph .r{font:12px var(--mono);color:var(--dim);white-space:nowrap}
+  .grid2{display:grid;grid-template-columns:7fr 5fr;gap:14px}
+  .grid2>.pn{margin-bottom:0}
+  .row{margin-bottom:14px}
+  @media (max-width:960px){.grid2{grid-template-columns:1fr}}
+
+  /* 三级字号 */
+  .lab{font-size:13px;color:var(--dim);margin:0 0 2px}
+  .val{font:600 28px/1.2 var(--mono);color:var(--hi);font-variant-numeric:tabular-nums}
+  .val.c{color:var(--fg)} .val.o{color:var(--or)}
+  .sub{font:12px var(--mono);color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* 今日 KPI */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr)}
+  .kpis>div{padding:0 18px;border-left:1px solid var(--soft);min-width:0}
+  .kpis>div:first-child{padding-left:0;border-left:0}
+  @media (max-width:960px){.kpis{grid-template-columns:repeat(3,1fr);row-gap:16px}.kpis>div:nth-child(4){padding-left:0;border-left:0}}
+  @media (max-width:560px){.kpis{grid-template-columns:1fr 1fr}.kpis>div{padding:0 0 0 14px}.kpis>div:nth-child(odd){padding-left:0;border-left:0}.kpis>div:nth-child(4){padding-left:14px;border-left:1px solid var(--soft)}}
+
+  /* 额度 */
+  .qs{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+  .qs>article{padding:0 18px;border-left:1px solid var(--soft);min-width:0}
+  .qs>article:first-child{padding-left:0;border-left:0}
+  .qh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .qh b{font-weight:500;color:var(--text)}
+  .qh .val{font-size:22px}
+  .qbar{margin:8px 0 6px}
+  .qf{display:flex;justify-content:space-between;gap:8px;font:12px var(--mono);color:var(--dim)}
+  .qf .hot{color:var(--or)} .qf .ok{color:var(--fg)}
+  @media (max-width:760px){.qs{grid-template-columns:1fr;row-gap:16px}.qs>article{padding:0;border-left:0}}
+
+  /* 热力图 */
+  .heat{position:relative;margin:18px 0 0 22px}
+  .heat .ml{position:absolute;top:-17px;font-size:11.5px;color:var(--dim);white-space:nowrap}
+  .heat .wl{position:absolute;left:-22px;font-size:11px;color:var(--dim);transform:translateY(-50%)}
+  .hleg{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim)}
+  .hleg i{width:9px;height:9px;display:inline-block}
+  .hfoot{display:flex;justify-content:space-between;margin-top:10px;font:12px var(--mono);color:var(--dim)}
+
+  /* 趋势 */
+  .chart{position:relative;padding-left:40px}
+  .yl{position:absolute;left:0;width:34px;text-align:right;font:11px var(--mono);color:var(--dim)}
+  .xl{display:flex;justify-content:space-between;font:11.5px var(--mono);color:var(--dim);margin:6px 0 0 40px}
+  .leg{display:flex;gap:14px;font-size:12px;color:var(--dim)}
+  .leg i{display:inline-block;width:8px;height:8px;margin-right:5px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--soft)}
+  .stats .val{font-size:17px}
+  @media (max-width:560px){.stats{grid-template-columns:1fr 1fr}}
+
+  /* 明细表（Token 构成 / 按模型） */
+  .tb{width:100%;border-collapse:collapse;font-size:13px}
+  .tb td{padding:6px 0;border-top:1px solid var(--soft);vertical-align:middle}
+  .tb tr:first-child td{border-top:0}
+  .tb .n{color:var(--text);white-space:nowrap;padding-right:10px}
+  .tb .m{font-family:var(--mono)}
+  .tb .v{font:13px var(--mono);color:var(--hi);text-align:right;white-space:nowrap;padding-left:10px}
+  .tb .p{font:11.5px var(--mono);color:var(--dim);text-align:right;width:58px;padding-left:8px;white-space:nowrap}
+  @media (max-width:560px){.tb .bar{width:22%}}
+  .tb .bar{width:38%}
+  .tb .bar svg{width:100%;height:6px}
+  .sep{height:16px}
+
+  /* 活动 */
+  .act{list-style:none;margin:0;padding:0}
+  .act li{display:grid;grid-template-columns:96px 280px 1fr;gap:2px 14px;padding:8px 0;border-top:1px solid var(--soft);align-items:baseline}
+  .act li:first-child{border-top:0;padding-top:0}
+  .act time{font:12px var(--mono);color:var(--dim)}
+  .act .p{color:var(--hi);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .act .p small{font:11px var(--mono);color:var(--dim);font-weight:400;margin-left:6px}
+  .act .p.priv{color:var(--dim);font-weight:500}
+  .act .p.priv i{display:inline-block;width:8px;height:8px;margin-right:7px;background:repeating-linear-gradient(45deg,var(--dim) 0 2px,transparent 2px 4px)}
+  .act .d{color:var(--text)}
+  @media (max-width:760px){.act li{grid-template-columns:1fr;gap:0}}
+
+  .cap{display:flex;justify-content:space-between;gap:12px;font:12px var(--mono);color:var(--dim);padding:6px 0 0}
+  @media (max-width:640px){.cap{flex-direction:column;gap:2px}}
+  .tail{height:34vh}
+
+  /* ?fx=crt：加回 C-v5 的扫描线、暗角、文字光晕 */
+  .fx{position:fixed;inset:0;pointer-events:none;display:none}
+  .crt .fx{display:block}
+  .scan{z-index:60;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.2) 0,rgba(0,0,0,.2) 1px,transparent 1px,transparent 3px)}
+  .vig{z-index:61;background:radial-gradient(ellipse at center,transparent 58%,rgba(0,0,0,.55) 100%)}
+  .crt .val,.crt .brand{text-shadow:0 0 14px rgba(108,151,214,.4)}
+</style>
+</head>
+<body>
+<canvas id="art" role="img" aria-label="今日画作：由今日用量生成的方块格点地形与光点，远山是近 30 天费用"></canvas>
+
+<div class="in">
+  <header class="top">
+    <div class="brand">glassbox</div>
+    <div class="meta"><span class="chip">只读快照</span><span class="chip line" id="stamp"></span><span id="clock"></span></div>
+  </header>
+
+  <section class="pn row" aria-labelledby="h-today">
+    <div class="ph"><h2 id="h-today">今日用量</h2><span class="r">费用为 API 等价估算</span></div>
+    <div class="kpis">
+      <div><p class="lab">请求</p><div class="val" id="kReq"></div><div class="sub" id="kReqS"></div></div>
+      <div><p class="lab">费用</p><div class="val o" id="kCost"></div><div class="sub" id="kCostS"></div></div>
+      <div><p class="lab">Token</p><div class="val" id="kTok"></div><div class="sub" id="kTokS"></div></div>
+      <div><p class="lab">缓存命中</p><div class="val c" id="kHit"></div><div class="sub" id="kHitS"></div></div>
+      <div><p class="lab">会话</p><div class="val" id="kSes"></div><div class="sub" id="kSesS"></div></div>
+    </div>
+  </section>
+
+  <section class="pn row" aria-labelledby="h-quota">
+    <div class="ph"><h2 id="h-quota">额度</h2><span class="r">▏= 匀速位置</span></div>
+    <div class="qs" id="quota"></div>
+  </section>
+
+  <section class="pn row" aria-labelledby="h-heat">
+    <div class="ph"><h2 id="h-heat">GitHub 贡献</h2><span class="r" id="heatN"></span></div>
+    <div id="heat"></div>
+    <div class="hfoot"><span id="heatStat"></span><span class="hleg" id="hleg"></span></div>
+  </section>
+
+  <div class="grid2 row">
+    <section class="pn" aria-labelledby="h-trend">
+      <div class="ph"><h2 id="h-trend">近 30 天费用</h2><span class="leg"><span><i style="background:#6c97d6"></i>Claude Code</span><span><i style="background:#dba843"></i>Codex</span></span></div>
+      <div class="chart" id="trend"></div>
+      <div class="xl" id="trendX"></div>
+      <div class="stats" id="trendStats"></div>
+    </section>
+    <section class="pn" aria-labelledby="h-tok">
+      <div class="ph"><h2 id="h-tok">今日构成</h2><span class="r">Token / 模型</span></div>
+      <table class="tb" id="tokens"></table>
+      <div class="sep"></div>
+      <table class="tb" id="models"></table>
+    </section>
+  </div>
+
+  <section class="pn row" aria-labelledby="h-act">
+    <div class="ph"><h2 id="h-act">最近活动</h2><span class="r" id="actN"></span></div>
+    <ul class="act" id="act"></ul>
+  </section>
+
+  <div class="cap"><span id="cap0"></span><span id="capMid"></span><span id="cap1"></span></div>
+  <div class="tail"></div>
+</div>
+<div class="fx scan"></div><div class="fx vig"></div>
+
+<script src="sample-data.js"></script>
+<script>
+(function(){
+'use strict';
+const GB=window.GB, T0=Date.parse(GB.generatedAt);
+const Q=new URLSearchParams(location.search);
+const FROZEN=Q.has('t')&&isFinite(parseFloat(Q.get('t')))?parseFloat(Q.get('t')):null;
+const REDUCE=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const STATIC=FROZEN!==null||REDUCE;
+const $=id=>document.getElementById(id);
+if(Q.get('fx')==='crt')document.body.classList.add('crt');
+
+const nf=n=>Math.round(n).toLocaleString('en-US');
+const fm=n=>n>=1e6?(n/1e6).toFixed(n>=1e7?1:2)+'M':nf(n/1e3)+'K';
+const usd=n=>'$'+n.toFixed(2);
+const mmdd=iso=>iso.slice(5,10).replace('-','/'), hhmm=iso=>iso.slice(11,16);
+const dayMs=864e5, todayMs=Date.UTC(+GB.generatedAt.slice(0,4),+GB.generatedAt.slice(5,7)-1,+GB.generatedAt.slice(8,10));
+const fmtD=ms=>{const d=new Date(ms);return String(d.getUTCMonth()+1).padStart(2,'0')+'/'+String(d.getUTCDate()).padStart(2,'0');};
+const TD=GB.today, TK=TD.tokens;
+const BLUE='#6c97d6', HI='#efeadd', OR='#dba843';
+
+/* 固定点径方块格点 */
+const COL=[BLUE,HI,OR];
+function cells(nc,nr,level,o={}){
+  const p=o.pitch||6, px=o.px||Math.round(p*0.72*10)/10, half=px/2, out=[];
+  for(let c=0;c<nc;c++)for(let r=0;r<nr;r++){
+    const v=level(c,r); if(!v)continue;
+    out.push(`<rect x="${(c*p+p/2-half).toFixed(2)}" y="${(r*p+p/2-half).toFixed(2)}" width="${px}" height="${px}" fill="${COL[v[1]||0]}" fill-opacity="${v[0].toFixed(3)}"/>`);
+  }
+  const w=nc*p,h=nr*p;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${out.join('')}</svg>`;
+}
+const fits=[];
+function fit(id,fn){const el=$(id);const run=()=>{const w=el.clientWidth;if(w)el.innerHTML=fn(w);};run();fits.push(run);}
+
+/* ---------- 今日用量 ---------- */
+const totTok=TK.input+TK.output+TK.cacheRead+TK.cacheWrite; // 推理已含在输出里
+const tr=GB.trend30d, cxs=GB.trend30dCodex, nT=tr.length, maxT=Math.max(...tr), miT=tr.indexOf(maxT);
+const avg7=tr.slice(-7).reduce((a,b)=>a+b,0)/7;
+const byA=Object.fromEntries(TD.byAgent.map(a=>[a.agent,a]));
+$('stamp').textContent='更新于 '+mmdd(GB.generatedAt)+' '+hhmm(GB.generatedAt);
+$('kReq').textContent=nf(TD.requests);
+$('kReqS').textContent=`Claude ${nf(byA['Claude Code'].requests)} · Codex ${nf(byA['Codex'].requests)}`;
+$('kCost').textContent=usd(TD.costUsdApiEquivalent);
+const dv=TD.costUsdApiEquivalent/avg7-1;
+$('kCostS').textContent=`近 7 日均 ${usd(avg7)} · ${dv>=0?'+':''}${Math.round(dv*100)}%`;
+$('kTok').textContent=fm(totTok);
+$('kTokS').textContent=`↓${fm(TK.input)} ↑${fm(TK.output)} 写${fm(TK.cacheWrite)}`;
+$('kHit').textContent=(TD.cacheHitRate*100).toFixed(1)+'%';
+$('kHitS').textContent=`读取 ${fm(TK.cacheRead)}`;
+$('kSes').textContent=TD.sessions;
+$('kSesS').textContent=`平均 ${nf(TD.requests/TD.sessions)} 请求/会话`;
+
+/* ---------- 额度 ---------- */
+const QWIN={'7 天':7*dayMs,'5 小时':5*36e5};
+function pace(q,now){
+  const reset=Date.parse(q.resetsAt), W=QWIN[q.window], e=Math.min(1,Math.max(0.001,(now-(reset-W))/W));
+  const diff=q.usedPct/100/e-1;
+  const dur=ms=>{const h=Math.floor(ms/36e5),m=Math.round(ms%36e5/6e4);return h>=24?`${Math.floor(h/24)}天${h%24}时`:h>0?`${h}时${m}分`:`${m}分`;};
+  if(diff<=0)return {e,reset,hot:false,txt:`慢于匀速 ${Math.round(-diff*100)}%`};
+  const el=e*W, tEx=(100-q.usedPct)/(q.usedPct/el), early=(reset-now)-tEx;
+  return {e,reset,hot:true,txt:`快 ${Math.round(diff*100)}% · 早 ${dur(early)}用完`};
+}
+function cd(ms){ms=Math.max(0,ms);const d=Math.floor(ms/dayMs);ms-=d*dayMs;const h=Math.floor(ms/36e5);ms-=h*36e5;const m=Math.floor(ms/6e4);
+  const z=x=>String(x).padStart(2,'0');return (d?d+'天 ':'')+z(h)+':'+z(m);}
+$('quota').innerHTML=GB.quota.map((q,i)=>{
+  const P=pace(q,T0);
+  return `<article><div class="qh"><b>${q.agent} · ${q.window}</b><span class="val">${q.usedPct}%</span></div>
+    <div class="qbar" data-i="${i}"></div>
+    <div class="qf"><span>重置 <span class="cd" data-q="${i}">${cd(P.reset-T0)}</span></span><span class="${P.hot?'hot':'ok'}">${P.txt}</span></div></article>`;
+}).join('');
+function qbars(){
+  document.querySelectorAll('.qbar').forEach(el=>{
+    const w=el.clientWidth; if(!w)return;
+    const q=GB.quota[+el.dataset.i], P=pace(q,T0), p=5, nc=Math.floor(w/p), u=Math.round(q.usedPct/100*nc), m=Math.min(nc-1,Math.round(P.e*nc));
+    el.innerHTML=cells(nc,3,(c,r)=>{if(c===m)return [1,1]; return c<u?[0.5+0.45*(c/nc),P.hot&&c>m?2:0]:[0.1,0];},{pitch:p,px:4});
+  });
+}
+qbars(); fits.push(qbars);
+
+/* ---------- 热力图：整行宽 ---------- */
+fit('heat',w=>{
+  const ALL=GB.contrib.length, W=w<600?26:ALL, C0=ALL-W, dow=new Date(todayMs).getUTCDay(), base=todayMs-dow*dayMs; // 手机只显示近半年
+  const p=Math.max(5,Math.min(24,Math.floor((w-22)/W))), px=Math.max(4,Math.round(p*0.74));
+  const lvl=v=>v===0?0:v<4?1:v<10?2:v<20?3:4, AL=[0.07,0.3,0.52,0.78,1];
+  const svg=cells(W,7,(c,r)=>{if(c===W-1&&r>dow)return null; const l=lvl(GB.contrib[C0+c][r]); return [AL[l],l===4?1:0];},{pitch:p,px});
+  let lab='',last=-9;
+  for(let k=0;k<W;k++){const dt=new Date(base-(W-1-k)*7*dayMs);
+    if(dt.getUTCDate()<=7&&k-last>=Math.ceil(30/p)){last=k;lab+=`<span class="ml" style="left:${k*p}px">${dt.getUTCMonth()+1}月</span>`;}}
+  const wl=[[1,'一'],[3,'三'],[5,'五']].map(([d,t])=>`<span class="wl" style="top:${(d+0.5)*p}px">${t}</span>`).join('');
+  return `<div class="heat">${lab}${wl}${svg}</div>`;
+});
+(function(){
+  const flat=GB.contrib.flat(), active=flat.filter(v=>v>0).length;
+  let streak=0; const dow=new Date(todayMs).getUTCDay();
+  for(let w=GB.contrib.length-1;w>=0;w--){for(let d=(w===GB.contrib.length-1?dow:6);d>=0;d--){if(GB.contrib[w][d]>0)streak++;else{w=-1;break;}}}
+  $('heatN').textContent=`近一年 ${nf(GB.contributions.total)} 次`;
+  $('heatStat').textContent=`活跃 ${active} 天 · 当前连续 ${streak} 天 · 单日最多 ${Math.max(...flat)} 次`;
+})();
+$('hleg').innerHTML='少 '+[0.07,0.3,0.52,0.78,1].map((a,i)=>`<i style="background:${i===4?HI:BLUE};opacity:${Math.max(a,0.16)}"></i>`).join('')+' 多';
+
+/* ---------- 趋势 ---------- */
+fit('trend',w=>{
+  const p=5, avail=w-40, per=Math.max(1,Math.floor(avail/p/nT)), nc=per*nT, NR=w<500?18:22;
+  const gapCol=per>=3?per-1:-1;
+  const html=cells(nc,NR,(c,r)=>{
+    const d=Math.floor(c/per), sub=c%per; if(sub===gapCol)return null;
+    const f=tr[d]/maxT*NR, cc=cxs[d]/maxT*NR, rb=NR-1-r, last=d===nT-1;
+    if(rb+0.55<=f){const top=f-rb<=1.55; return [Math.min(1,top?1:(0.4+0.42*rb/f)*(last?1.15:1)),rb<cc?2:0];}
+    return [0.05,0];
+  },{pitch:p,px:4});
+  const ys=[maxT,maxT/2,0].map((v,i)=>`<span class="yl" style="top:${i===0?0:i===1?(NR*p/2-7):(NR*p-12)}px">$${Math.round(v)}</span>`).join('');
+  return html+ys;
+});
+$('trendX').innerHTML=[0,15,29].map(k=>`<span>${fmtD(todayMs-(29-k)*dayMs)}</span>`).join('');
+(function(){
+  const sum=tr.reduce((a,b)=>a+b,0), cs=cxs.reduce((a,b)=>a+b,0);
+  const it=(l,v,s='')=>`<div><p class="lab">${l}</p><div class="val">${v}</div>${s?`<div class="sub">${s}</div>`:''}</div>`;
+  $('trendStats').innerHTML=it('30 天合计',usd(sum))+it('近 7 日均',usd(avg7))+it('单日最高',usd(maxT),fmtD(todayMs-(nT-1-miT)*dayMs))+it('Codex 占比',(cs/sum*100).toFixed(0)+'%');
+})();
+
+/* ---------- 今日构成：Token 与模型 ---------- */
+function bar(frac,ci){return `<svg viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="6" fill="${BLUE}" fill-opacity=".08"/><rect width="${Math.max(0.8,frac*100).toFixed(2)}" height="6" fill="${COL[ci]}" fill-opacity=".85"/></svg>`;}
+$('tokens').innerHTML=[['输入',TK.input],['输出',TK.output],['缓存读取',TK.cacheRead],['缓存写入',TK.cacheWrite],['推理 ⊂ 输出',TK.reasoning]]
+  .map(([n,v])=>`<tr><td class="n">${n}</td><td class="bar">${bar(v/totTok,0)}</td><td class="v">${fm(v)}</td><td class="p">${(v/totTok*100).toFixed(1)}%</td></tr>`).join('');
+const maxM=Math.max(...TD.byModel.map(m=>m.cost));
+$('models').innerHTML=TD.byModel.map(m=>{const cx=/gpt|codex/i.test(m.model);
+  return `<tr><td class="n m">${m.model}</td><td class="bar">${bar(m.cost/maxM,cx?2:0)}</td><td class="v">${usd(m.cost)}</td><td class="p">${nf(m.requests)}次</td></tr>`;}).join('');
+
+/* ---------- 活动 ---------- */
+$('act').innerHTML=GB.activity.map(a=>{
+  const when=`<time>${mmdd(a.t)} ${hhmm(a.t)}</time>`;
+  return a.public
+    ?`<li>${when}<span class="p">${a.repo}<small>${a.branch} · ${a.hash}</small></span><span class="d">${a.title}</span></li>`
+    :`<li>${when}<span class="p priv"><i></i>私有项目</span><span class="d">${a.title}</span></li>`;
+}).join('');
+$('actN').textContent=`${GB.activity.length} 条 · 私有 ${GB.activity.filter(a=>!a.public).length}`;
+
+/* ---------- 今日画作（背景层）：地形 + 光点，(日期种子, t) 的纯函数 ---------- */
+const seedDate=GB.generatedAt.slice(0,10).replace(/-/g,''), seed=parseInt(seedDate,10);
+const shareCC=byA['Claude Code'].requests/TD.requests;
+const nParticles=Math.round(totTok/1e6*38);
+$('cap0').textContent='今日画作 #'+seedDate;
+$('capMid').innerHTML=`<span style="color:${BLUE}">■</span> Claude Code ${Math.round(shareCC*100)}%　<span style="color:${OR}">■</span> Codex ${Math.round((1-shareCC)*100)}%`;
+$('cap1').textContent=`光点 ${nf(nParticles)} = ${fm(totTok)} Token · 远山 = 近 30 天费用`;
+
+const art=$('art'), ax=art.getContext('2d');
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const rnd0=mulberry(seed^0x9e3779b9), perm=new Float32Array(65536); for(let i=0;i<perm.length;i++)perm[i]=rnd0();
+function noise(x,y){const s_=t=>t*t*(3-2*t);
+  const xi=Math.floor(x),yi=Math.floor(y),xf=s_(x-xi),yf=s_(y-yi),x0=xi&255,x1=(xi+1)&255,y0=(yi&255)<<8,y1=((yi+1)&255)<<8;
+  const a=perm[y0|x0],b=perm[y0|x1],c=perm[y1|x0],d=perm[y1|x1]; return (a+(b-a)*xf)*(1-yf)+(c+(d-c)*xf)*yf;}
+const smooth=x=>{x=Math.max(0,Math.min(1,x));return x*x*(3-2*x);};
+const sstep=(a,b,x)=>smooth((x-a)/(b-a));
+const trMean=tr.reduce((a,b)=>a+b,0)/nT;
+function ridge(xn){const f=(xn*.5+.5)*(nT-1),i=Math.max(0,Math.min(nT-2,Math.floor(f))),t=f-i,s=(1-Math.cos(t*Math.PI))/2;return (tr[i]+(tr[i+1]-tr[i])*s)/maxT;}
+const prnd=mulberry(seed);
+const PART=Array.from({length:nParticles},()=>({bx:prnd()*2-1,by:prnd(),bz:prnd(),ph:prnd()*6.283,cx:prnd()>shareCC}));
+const LV=9, ART=[[108,151,214],[219,168,67]], jitter=(1-TD.cacheHitRate)*4;
+const NZ=120, zs=Array.from({length:NZ},(_,i)=>1.1*Math.pow(15/1.1,i/(NZ-1)));
+let L=null,G=null;
+function layout(){
+  const W=art.clientWidth,H=art.clientHeight; if(!W||!H){L=null;return;}
+  const dpr=Math.min(devicePixelRatio||1,2);
+  art.width=Math.round(W*dpr);art.height=Math.round(H*dpr);
+  const p=5; L={W,H,dpr,p,cols:Math.floor(W/p),rows:Math.floor(H/p)};
+}
+function drawArt(t){
+  if(!L)layout(); if(!L)return;
+  const {W,H,dpr,cols,rows}=L, P=L.p;
+  if(!G||G.n!==cols*rows){G={n:cols*rows,gb:new Float32Array(cols*rows),gc:new Uint8Array(cols*rows),bk:Array.from({length:2*LV},()=>new Int32Array(cols*rows)),bc:new Int32Array(2*LV)};}
+  const {gb,gc,bk,bc}=G, PN=W<640?Math.round(PART.length*.5):PART.length;
+  gb.fill(0);
+  const hy=rows*.42, focal=rows*.95, kx=.62*cols/rows;
+  const A=2.2+.5*Math.sin(t*.33), camH=2.0+.08*Math.sin(t*.21), trav=t*.16, ymin=new Float32Array(cols).fill(rows);
+  for(let c=0;c<cols;c++){
+    const xn=(c+.5)/cols*2-1;
+    for(let i=0;i<NZ;i++){
+      const z=zs[i], wx=xn*z*kx, zz=z+trav, far=sstep(5,13,z), amp=A*(.3+.7*sstep(2,8,z));
+      const Hf=(x,q)=>(noise(x*.42+7,q*.42)-.5)*amp+(noise(x*1.15+31,q*1.15+5)-.5)*jitter*.55;
+      const hc=Hf(wx,zz), ys=hy+(camH-(hc+(ridge(xn)-trMean/maxT)*far*3.2+.3))/z*focal;
+      if(ys>=ymin[c])continue;
+      const slope=-(Hf(wx,zz+.3)-hc)/.3*.6+(Hf(wx+.3,zz)-hc)/.3*.35, fog=Math.exp(-(z-1.1)*.12);
+      const b=Math.max(.2,Math.min(1,.26+slope*2.6))*(.4+.6*fog)*.95;
+      for(let y=Math.max(0,Math.ceil(ys)),y1=Math.min(rows,Math.ceil(ymin[c]));y<y1;y++){const k=c*rows+y; gb[k]=Math.min(1,b+(y===Math.ceil(ys)?.12*fog:0)); gc[k]=0;}
+      ymin[c]=ys;
+    }
+  }
+  for(let n=0;n<PN;n++){
+    const p=PART[n], u=(p.bz+t*.011)%1, z=2.2+u*12, life=Math.sin(u*Math.PI);
+    const wx=p.bx*z*kx+Math.sin(t*.22+p.ph)*.5+Math.sin(t*.13+p.by*5)*.4, wy=.9+p.by*3.6+Math.sin(t*.3+p.bx*4+p.ph)*.3+Math.sin(t*.17+z)*.2;
+    const sx=((wx/(z*kx))*.5+.5)*cols, sy=hy+(camH-wy)/z*focal, cx=sx|0, cy=sy|0;
+    if(cx<0||cx>=cols||cy<0||cy>=rows||sy>=ymin[cx]-1)continue;
+    const b=life*(.35+.65*Math.exp(-(z-2)*.12))*(.75+.25*Math.sin(t*.7+p.ph))*.95, k=cx*rows+cy;
+    if(b>gb[k]){gb[k]=b;gc[k]=p.cx?1:0;}
+  }
+  bc.fill(0);
+  for(let k=0;k<gb.length;k++){
+    const a=gb[k]; if(a<.05)continue;
+    const key=gc[k]*LV+Math.min(LV,Math.ceil(a*LV))-1; bk[key][bc[key]++]=k;
+  }
+  ax.setTransform(dpr,0,0,dpr,0,0); ax.clearRect(0,0,W,H);
+  for(let key=0;key<2*LV;key++){
+    const n=bc[key]; if(!n)continue;
+    const ci=(key/LV)|0, f=(key%LV+1)/LV, col=ART[ci], s=P*(.3+.6*f), off=(P-s)/2, arr=bk[key];
+    ax.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${((.14+.66*f)).toFixed(3)})`;
+    if(f>0.85){ax.shadowColor=`rgba(${col[0]},${col[1]},${col[2]},.7)`;ax.shadowBlur=6;}else ax.shadowBlur=0;
+    ax.beginPath(); for(let i=0;i<n;i++){const k=arr[i]; ax.rect(((k/rows)|0)*P+off,(k%rows)*P+off,s,s);} ax.fill();
+  }
+  ax.shadowBlur=0;
+}
+
+/* ---------- 逐帧 ---------- */
+let lastSec=-1;
+function tickText(T,force){
+  const now=T0+T*1000, sec=Math.floor(T); if(sec===lastSec&&!force)return; lastSec=sec;
+  document.querySelectorAll('.cd').forEach(el=>{el.textContent=cd(Date.parse(GB.quota[+el.dataset.q].resetsAt)-now);});
+  const d=new Date(now+9*36e5), z=n=>String(n).padStart(2,'0');
+  $('clock').textContent=`JST ${z(d.getUTCHours())}:${z(d.getUTCMinutes())}:${z(d.getUTCSeconds())}`;
+}
+function draw(T,force){drawArt(T+6);tickText(T,force);}
+let start=performance.now(),lastF=0;
+function frame(ts){requestAnimationFrame(frame); if(document.hidden||ts-lastF<40)return; lastF=ts; draw((performance.now()-start)/1000);}
+if(FROZEN!==null)draw(FROZEN,true); else if(REDUCE)draw(8,true); else {draw(0,true);requestAnimationFrame(frame);}
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{fits.forEach(f=>f());L=null;if(STATIC)draw(FROZEN!==null?FROZEN:8,true);},120);});
+})();
+</script>
+</body>
+</html>

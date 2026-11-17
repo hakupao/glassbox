@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>glassbox 样稿</title>
+<style>
+  :root { --bg:#0d0d0c; --fg:#e8e6e1; --dim:#8a877f; --line:#2a2925; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.6 ui-monospace,"SF Mono",Menlo,monospace; }
+  header { padding:28px 16px 8px; max-width:1500px; margin:0 auto; }
+  h1 { margin:0; font-size:20px; letter-spacing:.08em; }
+  p { color:var(--dim); margin:4px 0 0; }
+  main { max-width:1500px; margin:0 auto; padding:16px; display:grid; gap:28px; }
+  .item { border-top:1px solid var(--line); padding-top:14px; }
+  .meta { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; margin-bottom:10px; }
+  .meta b { font-size:16px; }
+  .meta a { color:var(--fg); }
+  .frames { display:grid; grid-template-columns: 1fr 260px; gap:16px; align-items:start; }
+  .desk, .mob { border:1px solid var(--line); background:#000; overflow:hidden; }
+  .desk { aspect-ratio:1440/900; position:relative; }
+  .desk iframe { width:1440px; height:900px; transform-origin:0 0; border:0; position:absolute; }
+  .mob { aspect-ratio:390/844; position:relative; }
+  .mob iframe { width:390px; height:844px; transform-origin:0 0; border:0; position:absolute; }
+  @media (max-width:800px){ .frames{ grid-template-columns:1fr; } .mob{ max-width:260px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>glassbox · 视觉样稿</h1>
+  <p>★ 是第三轮的两张；其后是第二轮 v2，下面 5 张是第一轮原稿（保留对照）。左边是桌面 1440 缩略，右边是手机 390 缩略；点标题打开全屏。</p>
+</header>
+<main id="list"></main>
+<script>
+const items = [
+  ["c-v5.html","★ C-v5 · C-v3 原样 + B 色调与今日画作","第五轮：C-v3 不动，只换 B-v2 的色调（墨底、纸色、石青 / 雌黄）和首屏今日画作"],
+  ["c-v4.html","★ C-v4 · C-v3 × B-v2","第四轮：C-v3 的版式 + B-v2 的色调（墨底、纸色、石青 / 雌黄）与今日画作首屏；标题沿字形细留白，远山从副标题后穿过"],
+  ["c-v3.html","★ C-v3 · CRT × A2 融合","第三轮：C 的磷光氛围 + A2 的大标题 banner；首屏方块格点 3D 地形从标题后穿过，细留白；只留标签与数据"],
+  ["b-v2.html","★ B-v2 · 今日画作（保留版）","第三轮：只修瑕疵（山脊空洞、手机格子、数据区解释句），气质不变"],
+  ["v2-grid.html","A1 → v2 · 暗场光带（方块）","A1 改：去掉 @#% 字符拼图，黑底 3D 扭转光带由格点组成；标题按字形让位；?cell=dot 看圆点版"],
+  ["a2-v2.html","A2 → v2 · 网点纸面","A2 改：保留标题 banner 与字形留白，背景换动态方块地形；图表去掉圆球改细方块"],
+  ["c-v2.html","C → v2 · CRT 驾驶舱","C 改：保留磷光氛围；排版不再塞字符网格，正常字体 + 人话说明 + 更多留白；图形改方块格点"],
+  ["b-v2.html","B → v2 · 今日画作","B 改：保持安静；画作从字符改成方块格点的透视地形与粒子云"],
+  ["a1-ascii-dark.html","A1 · ASCII 暗场","主方向：深色底，字符密度梯度构成的发光图形，画廊感"],
+  ["a2-ascii-halftone.html","A2 · ASCII 网点纸面","主方向浅色变体：网点/抖动印刷感，一抹印刷红"],
+  ["c-crt.html","C · CRT 终端驾驶舱","磷光、扫描线、box-drawing 面板、开机自检"],
+  ["d-glass.html","D · 玻璃盒 × ASCII","磨砂玻璃面板，背后流动的字符场"],
+  ["b-generative.html","B · 生成艺术 × ASCII","每天一幅由当日数据生成的字符画"],
+];
+const list = document.getElementById("list");
+for (const [f,t,d] of items) {
+  const el = document.createElement("section");
+  el.className = "item";
+  el.innerHTML = `<div class="meta"><b><a href="${f}" target="_blank">${t}</a></b><span style="color:var(--dim)">${d}</span></div>
+    <div class="frames"><div class="desk"><iframe loading="lazy" src="${f}"></iframe></div>
+    <div class="mob"><iframe loading="lazy" src="${f}"></iframe></div></div>`;
+  list.appendChild(el);
+}
+function fit(){ document.querySelectorAll(".desk,.mob").forEach(box=>{
+  const fr = box.querySelector("iframe"); fr.style.transform = `scale(${box.clientWidth/parseInt(getComputedStyle(fr).width)})`; }); }
+addEventListener("resize", fit); new ResizeObserver(fit).observe(document.body); fit();
+</script>
+</body>
+</html>

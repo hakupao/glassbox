@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>glassbox · A1 ASCII 暗场</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112,300..700&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#09090a; --bg2:#0f0f11; --line:#1f1f23;
+  --fg:#dcdad3; --mid:#8d8b85; --dim:#5a5954;
+  --acc:#9fd8ff;               /* 唯一强调色：冷冰蓝 */
+  --mono:"Martian Mono","SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  --disp:"Bricolage Grotesque","PingFang SC","Hiragino Sans GB",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--fg);font:400 12px/1.7 var(--mono);font-stretch:90%;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+:focus-visible{outline:1px solid var(--acc);outline-offset:3px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+pre{font:inherit;white-space:pre;overflow:hidden}
+.dim{color:var(--dim)} .mid{color:var(--mid)} .acc{color:var(--acc)}
+
+/* 顶栏 */
+header{border-bottom:1px solid var(--line);position:relative;z-index:3}
+header .wrap{display:flex;align-items:center;justify-content:space-between;height:52px;gap:12px}
+.brand{font:600 15px var(--mono);letter-spacing:.02em;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.brand i{font-style:normal;color:var(--acc)}
+.snap{display:flex;align-items:center;gap:8px;color:var(--mid);font-size:11px;border:1px solid var(--line);padding:4px 10px;border-radius:999px;white-space:nowrap}
+.snap b{width:6px;height:6px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc)}
+
+/* 主视觉 */
+.hero{position:relative;height:min(62vh,520px);min-height:340px;border-bottom:1px solid var(--line);overflow:hidden}
+#field{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hero::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(9,9,10,.92) 0%,rgba(9,9,10,.55) 34%,rgba(9,9,10,0) 62%),linear-gradient(0deg,rgba(9,9,10,.95),rgba(9,9,10,0) 38%)}
+.hero .wrap{position:absolute;left:0;right:0;bottom:0;top:0;z-index:2;display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:36px;pointer-events:none}
+.hero h1{font:400 12px var(--mono);color:var(--mid);margin-bottom:6px}
+.big{font:300 clamp(72px,13vw,168px)/.86 var(--disp);letter-spacing:-.045em;color:var(--fg);font-variation-settings:"opsz" 96;text-shadow:0 0 40px rgba(159,216,255,.18)}
+.big small{font:400 .22em/1 var(--mono);letter-spacing:0;color:var(--mid);margin-left:.5em}
+.legend{margin-top:18px;color:var(--dim);font-size:11px;max-width:44ch}
+.legend em{font-style:normal;color:var(--acc)}
+
+/* 区块 */
+section{padding:44px 0 0}
+.h{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.h h2{font:500 13px var(--mono);color:var(--fg)}
+.h span{color:var(--dim);font-size:11px;text-align:right}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line)}
+.kpi{padding:18px 20px 16px;border-right:1px solid var(--line);min-width:0}
+.kpi:last-child{border-right:0}
+.kpi .n{font:300 clamp(38px,4.4vw,56px)/1 var(--disp);letter-spacing:-.035em;margin:10px 0 8px;white-space:nowrap}
+.kpi .n u{text-decoration:none;font:400 .3em var(--mono);color:var(--mid);letter-spacing:0;margin-left:.3em}
+.kpi .l{color:var(--mid);font-size:11px}
+.kpi .s{color:var(--dim);font-size:11px;margin-top:4px}
+.kpi .bar{color:var(--acc);margin-top:8px;font-size:11px;white-space:nowrap;overflow:hidden}
+
+/* 趋势 + token */
+.two{display:grid;grid-template-columns:1.55fr 1fr;gap:32px}
+.chart{font-size:14px;line-height:1;letter-spacing:0;color:var(--fg)}
+.chart pre{line-height:1.02;font-size:inherit;font-family:var(--mono);height:auto}
+.axis{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin-top:10px}
+.tok{display:grid;gap:12px}
+.tok div{display:grid;grid-template-columns:5.6em 1fr auto;gap:10px;align-items:center;font-size:11px}
+.tok .t{color:var(--mid)} .tok .v{color:var(--fg);font-variant-numeric:tabular-nums}
+.tok .b{color:var(--fg);overflow:hidden;white-space:nowrap;letter-spacing:-.05em}
+.tok .b i{font-style:normal;color:var(--dim)}
+.tok .hot .b{color:var(--acc)}
+.agents{margin-top:22px;border-top:1px solid var(--line);padding-top:14px;display:grid;gap:6px;font-size:11px}
+.agents div{display:flex;justify-content:space-between;gap:8px;color:var(--mid)}
+.agents b{font-weight:400;color:var(--fg)}
+
+/* 额度 */
+.quotas{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.q{border:1px solid var(--line);padding:18px 20px;background:linear-gradient(180deg,var(--bg2),var(--bg));min-width:0}
+.q .top{display:flex;justify-content:space-between;color:var(--mid);font-size:11px;gap:8px}
+.q .pct{font:300 56px/1 var(--disp);letter-spacing:-.04em;margin:14px 0 10px}
+.q .pct u{text-decoration:none;font:400 16px var(--mono);color:var(--mid);margin-left:2px;letter-spacing:0}
+.q .gauge{font-size:12px;letter-spacing:0;color:var(--fg);white-space:nowrap;overflow:hidden}
+.q .gauge i{font-style:normal;color:var(--line)}
+.q .row{display:flex;justify-content:space-between;gap:8px;font-size:11px;margin-top:12px;color:var(--mid)}
+.q .row b{font-weight:400;color:var(--fg)}
+.q .burn{margin-top:14px;font-size:13px;line-height:1;color:var(--fg);height:auto}
+.q .burn pre{line-height:1.02}
+.pace.fast{color:var(--acc)} .pace.slow{color:var(--mid)}
+
+/* 热力图 */
+.heat{overflow:hidden}
+.mon{display:flex;color:var(--dim);font-size:10px;white-space:pre;height:1.7em}
+.hg{display:flex;gap:0}
+.dl{color:var(--dim);font-size:10px;line-height:1.9;width:2.4em;flex:none}
+.cols{display:flex;flex:1;justify-content:space-between}
+.col{display:flex;flex-direction:column}
+.col span{display:block;text-align:center;line-height:1.9;font-size:12px;width:1.5ch;cursor:default}
+.l0{color:#2a2a2d}.l1{color:#6b6a66}.l2{color:#999790}.l3{color:#cfcdc6}.l4{color:var(--acc);text-shadow:0 0 6px rgba(159,216,255,.5)}
+.key{display:flex;gap:10px;align-items:center;justify-content:flex-end;color:var(--dim);font-size:11px;margin-top:10px}
+
+/* 活动 */
+.feed{display:grid}
+.ev{display:grid;grid-template-columns:5.5em 1.6em 1fr auto;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.ev .tm{color:var(--dim);font-size:11px}
+.ev .tt{color:var(--fg);min-width:0}
+.ev .rp{color:var(--mid);font-size:11px;text-align:right;white-space:nowrap}
+.ev.priv .rp{color:var(--dim)}
+.ev .tr{color:var(--dim)}
+footer{padding:44px 0 56px;color:var(--dim);font-size:11px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+@media (max-width:900px){
+  .kpis{grid-template-columns:1fr 1fr}
+  .kpi:nth-child(2){border-right:0}
+  .kpi:nth-child(-n+2){border-bottom:1px solid var(--line)}
+  .two{grid-template-columns:1fr;gap:36px}
+  .quotas{grid-template-columns:1fr}
+}
+@media (max-width:600px){
+  .wrap{padding:0 16px}
+  header .wrap{height:48px}
+  .snap{font-size:10px;padding:3px 8px}
+  .hero{height:380px}
+  .hero .wrap{padding-bottom:24px}
+  .hero::after{background:linear-gradient(0deg,rgba(9,9,10,.96) 0%,rgba(9,9,10,.5) 45%,rgba(9,9,10,.1) 100%)}
+  .kpi{padding:14px 14px 12px}
+  .kpi .n{font-size:34px}
+  .ev{grid-template-columns:4.6em 1.4em 1fr}
+  .ev .rp{grid-column:3;text-align:left}
+  .h span{max-width:50%}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand"><i>&#9619;</i>glassbox</div>
+    <div class="snap" id="snap"><b></b><span></span></div>
+  </div>
+</header>
+
+<div class="hero">
+  <canvas id="field" role="img" aria-label="由近 30 天费用走势与今日 Token 量驱动的字符场"></canvas>
+  <div class="wrap">
+    <h1>今日 Token 总量</h1>
+    <div class="big" id="bigTok"></div>
+    <p class="legend">字符场的<em>脊线</em>是近 30 天每日费用，流动速度随今日 Token 量变化，最右侧是今天。</p>
+  </div>
+</div>
+
+<main class="wrap">
+  <section aria-labelledby="k">
+    <div class="h"><h2 id="k">今日</h2><span id="kdate"></span></div>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section aria-labelledby="t">
+    <div class="two">
+      <div>
+        <div class="h"><h2 id="t">近 30 天费用</h2><span>API 等价估算 · 美元 / 天</span></div>
+        <div class="chart" id="trend"><pre id="trendPre" aria-hidden="true"></pre>
+          <div class="axis"><span>30 天前</span><span id="trendMax"></span><span>今天</span></div></div>
+      </div>
+      <div>
+        <div class="h"><h2>Token 拆分</h2><span>今日</span></div>
+        <div class="tok" id="tok"></div>
+        <div class="agents" id="agents"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="qq">
+    <div class="h"><h2 id="qq">额度</h2><span>虚线为匀速消耗的参考位置</span></div>
+    <div class="quotas" id="quotas"></div>
+  </section>
+
+  <section aria-labelledby="hh">
+    <div class="h"><h2 id="hh">GitHub 贡献</h2><span id="hsub"></span></div>
+    <div class="heat">
+      <div class="mon" id="mon"></div>
+      <div class="hg"><div class="dl"><div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div></div><div class="cols" id="cols"></div></div>
+      <div class="key"><span>少</span><span class="l0">·</span><span class="l1">:</span><span class="l2">+</span><span class="l3">#</span><span class="l4">@</span><span>多</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="aa">
+    <div class="h"><h2 id="aa">最近活动</h2><span>私有项目不显示仓库、分支和哈希</span></div>
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <footer><span>glassbox · 只读快照，数据为虚构样例</span><span id="foot"></span></footer>
+</main>
+
+<script src="sample-data.js"></script>
+<script>
+(function(){
+const G = window.GB;
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('en-US');
+const M = n => (n/1e6).toFixed(n>=1e7?1:2)+'M';
+const gen = new Date(G.generatedAt);
+const p2 = n => String(n).padStart(2,'0');
+const stamp = d => `${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+// 统一按快照时刻（JST）显示，避免本机时区造成偏差
+const jst = iso => { const d=new Date(iso); return new Date(d.getTime()+ (9*60+d.getTimezoneOffset())*60000); };
+const genJ = jst(G.generatedAt);
+
+$('snap').lastChild.textContent = '只读快照 · 更新于 ' + stamp(genJ);
+$('kdate').textContent = `${genJ.getFullYear()}-${p2(genJ.getMonth()+1)}-${p2(genJ.getDate())} · ${G.today.sessions} 个会话`;
+$('foot').textContent = '@' + G.owner;
+
+const T = G.today.tokens;
+const totalTok = T.input+T.output+T.cacheRead+T.cacheWrite;
+$('bigTok').innerHTML = (totalTok/1e6).toFixed(1)+'<small>M tokens</small>';
+
+/* KPI */
+const rampBar = (p,n)=>{const f=Math.round(p*n);return '█'.repeat(f)+'░'.repeat(n-f)};
+$('kpis').innerHTML = [
+  ['请求数', fmt(G.today.requests), '', `Claude Code ${fmt(G.today.byAgent[0].requests)} · Codex ${fmt(G.today.byAgent[1].requests)}`, ''],
+  ['Token 输入 / 输出', (T.input/1e6).toFixed(2), `/ ${(T.output/1e6).toFixed(2)}M`, `含推理 ${(T.reasoning/1e6).toFixed(2)}M`, ''],
+  ['缓存命中率', (G.today.cacheHitRate*100).toFixed(1), '%', '读取占比越高越省', rampBar(G.today.cacheHitRate,22)],
+  ['费用', '$'+G.today.costUsdApiEquivalent.toFixed(1), '', 'API 等价估算，非实际账单', '']
+].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="n">${k[1]}<u>${k[2]}</u></div><div class="s">${k[3]}</div>${k[4]?`<div class="bar" aria-hidden="true">${k[4]}</div>`:''}</div>`).join('');
+
+/* Token 拆分条 */
+const parts=[['输入',T.input],['输出',T.output],['缓存读',T.cacheRead],['缓存写',T.cacheWrite],['推理',T.reasoning]];
+const mx=Math.max(...parts.map(p=>p[1]));
+$('tok').innerHTML = parts.map((p,i)=>{
+  const n=Math.max(1,Math.round(Math.sqrt(p[1]/mx)*26));
+  return `<div class="${i===2?'hot':''}"><span class="t">${p[0]}</span><span class="b" aria-hidden="true">${'▓'.repeat(n)}<i>${'░'.repeat(26-n)}</i></span><span class="v">${M(p[1])}</span></div>`}).join('')
+  + '<div style="grid-template-columns:1fr"><span class="dim">条长按平方根缩放，避免缓存读压扁其它项</span></div>';
+$('agents').innerHTML = G.today.byAgent.map(a=>`<div><span>${a.agent}</span><b>${fmt(a.requests)} 次 · ${M(a.tokens)} · $${a.cost.toFixed(1)}</b></div>`).join('')
+  + G.today.byModel.map(m=>`<div class="dim"><span>${m.model}</span><span>$${m.cost.toFixed(1)}</span></div>`).join('');
+
+/* 盲文点阵 */
+const BIT=[[1,2,4,64],[8,16,32,128]];
+function braille(W,R,fn){ // fn(c,totalCols)->{lo,hi,dither} 返回每列要点亮的行区间(自顶 0 起)
+  const H=R*4, g=Array.from({length:H},()=>new Uint8Array(W*2));
+  fn(g,W*2,H);
+  const rows=[];
+  for(let r=0;r<R;r++){let s='';
+    for(let c=0;c<W;c++){let b=0;
+      for(let dx=0;dx<2;dx++)for(let dy=0;dy<4;dy++) if(g[r*4+dy][c*2+dx]) b|=BIT[dx][dy];
+      s+=String.fromCharCode(0x2800+b);}
+    rows.push(s);}
+  return rows;
+}
+const lerp=(a,p)=>{const i=Math.floor(p),f=p-i;return a[i]+((a[Math.min(i+1,a.length-1)]-a[i])*f)};
+function charW(el){const s=document.createElement('span');s.textContent='⣿'.repeat(20);s.style.cssText='position:absolute;visibility:hidden;white-space:pre';el.appendChild(s);const w=s.getBoundingClientRect().width/20;s.remove();return w||8}
+
+function drawTrend(){
+  const el=$('trendPre'), box=$('trend'); el.textContent='';
+  const w=box.clientWidth, cw=charW(el), W=Math.max(20,Math.floor(w/cw)), R=window.innerWidth<600?6:8;
+  const d=G.trend30d, max=Math.max(...d)*1.05;
+  const rows=braille(W,R,(g,C,H)=>{
+    let prev=null;
+    for(let c=0;c<C;c++){
+      const v=lerp(d,c/(C-1)*(d.length-1)), y=H-1-Math.round(v/max*(H-1));
+      const y0=prev===null?y:prev;
+      for(let yy=Math.min(y,y0);yy<=Math.max(y,y0);yy++) g[yy][c]=1; // 线
+      for(let yy=y+1;yy<H;yy++) if((yy+c)%4===0 || (yy>y+1&&(c%2===0&&yy%2===0)&&yy<y+7)) g[yy][c]=1; // 抖动填充
+      prev=y;
+    }
+  });
+  const k=4; // 最右 4 字符强调今天
+  el.innerHTML=rows.map(r=>r.slice(0,-k)+'<span class="acc">'+r.slice(-k)+'</span>').join('\n');
+  $('trendMax').textContent='峰值 $'+Math.max(...d).toFixed(1);
+}
+
+/* 额度 */
+function countdown(iso){
+  let m=Math.max(0,Math.round((new Date(iso)-new Date(G.generatedAt))/60000));
+  const d=Math.floor(m/1440); m-=d*1440; const h=Math.floor(m/60); m-=h*60;
+  return d?`${d} 天 ${h} 小时`:`${h} 小时 ${m} 分`;
+}
+function drawQuotas(){
+  const nar=window.innerWidth<=900;
+  $('quotas').innerHTML=G.quota.map((q,i)=>{
+    const pace=q.pace, fast=pace>0, pctTxt=(Math.abs(pace)*100).toFixed(0);
+    const n=28, f=Math.round(q.usedPct/100*n);
+    return `<article class="q"><div class="top"><span>${q.agent}</span><span>${q.window}窗口</span></div>
+      <div class="pct">${q.usedPct}<u>%</u></div>
+      <div class="gauge" aria-label="已用 ${q.usedPct}%">${'█'.repeat(Math.max(f,q.usedPct>0?1:0))}<i>${'░'.repeat(n-Math.max(f,q.usedPct>0?1:0))}</i></div>
+      <div class="row"><span>重置倒计时</span><b>${countdown(q.resetsAt)}</b></div>
+      <div class="row"><span>配速</span><b class="pace ${fast?'fast':'slow'}">${fast?'快于匀速 +':'慢于匀速 −'}${pctTxt}%</b></div>
+      <div class="burn" data-i="${i}"><pre aria-hidden="true"></pre></div></article>`}).join('');
+  document.querySelectorAll('.burn').forEach(b=>{
+    const q=G.quota[+b.dataset.i], pre=b.firstChild, w=b.clientWidth, cw=charW(pre), W=Math.max(12,Math.floor(w/cw)), R=3;
+    const h=q.history, ideal=q.usedPct/(1+q.pace);
+    const rows=braille(W,R,(g,C,H)=>{
+      const Y=v=>H-1-Math.round(Math.min(v,100)/100*(H-1));
+      let prev=null;
+      for(let c=0;c<C;c++){
+        const p=c/(C-1), y=Y(lerp(h,p*(h.length-1)));
+        const y0=prev===null?y:prev;
+        for(let yy=Math.min(y,y0);yy<=Math.max(y,y0);yy++) g[yy][c]=1;
+        if(c%3===0) g[Y(ideal*p)][c]=1;
+        prev=y;
+      }
+    });
+    pre.textContent=rows.join('\n');
+  });
+}
+
+/* 热力图 */
+function drawHeat(){
+  const narrow=window.innerWidth<=600, weeks=narrow?26:53, off=53-weeks;
+  const lv=v=>v===0?0:v<5?1:v<12?2:v<22?3:4;
+  const ch=['·',':','+','#','@'];
+  const today=new Date(genJ.getFullYear(),genJ.getMonth(),genJ.getDate());
+  const startW=new Date(today); startW.setDate(today.getDate()-today.getDay()-52*7);
+  let html='', mon='', lastM=-1, total=0;
+  const colW=100/weeks;
+  const monEl=[];
+  for(let w=off;w<53;w++){
+    const sd=new Date(startW); sd.setDate(startW.getDate()+w*7);
+    if(sd.getMonth()!==lastM && sd.getDate()<=7){monEl.push([w-off,(sd.getMonth()+1)+'月']);}
+    lastM=sd.getMonth();
+    html+='<div class="col">';
+    for(let d=0;d<7;d++){
+      const v=G.contrib[w][d]; total+=v;
+      const dt=new Date(sd); dt.setDate(sd.getDate()+d);
+      const future=dt>today;
+      html+=future?'<span> </span>':`<span class="l${lv(v)}" title="${dt.getFullYear()}-${p2(dt.getMonth()+1)}-${p2(dt.getDate())} · ${v} 次贡献">${ch[lv(v)]}</span>`;
+    }
+    html+='</div>';
+  }
+  $('cols').innerHTML=html;
+  $('mon').innerHTML='<span style="width:2.4em;flex:none"></span><div style="position:relative;flex:1">'+monEl.map(m=>`<span style="position:absolute;left:${m[0]/weeks*100}%">${m[1]}</span>`).join('')+'</div>';
+  $('hsub').textContent=`${narrow?'近 26 周':'近 53 周'} · 共 ${fmt(narrow?total:G.contributions.total)} 次`;
+}
+
+/* 活动 */
+(function(){
+  const rel=iso=>{const d=jst(iso);const same=d.getDate()===genJ.getDate();return (same?'今天 ':'昨天 ')+p2(d.getHours())+':'+p2(d.getMinutes())};
+  $('feed').innerHTML=G.activity.map((a,i)=>{
+    const last=i===G.activity.length-1;
+    const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    return a.public
+     ?`<div class="ev"><span class="tm">${rel(a.t)}</span><span class="tr">${last?'└':'├'}</span><span class="tt">${esc(a.title)}</span><span class="rp">${a.repo} <span class="dim">${a.branch}@${a.hash}</span></span></div>`
+     :`<div class="ev priv"><span class="tm">${rel(a.t)}</span><span class="tr">${last?'└':'├'}</span><span class="tt">${esc(a.title)}</span><span class="rp">▒▒ 私有项目</span></div>`}).join('');
+})();
+
+/* 字符场 */
+const cv=$('field'), cx=cv.getContext('2d');
+const RAMP=' .·:-=+*#%@';
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let cols=0,rows=0,CW=9,CH=15,dpr=1,t0=0,running=false,vis=true;
+const tr=G.trend30d, trMax=Math.max(...tr);
+const speed=0.25+0.75*Math.min(1,totalTok/6e7);       // 今日 Token 量 → 流速
+const grain=1-G.today.cacheHitRate;                     // 未命中率 → 颗粒
+function ridge(u){ // u:0..1 -> 0..1 高度
+  const p=u*(tr.length-1), i=Math.floor(p), f=p-i, s=f*f*(3-2*f);
+  const a=tr[i], b=tr[Math.min(i+1,tr.length-1)];
+  return (a+(b-a)*s)/trMax;
+}
+const hash=(x,y)=>{let h=Math.sin(x*127.1+y*311.7)*43758.5453;return h-Math.floor(h)};
+function sizeField(){
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  const w=cv.clientWidth,h=cv.clientHeight;
+  CW=w<600?7:9; CH=w<600?12:15;
+  cv.width=w*dpr; cv.height=h*dpr; cx.setTransform(dpr,0,0,dpr,0,0);
+  cols=Math.ceil(w/CW); rows=Math.ceil(h/CH);
+  cx.font=`${CH-2}px "Martian Mono",ui-monospace,Menlo,monospace`; cx.textAlign='center'; cx.textBaseline='middle';
+}
+const greys=[];for(let i=0;i<RAMP.length;i++){const a=Math.pow(i/(RAMP.length-1),1.1);greys.push(`rgba(220,218,211,${(0.06+a*0.82).toFixed(3)})`)}
+const accs=[];for(let i=0;i<RAMP.length;i++){const a=Math.pow(i/(RAMP.length-1),1);accs.push(`rgba(159,216,255,${(0.1+a*0.9).toFixed(3)})`)}
+function frame(ts){
+  const t=ts/1000*speed;
+  cx.clearRect(0,0,cv.clientWidth,cv.clientHeight);
+  const lastCols=Math.max(3,Math.round(cols*0.025));
+  for(let y=0;y<rows;y++){
+    const v=y/rows;
+    for(let x=0;x<cols;x++){
+      const u=x/(cols-1);
+      const r=0.2+0.62*ridge(u)+0.015*Math.sin(u*9+t*0.9);   // 脊线高度
+      const top=1-r; const d=v-top;                          // d>0 在脊线之下
+      let val;
+      const n=0.5+0.5*Math.sin(x*0.19+t*1.3+Math.sin(y*0.27-t*0.8)*1.7);
+      const n2=0.5+0.5*Math.sin(x*0.07-y*0.11+t*0.6);
+      if(d>=0){ val=(0.95*Math.exp(-d*3.4))*(0.55+0.45*n)*(0.7+0.3*n2); val-=grain*hash(x,y)*0.6; }
+      else { val=0.55*Math.exp(d*16)*(0.4+0.6*n); const hs=hash(x+Math.floor(t*0.4),y); if(hs>1-grain*0.18) val=Math.max(val,0.22+0.2*hs); }
+      if(Math.abs(d)<0.012) val=Math.max(val,0.95);          // 脊线本身
+      val=Math.max(0,Math.min(1,val));
+      const idx=Math.round(val*(RAMP.length-1));
+      if(!idx) continue;
+      const isToday = x>=cols-lastCols;
+      cx.fillStyle=(isToday?accs:greys)[idx];
+      cx.fillText(RAMP[idx],x*CW+CW/2,y*CH+CH/2);
+    }
+  }
+}
+let last=0;
+function loop(ts){
+  if(!running) return;
+  if(ts-last>1000/18){last=ts;frame(ts)}   // 降到约 18fps
+  requestAnimationFrame(loop);
+}
+function start(){ if(reduce||running||!vis||document.hidden) return; running=true; requestAnimationFrame(loop); }
+function stop(){ running=false; }
+sizeField(); frame(8000);
+if(!reduce){
+  new IntersectionObserver(e=>{vis=e[0].isIntersecting; vis?start():stop()}).observe(cv);
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  start();
+}
+
+function layout(){ drawTrend(); drawQuotas(); drawHeat(); sizeField(); frame(reduce?8000:performance.now()); }
+layout();
+let rt; addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(layout,120)});
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(layout);
+})();
+</script>
+</body>
+</html>

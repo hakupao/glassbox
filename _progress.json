@@ -1,0 +1,14 @@
+{
+  "project": "glassbox",
+  "tier": 3,
+  "updated": "2026-11-17",
+  "steps": {
+    "S01": {"status": "done", "note": "git init; scripts/privacy_scan.py; full-tree scan 0 hits; first local commit (not pushed)"},
+    "S02": {"status": "todo"}, "S03": {"status": "todo"}, "S04": {"status": "todo"},
+    "S05": {"status": "todo"}, "S06": {"status": "todo"}, "S07": {"status": "todo"},
+    "S08": {"status": "todo"}, "S09": {"status": "todo"}, "S10": {"status": "todo"},
+    "S11": {"status": "todo"}, "S12": {"status": "todo"}, "S13": {"status": "todo"},
+    "S14": {"status": "todo"}, "S15": {"status": "todo"}, "S16": {"status": "todo"}
+  },
+  "evidence": ".local/evidence/ (gitignored: contains real data)"
+}

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>glassbox · 玻璃盒</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --abyss:#05090e;
+  --deep:#0a1620;
+  --ice:#d4f1ff;
+  --ice-dim:#8fb4c7;
+  --ice-faint:#5b7a8c;
+  --cyan:#5fe3ff;
+  --amber:#ffb454;
+  --rose:#ff5d8f;
+  --glass:rgba(170,215,240,.055);
+  --glass-hi:rgba(220,244,255,.38);
+  --mono:"Martian Mono","SF Mono","Menlo","Consolas",monospace;
+  --cjk:"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--abyss)}
+body{
+  font-family:var(--cjk);color:var(--ice);font-size:14px;line-height:1.55;
+  min-height:100vh;overflow-x:hidden;
+  background:radial-gradient(120% 80% at 80% -10%,#0f2a3a 0%,transparent 55%),radial-gradient(90% 70% at 0% 100%,#1a1030 0%,transparent 60%),var(--abyss);
+}
+#field{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+
+.wrap{position:relative;z-index:1;max-width:1360px;margin:0 auto;padding:20px 16px 48px}
+@media(min-width:900px){.wrap{padding:28px 32px 64px}}
+
+/* ---- glass ---- */
+.glass{
+  position:relative;border-radius:18px;padding:20px;
+  background:
+    linear-gradient(135deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 28%,rgba(255,255,255,0) 70%,rgba(130,220,255,.07) 100%),
+    var(--glass);
+  -webkit-backdrop-filter:blur(15px) saturate(1.5) brightness(1.15);
+  backdrop-filter:blur(15px) saturate(1.5) brightness(1.15);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    inset 0 -1px 0 rgba(255,255,255,.06),
+    inset 0 0 30px rgba(120,200,255,.06),
+    inset 14px 0 28px -22px rgba(255,93,143,.35),   /* 色散：左缘偏洋红 */
+    inset -14px 0 28px -22px rgba(95,227,255,.4),   /* 右缘偏青 */
+    -1px 0 0 rgba(255,93,143,.16),
+    1px 0 0 rgba(95,227,255,.2),
+    0 24px 60px -24px rgba(0,0,0,.7);
+  border:1px solid rgba(190,230,255,.13);
+  min-width:0;
+}
+.glass::before{ /* 顶部斜向高光条 */
+  content:"";position:absolute;left:14px;right:40%;top:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);
+  pointer-events:none;
+}
+h2{font-family:var(--mono);font-weight:400;font-size:12px;color:var(--ice-dim);letter-spacing:.02em;margin-bottom:14px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+h2 b{font-weight:600;color:var(--ice)}
+h2 small{font-size:11px;color:var(--ice-faint)}
+
+/* ---- top bar ---- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 18px;margin-bottom:16px;border-radius:999px}
+.top::before{left:30px}
+.brand{font-family:var(--mono);font-weight:600;font-size:17px;display:flex;align-items:center;gap:10px;letter-spacing:-.01em}
+.brand i{font-style:normal;color:var(--cyan);text-shadow:0 0 12px rgba(95,227,255,.7)}
+.snap{font-family:var(--mono);font-size:11px;color:var(--ice-dim);display:flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;border:1px solid rgba(190,230,255,.18);background:rgba(255,255,255,.04)}
+.snap::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--amber);box-shadow:0 0 8px var(--amber)}
+@media(max-width:520px){.top{border-radius:20px}}
+
+/* ---- grid ---- */
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px}
+.grid>*{grid-column:1/-1}
+@media(min-width:900px){
+  .kpi{grid-column:span 12}
+  .trend{grid-column:span 8}
+  .agents{grid-column:span 4}
+  .q{grid-column:span 4}
+  .heat{grid-column:span 12}
+  .feed{grid-column:span 12}
+
+}
+
+/* ---- KPI ---- */
+.kpi{display:grid;gap:24px;padding:24px}
+@media(min-width:900px){.kpi{grid-template-columns:1.05fr 1.4fr;gap:40px;padding:28px 32px}}
+.hero-n{font-family:var(--mono);font-weight:300;font-size:clamp(56px,9vw,104px);line-height:1;letter-spacing:-.05em;color:#fff;text-shadow:0 0 30px rgba(95,227,255,.35),-2px 0 0 rgba(255,93,143,.35),2px 0 0 rgba(95,227,255,.35)}
+.hero-l{margin-top:8px;color:var(--ice-dim)}
+.mini{display:flex;gap:28px;margin-top:22px;flex-wrap:wrap}
+.mini div{display:flex;flex-direction:column;gap:2px}
+.mini .num{font-size:20px;color:var(--ice)}
+.mini span.l{font-size:12px;color:var(--ice-dim)}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;border:1px dashed rgba(255,180,84,.6);color:var(--amber);margin-left:6px;vertical-align:2px;font-family:var(--cjk)}
+.tk{display:grid;grid-template-columns:5.2em 1fr auto;gap:6px 12px;align-items:center;font-family:var(--mono);font-size:12px}
+.tk .name{color:var(--ice-dim);font-family:var(--cjk)}
+.tk .bar{white-space:nowrap;overflow:hidden;letter-spacing:-.02em;color:var(--cyan);text-shadow:0 0 8px rgba(95,227,255,.45);font-size:13px;line-height:1.2}
+.tk .bar em{font-style:normal;color:rgba(95,227,255,.22);text-shadow:none}
+.tk .v{text-align:right;color:var(--ice);min-width:6em}
+.tk .v s{text-decoration:none;color:var(--ice-faint);margin-left:6px}
+.note{font-size:11px;color:var(--ice-faint);margin-top:12px}
+
+/* ---- trend ---- */
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.chart text{font-family:var(--mono);font-size:10px;fill:var(--ice-faint)}
+
+/* ---- agents ---- */
+.ag{display:flex;flex-direction:column;gap:18px}
+.ag .row .t{display:flex;justify-content:space-between;gap:8px;margin-bottom:4px}
+.ag .row .t span:last-child{font-family:var(--mono);color:var(--ice)}
+.ag .row .b{font-family:var(--mono);color:var(--cyan);letter-spacing:-.03em;white-space:nowrap;overflow:hidden;font-size:13px}
+.ag .row .b em{font-style:normal;color:rgba(95,227,255,.2)}
+.ag .row .s{font-size:12px;color:var(--ice-dim);font-family:var(--mono)}
+.models{margin-top:auto;border-top:1px dashed rgba(190,230,255,.15);padding-top:12px;font-family:var(--mono);font-size:11px;color:var(--ice-dim);display:grid;gap:4px}
+.models div{display:flex;justify-content:space-between;gap:8px}
+.models b{font-weight:400;color:var(--ice)}
+
+/* ---- quota ---- */
+.q .who{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.q .who strong{font-weight:600}
+.q .who span{font-family:var(--mono);font-size:11px;color:var(--ice-dim)}
+.q .pct{font-family:var(--mono);font-weight:300;font-size:44px;line-height:1;letter-spacing:-.04em}
+.q .pct sub{font-size:16px;vertical-align:baseline;color:var(--ice-dim);margin-left:2px}
+.q .gauge{font-family:var(--mono);font-size:13px;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;margin:12px 0 10px;color:var(--cyan);text-shadow:0 0 8px rgba(95,227,255,.4)}
+.q .gauge em{font-style:normal;color:rgba(95,227,255,.2);text-shadow:none}
+.q.hot .gauge{color:var(--amber);text-shadow:0 0 8px rgba(255,180,84,.45)}
+.q.hot .gauge em{color:rgba(255,180,84,.2)}
+.q .meta{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--ice-dim);flex-wrap:wrap}
+.q .meta .num{color:var(--ice)}
+.pace.fast{color:var(--amber)}
+.pace.slow{color:var(--cyan)}
+.q svg{width:100%;height:56px;margin-top:12px;display:block;overflow:visible}
+
+/* ---- heat ---- */
+.hm{container-type:inline-size}
+.months{display:grid;grid-template-columns:repeat(53,minmax(0,1fr));font-family:var(--mono);font-size:10px;color:var(--ice-faint);height:18px;white-space:nowrap;overflow:hidden}
+@media(max-width:600px){.months{font-size:8px}}
+.cells{display:grid;grid-template-columns:repeat(53,minmax(0,1fr));grid-template-rows:repeat(7,auto);grid-auto-flow:column;
+  font-family:var(--mono);font-size:clamp(7px,1.9cqw,17px);line-height:1.75;text-align:center}
+.cells span{display:block;color:rgba(95,227,255,.17);transition:transform .12s}
+.cells .l1{color:rgba(95,227,255,.5)}
+.cells .l2{color:rgba(120,235,255,.75)}
+.cells .l3{color:#c5f6ff;text-shadow:0 0 6px rgba(95,227,255,.7)}
+.cells .l4{color:#fff;font-weight:600;text-shadow:0 0 8px rgba(255,255,255,.9),0 0 14px rgba(95,227,255,.8)}
+.cells span:hover{transform:scale(1.9);position:relative;z-index:2}
+.legend{display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:11px;color:var(--ice-faint);margin-top:12px;justify-content:flex-end}
+.legend span{font-size:13px}
+
+/* ---- feed ---- */
+.feed ol{list-style:none;padding:0;display:flex;flex-direction:column}
+@media(min-width:900px){.feed ol{display:grid;grid-template-columns:1fr 1fr;column-gap:48px}.feed li:nth-child(2){border-top:0;padding-top:0}}
+.feed li{display:grid;grid-template-columns:4.8em 1fr;gap:4px 12px;padding:11px 0;border-top:1px dashed rgba(190,230,255,.13)}
+.feed li:first-child{border-top:0;padding-top:0}
+.feed time{font-family:var(--mono);font-size:11px;color:var(--ice-faint);padding-top:2px;white-space:nowrap}
+.feed .ti{overflow-wrap:anywhere}
+.feed .rp{display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;margin-top:2px;font-size:12px;color:var(--ice-dim)}
+.feed .rp .r{font-family:var(--mono)}
+.feed .rp .lock{color:var(--amber);font-family:var(--cjk)}
+.feed .rp .lock::before{content:"▒ "}
+.feed .rp code{font-family:var(--mono);font-size:11px;color:var(--ice-faint)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<canvas id="field" aria-hidden="true"></canvas>
+
+<div class="wrap">
+  <header class="glass top">
+    <div class="brand"><i>[▒]</i>glassbox</div>
+    <div class="snap" id="snap">只读快照</div>
+  </header>
+
+  <main class="grid">
+
+    <section class="glass kpi" aria-label="今日用量">
+      <div>
+        <h2><b>今日</b><small id="today-date"></small></h2>
+        <div class="hero-n" id="req"></div>
+        <div class="hero-l">次请求</div>
+        <div class="mini">
+          <div><span class="num" id="ses"></span><span class="l">会话</span></div>
+          <div><span class="num" id="hit"></span><span class="l">缓存命中率</span></div>
+          <div><span class="num" id="cost"></span><span class="l">费用<span class="tag">API 等价估算</span></span></div>
+        </div>
+      </div>
+      <div>
+        <h2><b>Token 拆分</b><small>字符条按平方根缩放</small></h2>
+        <div class="tk" id="tk"></div>
+        <p class="note">缓存读取占绝大多数，所以命中率高、实际成本远低于按量计价。</p>
+      </div>
+    </section>
+
+    <section class="glass trend" aria-label="近 30 天趋势">
+      <h2><b>近 30 天</b><small>每日费用 · API 等价估算 (USD)</small></h2>
+      <svg class="chart" id="trend" viewBox="0 0 700 220" role="img" aria-label="近 30 天每日费用折线图"></svg>
+    </section>
+
+    <section class="glass agents" aria-label="按工具分布">
+      <h2><b>今日分布</b><small>按工具</small></h2>
+      <div class="ag" id="ag"></div>
+      <div class="models" id="models"></div>
+    </section>
+
+    <section class="glass q" id="q0" aria-label="Claude Code 7 天额度"></section>
+    <section class="glass q" id="q1" aria-label="Codex 5 小时额度"></section>
+    <section class="glass q" id="q2" aria-label="Codex 7 天额度"></section>
+
+    <section class="glass heat" aria-label="GitHub 贡献热力图">
+      <h2><b>GitHub 贡献</b><small id="ctotal"></small></h2>
+      <div class="hm">
+        <div class="months" id="months" aria-hidden="true"></div>
+        <div class="cells" id="cells" role="img" aria-label="近 53 周每日贡献，字符越密越活跃"></div>
+        <div class="legend" aria-hidden="true">少 <span style="color:rgba(95,227,255,.2)">·</span><span style="color:rgba(95,227,255,.5)">:</span><span style="color:rgba(120,235,255,.8)">+</span><span style="color:#c5f6ff">#</span><span style="color:#fff">@</span> 多</div>
+      </div>
+    </section>
+
+    <section class="glass feed" aria-label="最近活动">
+      <h2><b>最近活动</b><small>私有项目不显示仓库细节</small></h2>
+      <ol id="feed"></ol>
+    </section>
+
+  </main>
+</div>
+
+<script src="sample-data.js"></script>
+<script>
+(function(){
+  const G = window.GB, $ = id => document.getElementById(id);
+  const fmtN = n => n.toLocaleString('en-US');
+  const fmtT = n => n>=1e6 ? (n/1e6).toFixed(2)+'M' : n>=1e3 ? (n/1e3).toFixed(0)+'k' : String(n);
+  const gen = new Date(G.generatedAt);
+  const p2 = n => String(n).padStart(2,'0');
+  const hm = d => p2(d.getHours())+':'+p2(d.getMinutes());
+
+  $('snap').textContent = '只读快照 · 更新于 ' + p2(gen.getMonth()+1)+'-'+p2(gen.getDate())+' '+hm(gen);
+  $('today-date').textContent = gen.getFullYear()+'-'+p2(gen.getMonth()+1)+'-'+p2(gen.getDate());
+  $('req').textContent = fmtN(G.today.requests);
+  $('ses').textContent = G.today.sessions;
+  $('hit').textContent = (G.today.cacheHitRate*100).toFixed(1)+'%';
+  $('cost').textContent = '$'+G.today.costUsdApiEquivalent.toFixed(2);
+
+  /* char bar */
+  const bar = (frac,w,fill='█',empty='░') => {
+    const n = Math.max(0,Math.min(w,Math.round(frac*w)));
+    return fill.repeat(n)+'<em>'+empty.repeat(w-n)+'</em>';
+  };
+
+  /* tokens */
+  const T = G.today.tokens, rows = [['输入',T.input],['输出',T.output],['缓存读',T.cacheRead],['缓存写',T.cacheWrite],['推理',T.reasoning]];
+  const tot = rows.reduce((a,r)=>a+r[1],0), mx = Math.sqrt(Math.max(...rows.map(r=>r[1])));
+  $('tk').innerHTML = rows.map(r=>`<span class="name">${r[0]}</span><span class="bar">${bar(Math.sqrt(r[1])/mx,30,'▮','▯')}</span><span class="v">${fmtT(r[1])}<s>${(r[1]/tot*100).toFixed(1)}%</s></span>`).join('');
+
+  /* trend svg */
+  (function(){
+    const d = G.trend30d, W=700,H=220,l=36,r=8,t=14,b=26, mxv = Math.ceil(Math.max(...d)/10)*10;
+    const x = i => l+(W-l-r)*i/(d.length-1), y = v => t+(H-t-b)*(1-v/mxv);
+    let s = '<defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fe3ff" stop-opacity=".28"/><stop offset="1" stop-color="#5fe3ff" stop-opacity="0"/></linearGradient></defs>';
+    for(let v=0;v<=mxv;v+=mxv/4){ s+=`<line x1="${l}" x2="${W-r}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(190,230,255,.12)" stroke-dasharray="2 5"/><text x="${l-8}" y="${y(v)+3}" text-anchor="end">$${v}</text>`; }
+    const pts = d.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1));
+    s += `<polygon points="${l},${y(0)} ${pts.join(' ')} ${W-r},${y(0)}" fill="url(#ar)"/>`;
+    s += `<polyline points="${pts.join(' ')}" fill="none" stroke="#ff5d8f" stroke-opacity=".45" stroke-width="1.2" transform="translate(-1.5,0)"/>`;
+    s += `<polyline points="${pts.join(' ')}" fill="none" stroke="#5fe3ff" stroke-width="1.3" stroke-linejoin="round" transform="translate(1.5,0)"/>`;
+    s += `<polyline points="${pts.join(' ')}" fill="none" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>`;
+    const li = d.length-1;
+    s += `<circle cx="${x(li)}" cy="${y(d[li])}" r="3.5" fill="#fff"/><circle cx="${x(li)}" cy="${y(d[li])}" r="9" fill="none" stroke="#5fe3ff" stroke-opacity=".5"/>`;
+    const mi = d.indexOf(Math.max(...d));
+    s += `<text x="${x(mi)}" y="${y(d[mi])-8}" text-anchor="middle" style="fill:#d4f1ff">$${d[mi]}</text>`;
+    s += `<text x="${l}" y="${H-6}">30 天前</text><text x="${W-r}" y="${H-6}" text-anchor="end">今天</text>`;
+    $('trend').innerHTML = s;
+  })();
+
+  /* agents */
+  const aT = G.today.byAgent.reduce((a,x)=>a+x.requests,0);
+  $('ag').innerHTML = G.today.byAgent.map(a=>`<div class="row"><div class="t"><span>${a.agent}</span><span>${fmtN(a.requests)} 次</span></div><div class="b">${bar(a.requests/aT,28,'▓','░')}</div><div class="s">${fmtT(a.tokens)} token · $${a.cost.toFixed(1)}</div></div>`).join('');
+  $('models').innerHTML = G.today.byModel.map(m=>`<div><span>${m.model}</span><b>$${m.cost.toFixed(1)}</b></div>`).join('');
+
+  /* quota */
+  const cd = iso => { let m = Math.max(0,Math.round((new Date(iso)-gen)/60000)); const d=Math.floor(m/1440), h=Math.floor(m%1440/60), mm=m%60;
+    return d? `${d}天${h}时` : h? `${h}时${p2(mm)}分` : `${mm}分`; };
+  G.quota.forEach((q,i)=>{
+    const fast = q.pace>0, pp = Math.round(Math.abs(q.pace)*100);
+    const h = q.history, W=200,H=56, xs = j=>W*j/(h.length-1), ys = v=>H-2-(H-6)*v/100;
+    const pts = h.map((v,j)=>xs(j).toFixed(1)+','+ys(v).toFixed(1)).join(' ');
+    const el = $('q'+i); el.classList.toggle('hot',fast);
+    el.innerHTML = `
+      <div class="who"><strong>${q.agent}</strong><span>${q.window}窗口</span></div>
+      <div class="pct">${q.usedPct}<sub>%</sub></div>
+      <div class="gauge" aria-hidden="true">${bar(q.usedPct/100,26,'█','░')}</div>
+      <div class="meta"><span>重置 <span class="num">${cd(q.resetsAt)}</span> 后</span><span class="pace ${fast?'fast':'slow'}">${fast?'比匀速快':'比匀速慢'} <span class="num">${fast?'+':'−'}${pp}%</span></span></div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="燃尽小图：已用百分比随时间变化">
+        <line x1="0" y1="${ys(0)}" x2="${W}" y2="${ys(100)}" stroke="rgba(190,230,255,.3)" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
+        <polyline points="${pts}" fill="none" stroke="${fast?'#ffb454':'#5fe3ff'}" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+        <circle cx="${xs(h.length-1)}" cy="${ys(h[h.length-1])}" r="3" fill="#fff"/>
+      </svg>`;
+  });
+
+  /* heatmap */
+  (function(){
+    const C = G.contrib, ch = ['·',':','+','#','@'], lv = v => v===0?0:v<4?1:v<10?2:v<20?3:4;
+    $('cells').innerHTML = C.map(w=>w.map(v=>{const k=lv(v); return `<span class="${k?'l'+k:''}" title="${v} 次贡献">${ch[k]}</span>`;}).join('')).join('');
+    const end = new Date(gen); end.setDate(end.getDate()-end.getDay()); // 最后一周周日
+    let last=-1, m='';
+    for(let w=0;w<53;w++){ const d=new Date(end); d.setDate(d.getDate()-(52-w)*7);
+      if(d.getMonth()!==last && w<=49){ last=d.getMonth(); m+=`<span style="grid-row:1;grid-column:${w+1}/span 4">${d.getMonth()+1}月</span>`; } }
+    $('months').innerHTML = m;
+    const tot = C.flat().reduce((a,b)=>a+b,0);
+    $('ctotal').textContent = '近一年 '+fmtN(G.contributions.total)+' 次';
+  })();
+
+  /* feed */
+  $('feed').innerHTML = G.activity.map(a=>{
+    const d = new Date(a.t), same = d.getDate()===gen.getDate();
+    const when = same? hm(d) : '昨 '+hm(d).slice(0,5);
+    const rp = a.public ? `<span class="r">${a.repo}</span><code>${a.branch}@${a.hash}</code>` : `<span class="lock">私有项目</span>`;
+    return `<li><time>${when}</time><div><div class="ti">${a.title}</div><div class="rp">${rp}</div></div></li>`;
+  }).join('');
+
+  /* ---------- ASCII field ---------- */
+  const cv = $('field'), cx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ramp = ' .·:-=+*#%@01';
+  let cw, ch_, cols, rows_, dpr, cell, mouse = {x:-999,y:-999,tx:-999,ty:-999}, t0 = 0;
+  function size(){
+    dpr = Math.min(devicePixelRatio||1,2);
+    cell = innerWidth<600 ? 12 : 15;
+    cw = innerWidth; ch_ = innerHeight;
+    cv.width = cw*dpr; cv.height = ch_*dpr; cx.setTransform(dpr,0,0,dpr,0,0);
+    cols = Math.ceil(cw/cell)+1; rows_ = Math.ceil(ch_/(cell*1.25))+1;
+    draw(t0);
+  }
+  function draw(t){
+    cx.clearRect(0,0,cw,ch_);
+    cx.font = `${cell-2}px "Martian Mono",Menlo,monospace`;
+    cx.textBaseline='top';
+    const rh = cell*1.25, px = (mouse.x-cw/2)*0.012, py = (mouse.y-ch_/2)*0.012;
+    const s = t*0.00018;
+    for(let j=0;j<rows_;j++){
+      for(let i=0;i<cols;i++){
+        const u=(i+px)*0.09, v=(j+py)*0.13;
+        let n = Math.sin(u*1.3+s*5)+Math.sin(v*1.7-s*4+u*.4)+Math.sin((u+v)*.8+s*3)+Math.sin(Math.hypot(u-5-Math.sin(s*3)*3,v-4)*.9-s*6);
+        n = (n+4)/8;
+        let x=i*cell, y=j*rh;
+        const dx=x-mouse.x, dy=y-mouse.y, dd=Math.hypot(dx,dy), R=170;
+        let boost=0; if(dd<R){ boost=(1-dd/R)**2; n+=boost*.45; x+=dx/(dd+1)*boost*6; y+=dy/(dd+1)*boost*6; }
+        const k = Math.max(0,Math.min(ramp.length-1,Math.floor(n*n*1.9*ramp.length)));
+        if(k<2) continue;
+        const a = Math.min(.6,.06+k/ramp.length*.5+boost*.3);
+        const hue = 195 + (i/cols)*40 - (j/rows_)*25;
+        cx.fillStyle = `hsla(${hue},85%,${60+boost*25}%,${a})`;
+        cx.fillText(ramp[k],x,y);
+      }
+    }
+  }
+  size(); addEventListener('resize',size);
+  if(!reduce){
+    addEventListener('pointermove',e=>{mouse.tx=e.clientX;mouse.ty=e.clientY},{passive:true});
+    let last=0;
+    (function loop(ts){
+      requestAnimationFrame(loop);
+      if(ts-last<83) return; last=ts; t0=ts;
+      mouse.x += (mouse.tx-mouse.x)*.35; mouse.y += (mouse.ty-mouse.y)*.35;
+      if(!document.hidden) draw(ts);
+    })(0);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# 本机环境与隐私配置：绝不进公开仓库
+.local/
+*.local.json
+*.local.md
+
+# 参考站截图（别人网站的内容）
+.playwright-mcp/
+
+# 采集缓存与导出产物
+.cache/
+dist/
+out/
+
+# OMC 运行时状态
+.omc/
+
+# Python / Node
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+
+.DS_Store
