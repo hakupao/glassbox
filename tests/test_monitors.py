@@ -1,4 +1,5 @@
 """Monitor collectors against fake Beszel / Kuma / Docker / tailscaled APIs (fabricated data)."""
+import copy
 import json
 import os
 import socket
@@ -11,23 +12,37 @@ from pathlib import Path
 
 from hub import db, monitors
 
-ROUTES = {
+S1, S2, SX = "a" * 15, "b" * 15, "c" * 15
+BASE_ROUTES = {
     "/api/collections/users/auth-with-password": {"token": "tk"},
     "/api/collections/systems/records": {"items": [
-        {"id": "s1", "name": "home-box", "status": "up", "info": {"u": 3600}},
-        {"id": "s2", "name": "unlisted-box", "status": "up", "info": {"u": 1}}]},
+        {"id": S1, "name": "home-box", "status": "up", "info": {"u": 3600}},
+        {"id": S2, "name": "vm-box", "status": "up", "info": {"u": 60}},
+        {"id": SX, "name": "unlisted-box", "status": "up", "info": {"u": 1}}], "totalPages": 1},
     "/api/collections/system_stats/records": {"items": [
-        {"created": "2026-11-17 01:00:00.000Z", "stats": {"cpu": 12.5, "m": 16, "mu": 8, "d": 500, "du": 100}}]},
+        {"created": "2026-11-17 01:00:00.000Z", "stats": {"cpu": 12.5, "m": 16, "mu": 8, "d": 500, "du": 100}}],
+        "totalPages": 1},
     "/api/collections/container_stats/records": {"items": [{"stats": [{"n": "web", "c": 1.5, "m": 256}]}]},
-    "/api/status-page/lan": {"publicGroupList": [{"monitorList": [{"id": 7, "name": "site"}]}]},
-    "/api/status-page/heartbeat/lan": {"heartbeatList": {"7": [{"status": 1}, {"status": 0}]}, "uptimeList": {"7_24": 0.9876}},
-    "/containers/json": [{"Names": ["/web"], "State": "running"}, {"Names": ["/old"], "State": "exited"}],
-    "/localapi/v0/status": {"Self": {"HostName": "me", "OS": "linux", "Online": True, "LastSeen": "0001-01-01T00:00:00Z"},
-                            "Peer": {"k": {"HostName": "phone", "OS": "iOS", "Online": False, "LastSeen": "2026-11-17T00:00:00Z"}}},
+    "/api/status-page/lan": {"publicGroupList": [{"monitorList": [
+        {"id": 7, "name": "site"}, {"id": 8, "name": "queue"}, {"id": 9, "name": "backup"}]}]},
+    "/api/status-page/heartbeat/lan": {"heartbeatList": {"7": [{"status": 1}, {"status": 0}], "8": [{"status": 2}],
+                                                         "9": [{"status": 3}]}, "uptimeList": {"7_24": 0.9876}},
+    "/containers/json": [{"Names": ["/web"], "State": "running"}, {"Names": ["/loop"], "State": "restarting"},
+                         {"Id": "0123456789abcdef", "State": "exited"}],
+    "/localapi/v0/status": {"Self": {"HostName": "me", "DNSName": "me.tail.ts.net.", "OS": "linux", "Online": True,
+                                     "LastSeen": "0001-01-01T00:00:00Z"},
+                            "Peer": {"k1": {"HostName": "localhost", "DNSName": "phone-a.tail.ts.net.", "OS": "android"},
+                                     "k2": {"HostName": "localhost", "DNSName": "phone-b.tail.ts.net.", "OS": "android",
+                                            "Online": True, "LastSeen": "2026-11-17T00:00:00Z"}}},
+    "/redirect": None,
 }
 
 
 class Fake(BaseHTTPRequestHandler):
+    routes = BASE_ROUTES
+    seen = []
+    fail = set()
+
     def log_message(self, *a):
         pass
 
@@ -35,13 +50,23 @@ class Fake(BaseHTTPRequestHandler):
         return "local"
 
     def _reply(self):
-        path = urllib.parse.urlparse(self.path).path
-        if path.startswith("/api/collections/") and path != "/api/collections/users/auth-with-password" \
+        u = urllib.parse.urlparse(self.path)
+        Fake.seen.append((u.path, urllib.parse.parse_qs(u.query)))
+        if u.path in Fake.fail:
+            self.send_response(500)
+            self.end_headers()
+            return
+        if u.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "http://198.51.100.1/steal")
+            self.end_headers()
+            return
+        if u.path.startswith("/api/collections/") and "auth-with-password" not in u.path \
                 and self.headers.get("Authorization") != "tk":
             self.send_response(401)
             self.end_headers()
             return
-        body = ROUTES.get(path)
+        body = Fake.routes.get(u.path)
         if body is None:
             self.send_response(404)
             self.end_headers()
@@ -68,39 +93,81 @@ class UnixServer(HTTPServer):
 
 
 class MonitorsTest(unittest.TestCase):
-    def test_all_collectors(self):
-        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Fake)
-        threading.Thread(target=httpd.serve_forever, daemon=True).start()
-        url = f"http://127.0.0.1:{httpd.server_address[1]}"
-        with tempfile.TemporaryDirectory() as d:
-            sock = os.path.join(d, "ts.sock")
-            ux = UnixServer(sock, Fake)
-            threading.Thread(target=ux.serve_forever, daemon=True).start()
-            conn = db.connect(Path(d) / "hub.sqlite")
-            os.environ["FAKE_BESZEL_PW"] = "pw"
-            cfg = {"beszel": {"url": url, "user": "u", "password_env": "FAKE_BESZEL_PW", "map": {"home-box": "C"}},
-                   "kuma": {"url": url, "slug": "lan", "machine": "C"},
-                   "docker": {"url": url, "machine": "C"},
-                   "tailscale": {"socket": sock}}
-            out = monitors.collect(conn, cfg)
-            self.assertEqual(out["beszel"]["unmapped"], 1)              # unlisted host is skipped, not stored
-            self.assertEqual(conn.execute("SELECT machine FROM machine_state").fetchall(), [("C",)])
-            cpu, mem_used = conn.execute("SELECT cpu, mem_used FROM machine_stats").fetchone()
-            self.assertEqual((cpu, mem_used), (12.5, 8 * 1024 ** 3))
-            svc = {r[0]: r[1:] for r in conn.execute("SELECT name, status, cpu, mem, uptime24 FROM services")}
-            self.assertEqual(svc["web"][:3], ("up", 1.5, 256 * 1024 * 1024))   # Beszel stats + Docker state
-            self.assertEqual(svc["old"][0], "down")
-            self.assertEqual(svc["site"][0], "down")                     # last heartbeat wins
-            self.assertEqual(svc["site"][3], 98.76)
-            tn = dict(conn.execute("SELECT name, last_seen FROM tailnet"))
-            self.assertEqual(set(tn), {"me", "phone"})
-            self.assertIsNone(tn["me"])                                  # zero time means unknown
-            self.assertNotIn("unlisted-box", json.dumps(conn.execute("SELECT * FROM services").fetchall()))
-            conn.close()
-            ux.shutdown()
-            ux.server_close()
-        httpd.shutdown()
-        httpd.server_close()
+    def setUp(self):
+        Fake.routes, Fake.seen, Fake.fail = copy.deepcopy(BASE_ROUTES), [], set()
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Fake)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
+        self.tmp = tempfile.TemporaryDirectory()
+        self.sock = os.path.join(self.tmp.name, "ts.sock")
+        self.ux = UnixServer(self.sock, Fake)
+        threading.Thread(target=self.ux.serve_forever, daemon=True).start()
+        self.conn = db.connect(Path(self.tmp.name) / "hub.sqlite")
+        os.environ["FAKE_BESZEL_PW"] = "pw"
+        self.cfg = {"beszel": {"url": self.url, "user": "u", "password_env": "FAKE_BESZEL_PW",
+                               "map": {"home-box": "C", "vm-box": "V"}},
+                    "kuma": {"url": self.url, "slug": "lan", "machine": "V"},
+                    "docker": {"url": self.url, "machine": "V"},
+                    "tailscale": {"socket": self.sock}}
+
+    def tearDown(self):
+        os.environ.pop("FAKE_BESZEL_PW", None)
+        self.conn.close()
+        for s in (self.ux, self.httpd):
+            s.shutdown()
+            s.server_close()
+        self.tmp.cleanup()
+
+    def q(self, sql):
+        return self.conn.execute(sql).fetchall()
+
+    def test_collect_all(self):
+        out = monitors.collect(self.conn, self.cfg)
+        self.assertEqual(out["beszel"]["unmapped"], 1)
+        self.assertEqual(sorted(r[0] for r in self.q("SELECT machine FROM machine_state")), ["C", "V"])
+        self.assertEqual(self.q("SELECT cpu, mem_used FROM machine_stats WHERE machine='C'"), [(12.5, 8 * 1024 ** 3)])
+        # the same container name on two machines stays two rows
+        self.assertEqual(sorted(self.q("SELECT machine, name, mem FROM container_stats")),
+                         [("C", "web", 256 * 1024 ** 2), ("V", "web", 256 * 1024 ** 2)])
+        self.assertEqual(dict(self.q("SELECT name, status FROM container_state")),
+                         {"web": "up", "loop": "down", "0123456789ab": "down"})
+        self.assertEqual(dict(self.q("SELECT name, status FROM monitors")),
+                         {"site": "down", "queue": "pending", "backup": "maintenance"})
+        self.assertEqual(self.q("SELECT uptime24 FROM monitors WHERE name='site'"), [(98.76,)])
+        tn = dict(self.q("SELECT name, last_seen FROM tailnet"))
+        self.assertEqual(set(tn), {"me", "phone-a", "phone-b"})      # two "localhost" devices both kept
+        self.assertIsNone(tn["me"])
+        self.assertNotIn("unlisted-box", json.dumps(self.q("SELECT * FROM machine_state")))
+        # the Beszel queries really filter what we expect
+        stat_q = [q for p, q in Fake.seen if p == "/api/collections/system_stats/records"]
+        self.assertTrue(all("type='20m'" in q["filter"][0] and "created>'" in q["filter"][0] for q in stat_q))
+        cont_q = [q for p, q in Fake.seen if p == "/api/collections/container_stats/records"]
+        self.assertTrue(all("type='1m'" in q["filter"][0] and "created>'" in q["filter"][0] for q in cont_q))
+        self.assertNotIn(SX, json.dumps(stat_q))                      # unmapped system never queried
+
+    def test_disappeared_things_are_removed(self):
+        monitors.collect(self.conn, self.cfg)
+        Fake.routes["/api/status-page/lan"] = {"publicGroupList": [{"monitorList": [{"id": 7, "name": "site"}]}]}
+        Fake.routes["/containers/json"] = [{"Names": ["/web"], "State": "running"}]
+        Fake.routes["/api/collections/systems/records"]["items"] = Fake.routes["/api/collections/systems/records"]["items"][:1]
+        monitors.collect(self.conn, self.cfg)
+        self.assertEqual([r[0] for r in self.q("SELECT name FROM monitors")], ["site"])
+        self.assertEqual([r[0] for r in self.q("SELECT name FROM container_state")], ["web"])
+        self.assertEqual([r[0] for r in self.q("SELECT machine FROM machine_state")], ["C"])
+
+    def test_one_failing_source_keeps_its_old_data_and_does_not_stop_others(self):
+        monitors.collect(self.conn, self.cfg)
+        Fake.fail = {"/api/collections/system_stats/records"}
+        Fake.routes["/containers/json"] = [{"Names": ["/new"], "State": "running"}]
+        out = monitors.collect(self.conn, self.cfg)
+        self.assertIn("error", out["beszel"])
+        self.assertNotIn("FAKE", json.dumps(out))                    # no credentials or env names in output
+        self.assertEqual(len(self.q("SELECT * FROM machine_state")), 2)   # Beszel data kept, not half-written
+        self.assertEqual([r[0] for r in self.q("SELECT name FROM container_state")], ["new"])  # Docker still ran
+
+    def test_redirects_are_not_followed(self):
+        with self.assertRaises(Exception):
+            monitors._get(self.url + "/redirect", {"Authorization": "tk"})
 
 
 if __name__ == "__main__":

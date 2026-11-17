@@ -41,7 +41,7 @@
   "machines[].history[].t": "iso", "machines[].history[].cpuPct": "number", "machines[].history[].memPct": "number",
 
   "services[].name": "text", "services[].kind": "enum:container|monitor", "services[].machine": "code",
-  "services[].status": "enum:up|down|paused|unknown", "services[].uptimePct24h": "number?",
+  "services[].status": "enum:up|down|paused|pending|maintenance|unknown", "services[].uptimePct24h": "number?",
   "services[].cpuPct": "number?", "services[].memBytes": "number?",
 
   "runtimes[].machine": "code", "runtimes[].agent": "enum:claude-code|codex", "runtimes[].version": "semver",

@@ -2,7 +2,7 @@
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = "3"   # bump on any table change; an older database refuses to open (no silent breakage)
+SCHEMA_VERSION = "4"   # bump on any table change; an older database refuses to open (no silent breakage)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS machines (
@@ -50,10 +50,10 @@ CREATE TABLE IF NOT EXISTS machine_stats (
   machine TEXT, t TEXT, cpu REAL, mem_used REAL, mem_total REAL, disk_used REAL, disk_total REAL,
   PRIMARY KEY (machine, t)
 );
-CREATE TABLE IF NOT EXISTS services (
-  kind TEXT, name TEXT, machine TEXT, status TEXT, uptime24 REAL, cpu REAL, mem REAL, updated REAL,
-  PRIMARY KEY (kind, name)
-);
+-- One table per source; each source replaces its table after a successful run.
+CREATE TABLE IF NOT EXISTS container_stats (machine TEXT, name TEXT, cpu REAL, mem REAL, PRIMARY KEY (machine, name));
+CREATE TABLE IF NOT EXISTS container_state (machine TEXT, name TEXT, status TEXT, PRIMARY KEY (machine, name));
+CREATE TABLE IF NOT EXISTS monitors (id TEXT PRIMARY KEY, name TEXT, machine TEXT, status TEXT, uptime24 REAL);
 CREATE TABLE IF NOT EXISTS tailnet (name TEXT PRIMARY KEY, os TEXT, online INTEGER, last_seen TEXT);
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS warnings (t REAL, machine TEXT, kind TEXT, detail TEXT);

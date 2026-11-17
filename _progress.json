@@ -64,7 +64,8 @@
   "followups": {
     "S10": [
       "front end must tolerate missing keys (e.g. machines[].system null is dropped)",
-      "rename 'GitHub 贡献' heading: contributions are deduped commits"
+      "rename 'GitHub 贡献' heading: contributions are deduped commits",
+      "services/monitors/tailnet names are stored as-is (private store); the public export must mask or allowlist them — part of S10/S11 acceptance"
     ],
     "S12": [
       "gate(): cross-field rule 4 (private entries: branch/hash/url/machine null, t on the hour) + red-team cases",

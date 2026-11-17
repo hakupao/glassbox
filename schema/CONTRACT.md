@@ -141,7 +141,7 @@
   }],
 
   "machines": [{ … }],   // provisional：id、label: Text、role、os、online、lastSeen、probeLastReport、system、history
-  "services": [{ … }],   // provisional：name: Text、kind、machine、status、uptimePct24h、cpuPct、memBytes
+  "services": [{ … }],   // provisional：name: Text、kind、machine、status（up|down|paused|pending|maintenance|unknown）、uptimePct24h、cpuPct、memBytes
   "runtimes": [{ … }],   // provisional：machine、agent、version、processes、activeSessions、stale
   "tailnet":  [{ … }],   // provisional：name: Text、os、online、lastSeen
   "jobs":     [{ … }],   // provisional：name: Text、machine、lastRun、lastSuccess、ok
