@@ -32,8 +32,8 @@
       "note": "GitHub collector verified on real account (23 public repos, 2688 commits; privacy cross-checked via gh api). Gitea tested on a fake API only — needs real read-only tokens at deploy time"
     },
     "S08": {
-      "status": "review",
-      "note": "Beszel + Kuma verified read-only against the real instances (2 systems, 148 points, 19 containers, 12 monitors); Docker proxy and tailscale tested on fakes only"
+      "status": "done",
+      "note": "review APPROVE after one round; Beszel + Kuma verified read-only on the real instances; Docker proxy and tailscale on fakes"
     },
     "S09": {
       "status": "todo"
@@ -79,7 +79,9 @@
       "start the deploy hub from a fresh database (schema_version guard refuses old dev DBs)",
       "install Beszel agents on the dev machine, the work machine and the Gitea machine (Beszel lists only the deploy host and its VM today)",
       "install Tailscale on the dev machine (not present) — the probe pushes over the tailnet",
-      "docker-socket-proxy for container run state (Beszel gives cpu/mem only)"
+      "docker-socket-proxy for container run state (Beszel gives cpu/mem only)",
+      "runbook in docs/runbooks/ for an agent on each machine: Tailscale, Beszel agent, probe + schedule; per-machine secrets handed over separately",
+      "decide Beszel agent<->hub connection direction for the off-LAN work machine (over the tailnet)"
     ]
   }
 }

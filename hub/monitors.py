@@ -71,8 +71,11 @@ def _pb_list(base, coll, auth, **params):
         q = urllib.parse.urlencode({"perPage": 200, "page": page, **params})
         res = _get(f"{base}/api/collections/{coll}/records?{q}", auth)
         out += res.get("items") or []
-        if page >= int(res.get("totalPages") or 1) or page >= 50:
+        total = int(res.get("totalPages") or 1)
+        if page >= total:
             return out
+        if page >= 50:
+            raise OverflowError(f"{coll}: more than 50 pages")   # fail loudly rather than truncate
         page += 1
 
 
@@ -202,7 +205,8 @@ def tailscale(conn, cfg):
     peers = list((st.get("Peer") or {}).values()) + ([st["Self"]] if st.get("Self") else [])
     rows = {}
     for p in peers:
-        name = (p.get("DNSName") or "").split(".")[0] or p.get("HostName") or "?"   # DNS name is unique per tailnet
+        name = ((p.get("DNSName") or "").split(".")[0] or p.get("HostName")
+                or "device-" + str(p.get("ID") or p.get("PublicKey") or len(rows))[-6:])   # DNS name is unique per tailnet
         last = p.get("LastSeen")
         rows[name] = (name, (p.get("OS") or "").lower() or None, 1 if p.get("Online") else 0,
                       None if not last or last.startswith("0001") else last)
