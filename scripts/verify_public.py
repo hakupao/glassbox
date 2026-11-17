@@ -25,7 +25,8 @@ Checks every path given: the publish directory, its index.html, or the page JSON
   absolute paths (any drive letter), LAN host names, secrets and tokens.
 - single file (review M2): the publish directory holds index.html and optionally CNAME (one
   domain), nothing else. index.html, as parsed: <!doctype html>, <html> (lang only), <head>, and
-  the exact CSP <meta> (see CSP below) as head's first element; no <script src>, no <link> but one
+  the exact CSP <meta> (see CSP below) as head's first element, with only ASCII whitespace and no
+  head-closing end tag (</body> </html> </br>) before it; no <script src>, no <link> but one
   exact <link rel="icon" href="data:,">, no <base>, frames or forms, no URL attribute
   other than empty, #fragment, data: or a public commit link, no CSS url() / @import except data:,
   exactly one <script> holding only `window.GB = {...};`, and no other script writing GB (also
@@ -101,6 +102,8 @@ PREFIX_ONLY = re.compile(r"\*{6}|(?:feat|fix|docs|style|refactor|perf|tests?|bui
 # Review M2: the public snapshot is ONE self-contained HTML file whose head starts with this CSP.
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; "
        "font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'")
+HTML_WS = "\t\n\f\r "                                       # the HTML spec's whitespace
+HEAD_BREAKING_END_TAGS = {"body", "html", "br"}
 CSP_ATTRS = [("http-equiv", "Content-Security-Policy"), ("content", CSP)]
 FAVICON_ATTRS = [("rel", "icon"), ("href", "data:,")]          # the one <link> allowed (lane D bundle)
 GB_SCRIPT = re.compile(r"\s*window\.GB\s*=\s*(.*?)\s*;?\s*", re.S)
@@ -171,12 +174,13 @@ class _Parse(HTMLParser):
         self.tags.append((tag, attrs))
 
     def handle_data(self, data):
-        if data.strip():
+        if data.strip(HTML_WS):              # HTML whitespace is ASCII only; U+00A0 / U+3000 are text
             self.events.append(("data", data))
         if self._in:
             self._in[2].append(data)
 
     def handle_endtag(self, tag):
+        self.events.append(("end", tag))
         if self._in and tag == self._in[0]:
             (self.scripts if tag == "script" else self.styles).append((self._in[1], "".join(self._in[2])))
             self._in = None
@@ -620,10 +624,10 @@ class Gate:
         cname = d / "CNAME"
         if cname.is_file() and not cname.is_symlink():
             try:
-                lines = cname.read_text(encoding="ascii").strip().splitlines()
+                lines = cname.read_text(encoding="ascii").strip(HTML_WS).splitlines()
             except (OSError, UnicodeDecodeError):
                 lines = []
-            if len(lines) != 1 or not CNAME_RX.fullmatch(lines[0].strip()):
+            if len(lines) != 1 or not CNAME_RX.fullmatch(lines[0].strip(HTML_WS)):
                 bad.append(f"{d.name}/CNAME: must be exactly one domain name")
             elif self.name_hits(lines[0]):
                 bad.append(f"{d.name}/CNAME: the domain contains a private name")
@@ -642,12 +646,18 @@ class Gate:
         except Exception:                             # noqa: BLE001 — any parser failure rejects
             return bad + [f"{where}: HTML could not be parsed"], None
         # Parsed, not byte-matched: doctype, <html> (lang only), <head>, then the exact CSP meta as
-        # head's first element. Whitespace may sit between them; nothing else may.
-        ev = p.events[:4]
-        ok = (len(ev) == 4 and ev[0][0] == "decl" and ev[0][1].strip().lower() == "doctype html"
+        # head's first element. Only ASCII whitespace may sit between them (review 3). End tags
+        # between <head> and the CSP are refused when they move the meta out of <head> in a browser
+        # (</body>, </html>, </br>: "anything else" -> body); the others are ignored by the HTML
+        # parser in head, or (</head>) put the meta back into head, so the CSP still applies.
+        ev = p.events
+        j = 3
+        while j < len(ev) and ev[j][0] == "end" and ev[j][1] not in HEAD_BREAKING_END_TAGS:
+            j += 1
+        ok = (len(ev) > j and ev[0][0] == "decl" and ev[0][1].strip(HTML_WS).lower() == "doctype html"
               and ev[1][:2] == ("start", "html") and all(k == "lang" and re.fullmatch(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", v or "")
                                                          for k, v in ev[1][2])
-              and ev[2] == ("start", "head", []) and ev[3] == ("start", "meta", CSP_ATTRS))
+              and ev[2] == ("start", "head", []) and ev[j] == ("start", "meta", CSP_ATTRS))
         if not ok:
             bad.append(f"{where}: must be <!doctype html>, <html>, <head> with the exact CSP <meta> as head's first element")
         if sum(1 for t, a in p.tags if t == "meta" and any(k.lower() == "http-equiv" for k, _ in a)) != 1:
@@ -661,7 +671,7 @@ class Gate:
             if tag in DENY_TAGS - {"link"}:
                 bad.append(f"{where}: <{tag}> is not allowed in the snapshot")
             for k, v in attrs:
-                k, v = (k or "").lower(), (v or "").strip()
+                k, v = (k or "").lower(), (v or "").strip(HTML_WS)
                 if k in URL_ATTRS and v and not v.startswith("#") and not (
                         k in ("src", "srcset", "poster") and v.lower().startswith("data:") and "," in v) and not (
                         tag == "a" and k == "href" and self.repo_url and self.repo_url.fullmatch(v)):

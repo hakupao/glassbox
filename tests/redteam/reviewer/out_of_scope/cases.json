@@ -38,7 +38,7 @@
    ],
    "normProbes": [],
    "mustBeNull": [],
-   "why": ""
+   "why": "主控裁定（2026-11-17）：自由文本不在威胁模型内，主机名靠 redact_terms 拦截"
   },
   {
    "id": "r2 armenian-o",

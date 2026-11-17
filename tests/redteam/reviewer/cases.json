@@ -1847,6 +1847,64 @@
      "costUsd": 1.0
     }
    ]
+  },
+  {
+   "id": "r3 nbsp-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "&nbsp;",
+   "why": "closes <head> in a browser, so the CSP meta lands in <body> and does not apply"
+  },
+  {
+   "id": "r3 u00a0-raw-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": " ",
+   "why": "closes <head> in a browser, so the CSP meta lands in <body> and does not apply"
+  },
+  {
+   "id": "r3 u3000-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "　",
+   "why": "closes <head> in a browser, so the CSP meta lands in <body> and does not apply"
+  },
+  {
+   "id": "r3 endbody-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "</body>",
+   "why": "closes <head> in a browser, so the CSP meta lands in <body> and does not apply"
+  },
+  {
+   "id": "r3 endhtml-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "</html>",
+   "why": "closes <head> in a browser, so the CSP meta lands in <body> and does not apply"
+  },
+  {
+   "id": "r3 endbr-before-csp",
+   "source": "lane-b",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "</br>",
+   "why": "</br> is treated like <br> outside head: the meta lands in <body>"
+  },
+  {
+   "id": "r3 endhead-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "</head>",
+   "expect": "pass",
+   "decision": "accepted: after </head> a browser puts the <meta> back into <head> (\"after head\" mode), the CSP applies"
+  },
+  {
+   "id": "r3 endp-before-csp",
+   "source": "atk7.py",
+   "kind": "bundle-insert",
+   "insertBeforeCsp": "</p>",
+   "expect": "pass",
+   "decision": "accepted: an end tag other than </head> </body> </html> </br> is ignored in <head>; the CSP stays first"
   }
  ]
 }

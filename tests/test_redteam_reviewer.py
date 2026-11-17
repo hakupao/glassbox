@@ -104,6 +104,14 @@ class ReviewerSamplesTest(unittest.TestCase):
             f.write_text(json.dumps(pub, ensure_ascii=False), encoding="utf-8")
             return bool(self.gate(page).check_file(f))
         pub, _ = ex.export(copy.deepcopy(EXAMPLE), self.cfg, self.terms)
+        if case["kind"] == "bundle-insert":            # lane D's real bundle, one string before the CSP
+            from hub.bundle import CSP as CSP_TAG, bundle
+            html = bundle(pub)
+            i = html.index(CSP_TAG)
+            site = Path(tempfile.mkdtemp(dir=self.tmp.name)) / "site"
+            site.mkdir()
+            (site / "index.html").write_text(html[:i] + case["insertBeforeCsp"] + html[i:], encoding="utf-8")
+            return bool(self.gate(EXAMPLE).check_file(site))
         body = json.dumps(pub, ensure_ascii=False)
         if case.get("dataReplace"):
             old, new = case["dataReplace"]
@@ -136,7 +144,7 @@ class ReviewerSamplesTest(unittest.TestCase):
         self.assertEqual(self.gate(EXAMPLE).check_file(f), [])
 
     def test_every_reviewer_sample_is_refused(self):
-        self.assertGreaterEqual(sum(c.get("expect") != "pass" for c in CASES), 99)
+        self.assertGreaterEqual(sum(c.get("expect") != "pass" for c in CASES), 105)
         for case in CASES:
             with self.subTest(case["id"]):
                 if case.get("expect") == "pass":
@@ -163,10 +171,11 @@ class ReviewerSamplesTest(unittest.TestCase):
 
     def test_accepted_exemptions_pass(self):
         accepted = [c for c in CASES if c.get("expect") == "pass"]
-        self.assertEqual([c["id"] for c in accepted], ["html svg-path-ip"])
+        self.assertEqual([c["id"] for c in accepted],
+                         ["html svg-path-ip", "r3 endhead-before-csp", "r3 endp-before-csp"])
         for case in accepted:
             with self.subTest(case["id"]):
-                self.assertIn("accepted exemption (L4)", case["decision"])
+                self.assertIn("accepted", case["decision"])
                 self.assertFalse(self.refused_gate(case), "an accepted exemption must pass")
 
     def test_out_of_scope_is_documented_not_counted(self):
