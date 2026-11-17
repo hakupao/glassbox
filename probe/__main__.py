@@ -3,6 +3,7 @@
     python -m probe [--config FILE] scan               # update the local request cache
     python -m probe [--config FILE] report [--days N]  # print a glassbox.probe/1 report (usage part)
     python -m probe [--config FILE] daily [--days N]   # local-time daily totals, for checking by hand
+    python -m probe [--config FILE] push [--days N]    # scan + report + POST to the hub
 
 Config (TOML, optional; defaults shown):
     machine = "A"                       # this machine's code
@@ -16,6 +17,8 @@ Config (TOML, optional; defaults shown):
     author_emails = []                  # only commits by these authors are reported
     git_days = 60
     jobs = []                           # [{name, path, ok = "success regex"}]
+    hub_url = "https://glassbox.<tailnet>.ts.net"
+    hub_token_file = "~/.glassbox/hub.token"
     [ssh_aliases]                       # ssh host alias -> real host, for remote normalization
 """
 import argparse
@@ -58,14 +61,43 @@ def cmd_scan(conn, cfg, args):
           f"{s['rows']} rows upserted, {n} unique requests, {time.time() - t0:.1f}s")
 
 
-def cmd_report(conn, cfg, args):
-    body = report.usage(conn, cfg["machine"], days=args.days, aliases=cfg["ssh_aliases"])
+def build_report(conn, cfg, days, rebaseline=False):
+    body = report.usage(conn, cfg["machine"], days=days, aliases=cfg["ssh_aliases"])
+    if rebaseline:
+        body["usage"]["rebaseline"] = True
     body["quota"] = quota.collect(cfg)
     body["git"], used = local.git_activity(conn, cfg)
     body["projects"].update(used)
     body["runtimes"] = local.runtimes(cfg)
     body["jobs"] = local.jobs(cfg)
-    print(json.dumps(report.envelope(cfg["machine"], cfg["tz"], body), ensure_ascii=False, indent=1))
+    return report.envelope(cfg["machine"], cfg["tz"], body)
+
+
+def cmd_report(conn, cfg, args):
+    print(json.dumps(build_report(conn, cfg, args.days), ensure_ascii=False, indent=1))
+
+
+def cmd_push(conn, cfg, args):
+    """Scan, build the report and POST it to the hub (CONTRACT §1)."""
+    import gzip
+    import urllib.error
+    import urllib.request
+    cmd_scan(conn, cfg, args)
+    rep = build_report(conn, cfg, args.days, rebaseline=args.rebaseline)
+    token = Path(cfg["hub_token_file"]).expanduser().read_text(encoding="utf-8").strip()
+    req = urllib.request.Request(cfg["hub_url"].rstrip("/") + "/ingest", method="POST",
+                                 data=gzip.compress(json.dumps(rep).encode("utf-8")),
+                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                                          "Content-Encoding": "gzip"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            print("pushed:", r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"hub refused ({e.code}): {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
+        sys.exit(1)
+    except urllib.error.URLError as e:
+        print(f"hub unreachable: {e.reason}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_daily(conn, cfg, args):
@@ -93,13 +125,16 @@ def main(argv=None):
     ap.add_argument("--config")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("scan")
-    for name in ("report", "daily"):
+    for name in ("report", "daily", "push"):
         p = sub.add_parser(name)
         p.add_argument("--days", type=int, default=3)
+        if name == "push":
+            p.add_argument("--rebaseline", action="store_true",
+                           help="ask the hub to accept shrinking history (needs a newer probe or `hub machine rebaseline`)")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     conn = state.connect(cfg["state"])
-    {"scan": cmd_scan, "report": cmd_report, "daily": cmd_daily}[args.cmd](conn, cfg, args)
+    {"scan": cmd_scan, "report": cmd_report, "daily": cmd_daily, "push": cmd_push}[args.cmd](conn, cfg, args)
 
 
 if __name__ == "__main__":
