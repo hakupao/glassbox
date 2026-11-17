@@ -185,6 +185,8 @@ def _projects(conn, machine, projects):
             if remote != remote.lower() or project_key(remote) != key:
                 raise Rejected(f"project key {key} does not match its remote")
         old = conn.execute("SELECT remote, owner FROM projects WHERE key=?", (key,)).fetchone()
+        if old and key != OTHER and remote is None and old[0] is not None:
+            raise Rejected(f"project {key} has a remote; it cannot be redeclared without one")
         if old and remote is None and key != OTHER and old[1] not in (None, machine):
             raise Rejected(f"project {key} belongs to another machine")
         conn.execute(

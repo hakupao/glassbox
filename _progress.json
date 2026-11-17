@@ -72,7 +72,9 @@
     ],
     "S13": [
       "install the pre-commit privacy hook (.git/hooks is not versioned) on every clone",
-      "Gitea read-only tokens for both instances; GitHub fine-grained read-only token for the hub"
+      "Gitea read-only tokens for both instances; GitHub fine-grained read-only token for the hub",
+      "verify Gitea /user/repos includes organization repositories on both real instances; else add /orgs/{org}/repos",
+      "start the deploy hub from a fresh database (schema_version guard refuses old dev DBs)"
     ]
   }
 }

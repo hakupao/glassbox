@@ -98,7 +98,7 @@ def make_handler(hub):
                 rep = json.loads(raw)
             except TooLarge:
                 return self._send(413, {"error": "report too large"})
-            except (zlib.error, ValueError):
+            except (zlib.error, ValueError, RecursionError):
                 return self._send(400, {"error": "not JSON"})
             try:
                 with hub.lock:

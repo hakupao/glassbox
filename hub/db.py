@@ -2,6 +2,8 @@
 import sqlite3
 from pathlib import Path
 
+SCHEMA_VERSION = "2"   # bump on any table change; an older database refuses to open (no silent breakage)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS machines (
   id TEXT PRIMARY KEY, token_sha TEXT UNIQUE, role TEXT, os TEXT, label TEXT,
@@ -54,7 +56,14 @@ def connect(path):
     conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
+    fresh = not conn.execute("SELECT 1 FROM sqlite_master WHERE name='kv'").fetchone()
     conn.executescript(SCHEMA)
+    v = get(conn, "schema_version")
+    if fresh or v is None and not conn.execute("SELECT 1 FROM machines").fetchone():
+        put(conn, "schema_version", SCHEMA_VERSION)
+        conn.commit()
+    elif v != SCHEMA_VERSION:
+        raise SystemExit(f"hub database schema {v} != {SCHEMA_VERSION}; migrate or start from a new database")
     return conn
 
 

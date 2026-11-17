@@ -175,6 +175,19 @@ def check_visibility(conn, token, api="https://api.github.com"):
     """Projects reported by probes get their real visibility. A GitHub remote is public only
     when the API says so; 404 or any doubt means private. Non-GitHub and remote-less: private."""
     n = 0
+    # GitHub commits whose repository no longer appears anywhere else still need refreshing.
+    for (remote,) in conn.execute("SELECT DISTINCT remote FROM commits WHERE source='github' AND remote NOT IN "
+                                  "(SELECT remote FROM projects WHERE remote IS NOT NULL)").fetchall():
+        if _cached_visibility(conn, remote) is None:
+            vis = "private"
+            try:
+                r, _ = _http(f"{api}/repos/{remote.split('/', 1)[1]}", token)
+                vis = "public" if r.get("private") is False and r.get("visibility", "public") == "public" else "private"
+            except urllib.error.HTTPError as e:
+                if e.code != 404:
+                    print(f"github: visibility check failed with HTTP {e.code}; treating as private", file=sys.stderr)
+            set_visibility(conn, remote, vis)
+            n += 1
     for key, remote, checked in conn.execute("SELECT key, remote, checked FROM projects").fetchall():
         if checked and time.time() - checked < VIS_TTL:
             continue
