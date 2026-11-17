@@ -1,0 +1,44 @@
+{
+ "_note": "Out of scope by the lead's ruling (2026-11-17, option b): the name appears only in warnings, which is free text. Text fields of the private page are private names; free-text host names are the job of the redact_terms word list. Kept for the record; not counted as must-block.",
+ "cases": [
+  {
+   "id": "hourly-name-in-title",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "hourly"
+     ],
+     []
+    ],
+    [
+     "set",
+     [
+      "warnings"
+     ],
+     [
+      "disk full on zebra-host"
+     ]
+    ],
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix zebra-host disk"
+    ]
+   ],
+   "probes": [
+    "zebra-host"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  }
+ ]
+}

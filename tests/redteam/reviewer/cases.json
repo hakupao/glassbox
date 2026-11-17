@@ -310,45 +310,6 @@
    "why": ""
   },
   {
-   "id": "hourly-name-in-title",
-   "source": "atk.py",
-   "kind": "export",
-   "ops": [
-    [
-     "set",
-     [
-      "today",
-      "hourly"
-     ],
-     []
-    ],
-    [
-     "set",
-     [
-      "warnings"
-     ],
-     [
-      "disk full on zebra-host"
-     ]
-    ],
-    [
-     "set",
-     [
-      "activity",
-      0,
-      "title"
-     ],
-     "fix zebra-host disk"
-    ]
-   ],
-   "probes": [
-    "zebra-host"
-   ],
-   "normProbes": [],
-   "mustBeNull": [],
-   "why": ""
-  },
-  {
    "id": "private-branch-in-pub-title",
    "source": "atk.py",
    "kind": "export",
@@ -1046,7 +1007,9 @@
    "head": "<svg><path d=\"M10\u002e1.2.3\"/></svg>",
    "body": "",
    "dataReplace": null,
-   "why": ""
+   "why": "",
+   "expect": "pass",
+   "decision": "accepted exemption (L4): number-only <path d> geometry such as M10\u002e1.2.3 is normal minifier output; svg-g-ip and svg-viewBox-ip stay blocked (lead's ruling 2026-11-17)"
   },
   {
    "id": "html svg-viewBox-ip",

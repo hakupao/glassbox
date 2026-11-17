@@ -22,13 +22,8 @@ vp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(vp)
 EXAMPLE = json.loads((ROOT / "schema" / "examples" / "page.private.json").read_text(encoding="utf-8"))
 CASES = json.loads((RT / "reviewer" / "cases.json").read_text(encoding="utf-8"))["cases"]
-# Not covered by any review item; a ruling was asked of the lead (2026-11-17). They are NOT
-# counted as refused: test_pending_cases_are_still_open fails the day one starts being refused,
-# so this list cannot go stale silently.
-PENDING = {
-    "hourly-name-in-title": "name only in warnings (free text, not a Text field): no rule covers it",
-    "html svg-path-ip": "review L4 keeps <path d> geometry exempt from the IPv4 check",
-}
+# Lead's rulings (2026-11-17): a case with "expect": "pass" is an accepted exemption and must PASS
+# (its "decision" says why); out_of_scope/ holds cases outside the threat model, not run here.
 
 
 def value(v):
@@ -125,10 +120,10 @@ class ReviewerSamplesTest(unittest.TestCase):
         self.assertEqual(self.gate(EXAMPLE).check_file(f), [])
 
     def test_every_reviewer_sample_is_refused(self):
-        self.assertGreaterEqual(len(CASES), 50)
+        self.assertGreaterEqual(sum(c.get("expect") != "pass" for c in CASES), 54)
         for case in CASES:
             with self.subTest(case["id"]):
-                if case["id"] in PENDING:
+                if case.get("expect") == "pass":
                     continue
                 ok = self.refused_export(case) if case["kind"] == "export" else self.refused_gate(case)
                 self.assertTrue(ok, f"not refused: {case['source']} {case['id']}")
@@ -150,12 +145,19 @@ class ReviewerSamplesTest(unittest.TestCase):
                 f.write_text(json.dumps(pub, ensure_ascii=False), encoding="utf-8")
                 self.assertEqual(self.gate(page).check_file(f), [])
 
-    def test_pending_cases_are_still_open(self):
-        for case in CASES:
-            if case["id"] in PENDING:
-                with self.subTest(case["id"]):
-                    ok = self.refused_export(case) if case["kind"] == "export" else self.refused_gate(case)
-                    self.assertFalse(ok, "now refused: drop it from PENDING")
+    def test_accepted_exemptions_pass(self):
+        accepted = [c for c in CASES if c.get("expect") == "pass"]
+        self.assertEqual([c["id"] for c in accepted], ["html svg-path-ip"])
+        for case in accepted:
+            with self.subTest(case["id"]):
+                self.assertIn("accepted exemption (L4)", case["decision"])
+                self.assertFalse(self.refused_gate(case), "an accepted exemption must pass")
+
+    def test_out_of_scope_is_documented_not_counted(self):
+        oos = json.loads((RT / "reviewer" / "out_of_scope" / "cases.json").read_text(encoding="utf-8"))
+        self.assertIn("redact_terms", oos["_note"])
+        self.assertEqual([c["id"] for c in oos["cases"]], ["hourly-name-in-title"])
+        self.assertFalse({c["id"] for c in oos["cases"]} & {c["id"] for c in CASES})
 
 
 if __name__ == "__main__":
