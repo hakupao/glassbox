@@ -67,6 +67,25 @@ class GateCliTest(unittest.TestCase):
         self.assertIn("view must be 'public'", out)
         self.assertIn("today.h*****: field not in public_fields.json", out)   # today.hourly, key masked
 
+    def test_default_config_requires_prefix_only_private_titles(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = Path(d) / "public.toml"                     # no privateTitles: the default applies
+            cfg.write_text('githubOwners = ["example-owner"]\nhidden = ["tailnet"]\n'
+                           '[allow]\n"services[].name" = ["gitea"]\n', encoding="utf-8")
+            page = json.loads((RT / "samples" / "pass-minimal.json").read_text(encoding="utf-8"))
+            terms, ctx = RT / "context" / "terms.json", RT / "context" / "gate-context.json"
+            for title, rc in (("fix: handle empty mapping rule", 1), ("fix:", 0), ("******", 0), ("oops:", 1)):
+                with self.subTest(title):
+                    page["activity"][1]["title"] = title
+                    p = Path(d) / "page.json"
+                    p.write_text(json.dumps(page), encoding="utf-8")
+                    code, out = run(p, "--terms", terms, "--config", cfg, "--context", ctx)
+                    self.assertEqual(code, rc, out)
+                    if rc:
+                        self.assertIn("must be only a prefix", out)
+            cfg.write_text('privateTitles = "full"\n', encoding="utf-8")
+            self.assertEqual(run(p, "--terms", terms, "--config", cfg, "--context", ctx)[0], 2)
+
     def test_assets_get_text_checks(self):
         with tempfile.TemporaryDirectory() as d:
             ok, bad, odd = Path(d) / "app.js", Path(d) / "style.css", Path(d) / "font.woff2"

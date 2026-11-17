@@ -105,7 +105,10 @@ class ExportTest(unittest.TestCase):
         self.assertTrue(all(s["name"] == {"masked": True} for s in pub["services"]))
         self.assertEqual(pub["hidden"], [])
         self.assertIsNone(next(a for a in pub["activity"] if a["public"])["url"])   # no configured owner => no links
-        self.assertEqual(cfg["privateTitles"], "redacted")
+        self.assertEqual(cfg["privateTitles"], "prefix-only")          # owner's decision 2026-11-17
+        self.assertTrue(all(a["title"] in ("fix:", "refactor:", "******") for a in pub["activity"] if not a["public"]))
+        terms = json.loads((RT / "terms.json").read_text(encoding="utf-8"))
+        self.assertEqual(vp.Gate(terms, ctx, {}).check_page(pub, "p"), [])      # gate with the same empty config
 
     # --- rule 4: private commits ----------------------------------------------------------------
 

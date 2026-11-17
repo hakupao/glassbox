@@ -69,6 +69,8 @@ XMLNS = re.compile(r"http://www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink|XML/1
 # Inside SVG shape tags only, number-only geometry ("M1.5.5.25 ...") is not an IP address.
 SVG_TAG = re.compile(r"(?i)<(?:svg|path|polyline|polygon|g|use|rect|circle|ellipse|line)\b[^>]*>")
 SVG_GEOMETRY = re.compile(r"(?i)(?<![\w-])(?:d|points|viewBox|transform)\s*=\s*\"[-0-9\s.,+eEMmLlHhVvCcSsQqTtAaZz()]*\"")
+PREFIX_ONLY = re.compile(r"\*{6}|(?:feat|fix|docs|style|refactor|perf|tests?|build|ci|chore|revert|wip|merge"
+                         r"|release|deps|init):")
 GB_MARK = re.compile(r"window\.GB\s*=\s*")
 TEXT_ONLY = {".js", ".mjs", ".css", ".svg", ".txt", ".webmanifest"}
 
@@ -121,6 +123,9 @@ class Gate:
         ctx = context or {}
         self.private_projects = set(config.get("privateProjects", []))
         self.hidden = set(config.get("hidden", []))
+        self.private_titles = config.get("privateTitles", "prefix-only")      # default: owner's decision 2026-11-17
+        if self.private_titles not in ("prefix-only", "redacted"):
+            raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
         self.public_repos = (set(ctx.get("publicRepos", [])) | self.allow.get("activity[].repo", set())) \
             - self.private_projects
         for f in ("activity[].repo", GROUP_FIELD):
@@ -302,6 +307,9 @@ class Gate:
                         bad.append(f"{p}: private commit keeps {k}")
                 if a.get("repo") != MASK:
                     bad.append(f"{p}: private commit repo must be masked")
+                if self.private_titles == "prefix-only" and not (
+                        isinstance(a.get("title"), str) and PREFIX_ONLY.fullmatch(a["title"])):
+                    bad.append(f"{p}: private commit title must be only a prefix (privateTitles = prefix-only)")
                 t = a.get("t")
                 try:
                     dt = datetime.fromisoformat(t)

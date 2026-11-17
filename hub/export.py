@@ -10,7 +10,8 @@ private one: a path not in that table cannot reach the output. On the way:
   Gitea commits and repos listed in `privateProjects` count as private.
 - Commit titles (rule 5), public and private alike, lose secrets, e-mails, IPs, paths, URLs,
   ticket ids, blocked keywords and every private name (normalised match, so `FalconLedger` and
-  `falcon_ledger` both go). `privateTitles = "prefix-only"` keeps only `fix:` for private ones.
+  `falcon_ledger` both go). Private titles keep only a prefix such as `fix:` (`privateTitles =
+  "prefix-only"`, the default by the owner's decision of 2026-11-17); "redacted" keeps the scrubbed text.
 - today.byProject merges private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
@@ -75,7 +76,7 @@ def load_config(path=DEFAULT_CONFIG):
     p = Path(path).expanduser()
     raw = tomllib.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
     cfg = {
-        "privateTitles": raw.get("privateTitles", "redacted"),
+        "privateTitles": raw.get("privateTitles", "prefix-only"),
         "hidden": list(raw.get("hidden", [])),
         "keywords": [k for k in raw.get("keywords", []) if k],
         "privateProjects": set(raw.get("privateProjects", [])),

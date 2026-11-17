@@ -1,12 +1,12 @@
 # Public snapshot settings — example with made-up values.
 # The real file is .local/public.local.toml (gitignored); hub/export.py and
 # scripts/verify_public.py both read it. A missing file means: nothing allowlisted,
-# every name masked, titles "redacted", nothing hidden.
+# every name masked, private titles "prefix-only", nothing hidden.
 
 # Commit titles of private repos (CONTRACT §3 rule 5):
-#   "redacted"    — keep the title after regex scrubbing and keyword blocking (default)
-#   "prefix-only" — keep only a conventional-commit type such as "fix:"
-privateTitles = "redacted"
+#   "prefix-only" — keep only a conventional-commit type such as "fix:" (default, owner's decision 2026-11-17)
+#   "redacted"    — keep the title after regex scrubbing and keyword blocking
+privateTitles = "prefix-only"
 
 # Blocks that are not published at all; their value becomes [] (rule 7).
 # Any of: quota, activity, machines, services, runtimes, tailnet, jobs, byProject
