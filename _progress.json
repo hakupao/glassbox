@@ -36,10 +36,8 @@
       "note": "review APPROVE after one round; Beszel + Kuma verified read-only on the real instances; Docker proxy and tailscale on fakes"
     },
     "S09": {
-      "status": "todo"
-    },
-    "S10": {
-      "status": "todo"
+      "status": "done",
+      "note": "c-v7 → c-v8 → c-v9 accepted as the overview page"
     },
     "S11": {
       "status": "todo"
@@ -57,6 +55,15 @@
       "status": "todo"
     },
     "S16": {
+      "status": "todo"
+    },
+    "S10a": {
+      "status": "todo"
+    },
+    "S10b": {
+      "status": "todo"
+    },
+    "S10c": {
       "status": "todo"
     }
   },
