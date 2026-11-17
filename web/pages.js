@@ -664,7 +664,9 @@ P.services = params => {
   const isOther = s => s.status !== 'up' && s.status !== 'down';
   const counts = {all: all.length, up: all.filter(s => s.status === 'up').length, down: all.filter(s => s.status === 'down').length, other: all.filter(isOther).length};
   let list = all.filter(s => stF === 'all' || (stF === 'other' ? isOther(s) : s.status === stF));
-  if(machF) list = list.filter(s => (s.machine || '') === machF);
+  const NOM = '-';                                  /* machine=- : services without a machine */
+  const mkey = s => s.machine || NOM;
+  if(machF) list = list.filter(s => mkey(s) === machF);
   if(q) list = list.filter(s => typeof s.name === 'string' && s.name.toLowerCase().includes(q));
   const num0 = v => v == null ? -1 : v;
   if(sort === 'name') list.sort((a, b) => G.Tplain(a.name).localeCompare(G.Tplain(b.name)));
@@ -686,10 +688,11 @@ P.services = params => {
     </div>`, 'hero');
 
     h += G.grpH('02', 'svc.grpList');
-    const machines = [...new Set(all.map(s => s.machine || ''))].sort();
+    const machines = [...new Set(all.map(mkey))].sort();
     h += G.pn('s-list', G.ph('s-list', 'box', 'ok', esc(t('svc.all')), esc(t('svc.shown', {n: list.length, m: all.length})), esc(t('detail.hint'))) +
       `<div class="bar-f">${seg(STS.filter(s => s === 'all' || counts[s]).map(s => [s, esc(t(s === 'all' ? 'filter.all' : s === 'other' ? 'svc.other' : 'st.' + s)) + `<small>${F.n(counts[s])}</small>`]), stF, v => lk({st: v === 'all' ? null : v}))}
-        ${machines.length > 1 ? `<span class="flab">${esc(t('svc.machine'))}</span>${seg([['', esc(t('filter.all'))]].concat(machines.map(m => [m, m ? esc(m) : esc(t('svc.noMachine'))])), machF || '', v => lk({machine: v || null}))}` : ''}
+        ${machines.length > 1 ? `<span class="flab">${esc(t('svc.machine'))}</span>${seg([['\u0000all', esc(t('filter.all'))]].concat(machines.map(m => [m, m === NOM ? esc(t('svc.noMachine')) : esc(m)])), machF || '\u0000all', v => lk({machine: v === '\u0000all' ? null : v}))}` : ''}
+        ${machF ? `<span class="bds" id="s-mf">${machF === NOM ? bd(esc(t('svc.noMachine')), 'c-dim') : G.code(machF)} <a class="clear" href="${lk({machine: null})}">\u2715 ${esc(t('filter.clear'))}</a></span>` : ''}
         <span class="flab">${esc(t('filter.sort'))}</span>${seg(['status', 'name', 'up', 'cpu', 'mem'].map(s => [s, esc(t('sort.' + s))]), sort, v => lk({sort: v === 'status' ? null : v}))}
         <input class="search" id="s-q" type="search" value="${esc(params.get('q') || '')}" placeholder="${esc(t('svc.search'))}" aria-label="${esc(t('svc.search'))}"></div>` +
       (list.length ? `<table class="tb">${serviceRows(list)}</table>` : G.empty('filter.none')));
