@@ -349,9 +349,16 @@ class ExportTest(unittest.TestCase):
     # --- refusing --------------------------------------------------------------------------------
 
     def test_mistyped_values_raise(self):
-        self.page["runtimes"][0]["version"] = "latest"
-        with self.assertRaises(ex.ExportError):
-            self.run_export()
+        self.page["runtimes"][0]["version"] = "2.0.1+build.secrethost"       # L3: not published, nulled
+        pub, _ = self.run_export()
+        self.assertIsNone(pub["runtimes"][0]["version"])
+        for put in (lambda p: p["today"].__setitem__("requests", {"zebra": 1}),    # dict where a number goes
+                    lambda p: p["today"].__setitem__("costUsd", float("nan")),      # L6
+                    lambda p: p["today"].__setitem__("requests", "120")):
+            page = copy.deepcopy(EXAMPLE)
+            put(page)
+            with self.subTest(put), self.assertRaises(ex.ExportError):
+                self.run_export(page=page)
         page = copy.deepcopy(EXAMPLE)
         page["schema"] = "something/else"
         with self.assertRaises(ex.ExportError):
@@ -379,6 +386,29 @@ class ExportTest(unittest.TestCase):
         p.write_text('codes = ["studio-dev"]\n', encoding="utf-8")
         with self.assertRaises(ex.ExportError):
             self.run_export(cfg=ex.load_config(p, self.terms))         # a code equal to a private name
+
+    def test_low_title_patterns(self):
+        m = ex.Matcher([], {})
+        for t in ["deploy: hub at box.tail1a2b.ts.net", "docs: see wiki.acmecorp.internal/page",
+                  "chore: rotate sk_live_51HxAbCdEfGhIjKlMnOp", "test: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc",
+                  "ci: npm_" + "a1B2c3D4" * 4, "ci: hf_" + "a1B2c3D4" * 4, "fix D:" + "\\work\\acme\\x",
+                  "docs: see docs.example.com/guide"]:
+            with self.subTest(t):
+                out = ex.scrub_title(t, m)
+                self.assertIn("******", out)
+                g = vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), None, {})
+                self.assertEqual(g.title_problems(out), [], out)                         # exporter ⊇ gate
+                self.assertTrue(g.title_problems(t))
+
+    def test_cli_errors_are_masked(self):
+        src = Path(self.tmp.name) / "private.json"
+        src.write_text("[1, 2]", encoding="utf-8")                                     # not even an object
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            rc = ex.main([str(src), "--no-config", "--terms", str(RT / "terms.json"),
+                          "--out", str(Path(self.tmp.name) / "o.json")])
+        self.assertEqual(rc, 2)
+        self.assertNotIn("Traceback", err.getvalue())
 
     def test_cli_writes_page_and_context(self):
         src = Path(self.tmp.name) / "private.json"

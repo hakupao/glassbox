@@ -34,6 +34,7 @@ import argparse
 import copy
 import html
 import json
+import math
 import re
 import sys
 import tomllib
@@ -64,7 +65,11 @@ NAME_FIELDS_SKIP = {"activity[].branch"}     # branches are not names; private o
 SCRUB = [
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}"
-               r"|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"),
+               r"|sk-[A-Za-z0-9_-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{6,}|npm_[A-Za-z0-9]{16,}|hf_[A-Za-z0-9]{16,}"
+               r"|xox[a-z]-[A-Za-z0-9-]{8,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"),
+    re.compile(r"\beyJ[\w-]{3,}\.[\w-]{3,}(?:\.[\w-]*)?"),                                  # JWT
+    re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ts\.net|local|lan|internal|home\.arpa)\b\S*"),   # LAN hosts
+    re.compile(r"(?i)\b(?:[\w-]+\.)+[a-z]{2,}/\S*"),                                       # domain/path
     re.compile(r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|auth)\s*[=:]\s*\S+"),
     re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://\S*"),                                   # any URL
     re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),                     # e-mail
@@ -80,6 +85,10 @@ SCRUB = [
 
 class ExportError(Exception):
     pass
+
+
+def _no_constant(name):
+    raise ValueError("NaN / Infinity")                    # review L6
 
 
 # --- config ----------------------------------------------------------------------------------
@@ -336,13 +345,13 @@ def _type_ok(v, typ, cfg, url_rx):
         typ = typ[:-1]
     kind, _, arg = typ.partition(":")
     if kind == "number":
-        return isinstance(v, (int, float)) and not isinstance(v, bool)
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
     if kind == "bool":
         return isinstance(v, bool)
     if kind == "null":
         return v is None
     if kind == "text":
-        return v in (MASK, MASK_PRIVATE) or isinstance(v, str)
+        return _is_placeholder(v) or isinstance(v, str)
     if not isinstance(v, str):
         return False
     if kind == "iso":
@@ -350,7 +359,7 @@ def _type_ok(v, typ, cfg, url_rx):
     return {
         "date": lambda: bool(re.fullmatch(r"\d{4}-\d\d-\d\d", v)),
         "hash": lambda: bool(re.fullmatch(r"[0-9a-f]{7,40}", v)),
-        "semver": lambda: bool(re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", v)),
+        "semver": lambda: bool(SEMVER.fullmatch(v)),
         "enum": lambda: v in arg.split("|"),
         "const": lambda: v == arg,
         "code": lambda: is_code(v, cfg),
@@ -360,14 +369,29 @@ def _type_ok(v, typ, cfg, url_rx):
     }[kind]()
 
 
+SEMVER = re.compile(r"\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?")      # review L3
+
+
+def _is_placeholder(v):
+    """Exactly one of the two placeholder shapes, with `masked` that `is True` (review L8)."""
+    return isinstance(v, dict) and v.get("masked") is True and (
+        set(v) == {"masked"} or (set(v) == {"masked", "group"} and v["group"] == "private"))
+
+
 def _check(node, path, cfg, url_rx, bad):
-    if isinstance(node, dict) and node not in (MASK, MASK_PRIVATE):
+    g = generic(path)
+    if g in FIELDS and isinstance(node, (dict, list)) and not (
+            FIELDS[g].rstrip("?") == "text" and _is_placeholder(node)):
+        bad.append(f"{path}: a {type(node).__name__} where {FIELDS[g]} is expected")
+    elif isinstance(node, dict) and not _is_placeholder(node):
         for k, v in node.items():
             _check(v, f"{path}.{k}" if path else k, cfg, url_rx, bad)
     elif isinstance(node, list):
         for i, v in enumerate(node):
             _check(v, f"{path}[{i}]", cfg, url_rx, bad)
-    elif not _type_ok(node, FIELDS[generic(path)], cfg, url_rx):
+    elif g not in FIELDS:
+        bad.append(f"{path}: not a public field")
+    elif not _type_ok(node, FIELDS[g], cfg, url_rx):
         bad.append(f"{path}: not {FIELDS[generic(path)]} (a {type(node).__name__})")
 
 
@@ -508,6 +532,9 @@ def export(page, cfg, terms):
                              "requests": sum(p.get("requests") or 0 for p in priv_rows),
                              "costUsd": round(sum(p.get("costUsd") or 0 for p in priv_rows), 2)})
         today["byProject"] = pub_rows
+    for r in src.get("runtimes") or []:                   # odd versions are dropped, not published
+        if isinstance(r, dict) and isinstance(r.get("version"), str) and not SEMVER.fullmatch(r["version"]):
+            r["version"] = None
     for m in today.get("byModel") or []:
         if m.get("model") not in MODELS:
             m["model"] = "other"
@@ -546,6 +573,17 @@ _PRIVATE_GROUP_BRANCH = object()  # same, for a public commit's branch that carr
 
 
 def main(argv=None):
+    """Every failure is a one-line message without values and exit 2; no traceback (review L5)."""
+    try:
+        return _main(argv)
+    except SystemExit:
+        raise
+    except Exception as e:                                    # noqa: BLE001
+        print(f"export failed ({e.__class__.__name__}); nothing was written", file=sys.stderr)
+        return 2
+
+
+def _main(argv=None):
     ap = argparse.ArgumentParser(prog="hub.export")
     ap.add_argument("private")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
@@ -555,11 +593,14 @@ def main(argv=None):
     ap.add_argument("--context")
     a = ap.parse_args(argv)
     try:
-        page = json.loads(Path(a.private).read_text(encoding="utf-8"))
+        page = json.loads(Path(a.private).read_text(encoding="utf-8"), parse_constant=_no_constant)
         terms = load_terms(a.terms)
         pub, ctx = export(page, load_config(None if a.no_config else a.config, terms), terms)
-    except (OSError, ValueError, ExportError) as e:
+    except ExportError as e:                      # our own messages carry no private values
         print(f"export failed: {e}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError) as e:
+        print(f"export failed ({e.__class__.__name__})", file=sys.stderr)
         return 2
     for path, obj in ((a.out, pub), (a.context, ctx)):
         if path:

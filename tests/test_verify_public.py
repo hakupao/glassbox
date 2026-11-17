@@ -94,12 +94,53 @@ class GateCliTest(unittest.TestCase):
                 self.assertTrue(any("private name" in b for b in g.check_text(f"<p>{t}</p>", "x", True)), t)
         self.assertEqual([b for b in g.check_text("<p>bowling owls nightjars</p>", "x", True) if "private" in b], [])
 
+    def test_low_findings(self):
+        terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
+        g = vp.Gate(terms, None, {})
+        home_drive = "D:" + "\\work\\acme\\x"
+        for t in ["deploy: hub at box.tail1a2b.ts.net", "docs: see wiki.acmecorp.internal/page", "nas.local up",
+                  "router.lan", "printer.home.arpa", "docs: see docs.example.com/guide",
+                  "chore: rotate sk_live_51HxAbCdEfGhIjKlMnOp", "test: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc",
+                  "ci: npm_" + "a1B2c3D4" * 4, "ci: hf_" + "a1B2c3D4" * 4, "ci: gho_" + "a1B2c3D4" * 4,
+                  "ci: xoxp-1234567890-abc", f"fix {home_drive}"]:
+            with self.subTest(t):
+                self.assertTrue(g.title_problems(t))                                    # L1
+        for v, ok in (("2.1.326", True), ("1.0.0-rc.1", True), ("2.0.1+build.secrethost", False),
+                      ("1.2.3-internal", False)):
+            with self.subTest(v):
+                self.assertEqual(g.type_ok(v, "semver", "runtimes[].version"), ok)    # L3
+        svg = {'<svg><g d="203.0.113.9"></g></svg>': True, '<svg viewBox="203.0.113.9"></svg>': True,
+               '<svg><path d="M1.5.5.25 12.2.3.4"/></svg>': False, '<polygon points="1.2.3.4 5.6.7.8"/>': False,
+               '<polygon d="203.0.113.9"/>': True}
+        for html_, blocked in svg.items():
+            with self.subTest(html_):                                                    # L4
+                self.assertEqual(any("ipv4" in b for b in g.check_text(html_, "x", True)), blocked)
+        for v in (float("nan"), float("inf")):
+            self.assertFalse(g.type_ok(v, "number", "today.costUsd"))                   # L6
+        with self.assertRaises(ValueError):
+            vp.strict_json('{"a": NaN}')
+        for v in ({"masked": 1}, {"masked": 1.0}, {"masked": "true"}, {"masked": True, "x": 1}):
+            self.assertFalse(vp.is_mask(v), v)                                           # L8
+        self.assertTrue(vp.is_mask({"masked": True}))
+
+    def test_unexpected_errors_exit_2_without_traceback(self):
+        orig = vp.Gate.check_file
+        vp.Gate.check_file = lambda self, p: 1 / 0
+        try:
+            rc, out = run(RT / "samples" / "pass-minimal.json", *self.common, "--private", RT / "context" / "private.json")
+        finally:
+            vp.Gate.check_file = orig
+        self.assertEqual(rc, 2)
+        self.assertIn("gate error (ZeroDivisionError)", out)
+        self.assertNotIn("Traceback", out)
+
     def test_private_page_is_rejected(self):
         rc, out = run(ROOT / "schema" / "examples" / "page.private.json", *self.common,
                       "--private", RT / "context" / "private.json")
         self.assertEqual(rc, 1)
         self.assertIn("view must be 'public'", out)
-        self.assertIn("today.h*****: field not in public_fields.json", out)   # today.hourly, key masked
+        self.assertIn("field not in public_fields.json", out)          # today.hourly, its key masked
+        self.assertNotRegex(out, r"[A-Za-z]\*{3,}")                   # L7: no first letters or lengths
 
     def test_default_config_requires_prefix_only_private_titles(self):
         with tempfile.TemporaryDirectory() as d:

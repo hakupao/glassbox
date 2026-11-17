@@ -38,6 +38,7 @@ This file shares no code with hub/export.py on purpose: one bug must not pass bo
 import argparse
 import html
 import json
+import math
 import re
 import sys
 import tomllib
@@ -60,24 +61,30 @@ PATTERNS = {
     "ipv6": re.compile(r"(?i)(?<![\w:])(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}(?![\w:])"
                        r"|(?<![\w:])(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?(?![\w:])"),
     "path": re.compile(r"(?:/Users/|/home/|/Volumes/|/root/|/private/|/mnt/|/srv/|/var/folders/"
-                       r"|(?<![\w~])~/|[A-Za-z]:\\(?:Users|Documents and Settings)\\|\\\\[A-Za-z0-9.-]+\\)"),
+                       r"|(?<![\w~])~/|(?<![A-Za-z])[A-Za-z]:\\{1,2}[\w.$ -]|\\\\[A-Za-z0-9.-]+\\)"),
+    "lan host": re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ts\.net|local|lan|internal|home\.arpa)\b"),
     "secret": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
                          r"|\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}"
-                         r"|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"
+                         r"|sk-[A-Za-z0-9_-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{8,}|npm_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,}"
+                         r"|xox[a-z]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"
+                         r"|\beyJ[\w-]{5,}\.[\w-]{5,}(?:\.[\w-]*)?"
                          r"|(?i:\b(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*[\"']?[^\s\"'<>{}]{4,})"),
 }
 TITLE_EXTRA = {                  # keys differ from PATTERNS: both sets apply to titles
     "ticket": re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b"),
     "url": re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://"),
     "rooted path": re.compile(r"(?<![\w.])(?:~|\.{1,2})?/[\w.-]+/[\w.-]+"),
+    "domain": re.compile(r"(?i)\b(?:[\w-]+\.)+[a-z]{2,}/"),
 }
 ABS_URL = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>()\\]*")
 REL_URL = re.compile(r"(?i)(?:\b(?:src|href|srcset|action|data|poster|xlink:href)\s*=\s*[\"']?\s*"
                      r"|url\(\s*[\"']?\s*|@import\s+[\"']?\s*|\bimport\s*\(\s*[\"']|\bfetch\s*\(\s*[\"'])//")
 XMLNS = re.compile(r"http://www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink|XML/1998/namespace)")
 # Inside SVG shape tags only, number-only geometry ("M1.5.5.25 ...") is not an IP address.
-SVG_TAG = re.compile(r"(?i)<(?:svg|path|polyline|polygon|g|use|rect|circle|ellipse|line)\b[^>]*>")
-SVG_GEOMETRY = re.compile(r"(?i)(?<![\w-])(?:d|points|viewBox|transform)\s*=\s*\"[-0-9\s.,+eEMmLlHhVvCcSsQqTtAaZz()]*\"")
+# Review L4: only <path d> and <polyline|polygon points> geometry is exempt from the IPv4 check.
+SVG_TAGS = {"path": "d", "polyline": "points", "polygon": "points"}
+SVG_TAG = re.compile(r"(?i)<(path|polyline|polygon)\b[^>]*>")
+SVG_NUMBERS = r"\"[-0-9\s.,+eEMmLlHhVvCcSsQqTtAaZz]*\""
 PREFIX_ONLY = re.compile(r"\*{6}|(?:feat|fix|docs|style|refactor|perf|tests?|build|ci|chore|revert|wip|merge"
                          r"|release|deps|init):")
 # Review M2: the public snapshot is ONE self-contained HTML file whose head starts with this CSP.
@@ -112,8 +119,12 @@ def strict_object(pairs):
     return out
 
 
+def _no_constant(name):
+    raise ValueError("NaN / Infinity")                    # review L6
+
+
 def strict_json(text):
-    return json.loads(text, object_pairs_hook=strict_object)
+    return json.loads(text, object_pairs_hook=strict_object, parse_constant=_no_constant)
 
 
 class _Parse(HTMLParser):
@@ -210,10 +221,21 @@ def _chr(h):
         return ""
 
 
+_HIDDEN = {}
+
+
 def hide(s):
-    """Show a private word without revealing it."""
-    s = str(s)
-    return (s[:1] + "*" * (len(s) - 1)) if len(s) > 1 else "*"
+    """Refer to a private value by an ordinal only: no letters, no length (review L7)."""
+    return f"[hidden #{_HIDDEN.setdefault(str(s), len(_HIDDEN) + 1)}]"
+
+
+def is_mask(v):
+    """Exactly {"masked": true} — `is True`, so 1 or 1.0 do not pass (review L8)."""
+    return isinstance(v, dict) and set(v) == {"masked"} and v["masked"] is True
+
+
+def is_group(v):
+    return isinstance(v, dict) and set(v) == {"masked", "group"} and v["masked"] is True and v["group"] == "private"
 
 
 def generic(path):
@@ -383,7 +405,8 @@ class Gate:
                 if ("name", h) not in seen:
                     seen.add(("name", h))
                     bad.append(f"{where}: private name #{h} ({how})")
-            no_svg = SVG_TAG.sub(lambda m: SVG_GEOMETRY.sub('d=""', m.group(0)), t) if is_html else t
+            no_svg = SVG_TAG.sub(lambda m: re.sub(r"(?i)(?<![\w-])" + SVG_TAGS[m.group(1).lower()] + r"\s*=\s*"
+                                                  + SVG_NUMBERS, 'x=""', m.group(0)), t) if is_html else t
             for kind, rx in PATTERNS.items():
                 for m in rx.finditer(no_svg if kind == "ipv4" else t):
                     if (kind, m.group(0)) not in seen:
@@ -410,13 +433,13 @@ class Gate:
             typ = typ[:-1]
         kind, _, arg = typ.partition(":")
         if kind == "number":
-            return isinstance(v, (int, float)) and not isinstance(v, bool)
+            return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
         if kind == "bool":
             return isinstance(v, bool)
         if kind == "null":
             return v is None
         if kind == "text":
-            return v == MASK or (g == GROUP_FIELD and v == MASK_PRIVATE) or (
+            return is_mask(v) or (g == GROUP_FIELD and is_group(v)) or (
                 isinstance(v, str) and v in self.allow.get(g, ()))
         if not isinstance(v, str):
             return False
@@ -435,7 +458,7 @@ class Gate:
             return not self.title_problems(v)
         return {
             "hash": lambda: bool(re.fullmatch(r"[0-9a-f]{7,40}", v)),
-            "semver": lambda: bool(re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", v)),
+            "semver": lambda: bool(re.fullmatch(r"\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?", v)),
             "enum": lambda: v in arg.split("|"),
             "const": lambda: v == arg,
             "code": lambda: bool(re.fullmatch(r"[A-Z]", v)) or v in self.codes,
@@ -508,7 +531,7 @@ class Gate:
                 for k in ("branch", "hash", "url", "machine"):
                     if a.get(k) is not None:
                         bad.append(f"{p}: private commit keeps {k}")
-                if a.get("repo") != MASK:
+                if not is_mask(a.get("repo")):
                     bad.append(f"{p}: private commit repo must be masked")
                 if self.private_titles == "prefix-only" and not (
                         isinstance(a.get("title"), str) and PREFIX_ONLY.fullmatch(a["title"])):
@@ -521,18 +544,18 @@ class Gate:
                 except (TypeError, ValueError):
                     bad.append(f"{p}: private commit t is not a time")
             else:
-                if a.get("repo") == MASK:
+                if is_mask(a.get("repo")):
                     bad.append(f"{p}: public commit with a masked repo")
                 if a.get("source") == "local" and a.get("branch") is not None:
                     bad.append(f"{p}: local commit keeps branch")
         today = page.get("today") if isinstance(page.get("today"), dict) else {}
         rows = today.get("byProject") if isinstance(today.get("byProject"), list) else []
         for i, r in enumerate(rows):
-            if isinstance(r, dict) and r.get("public") is not True and r.get("project") != MASK_PRIVATE:
+            if isinstance(r, dict) and r.get("public") is not True and not is_group(r.get("project")):
                 bad.append(f"{where}: today.byProject[{i}]: private usage must be the merged private row")
-            if isinstance(r, dict) and r.get("project") == MASK_PRIVATE and r.get("public") is not False:
+            if isinstance(r, dict) and is_group(r.get("project")) and r.get("public") is not False:
                 bad.append(f"{where}: today.byProject[{i}]: merged private row must have public false")
-        if sum(1 for r in rows if isinstance(r, dict) and r.get("project") == MASK_PRIVATE) > 1:
+        if sum(1 for r in rows if isinstance(r, dict) and is_group(r.get("project"))) > 1:
             bad.append(f"{where}: today.byProject: more than one merged private row")
         hidden = page.get("hidden") if isinstance(page.get("hidden"), list) else []
         for h in sorted(self.hidden - set(h for h in hidden if isinstance(h, str))):
@@ -720,6 +743,17 @@ def load_toml(path):
 
 
 def main(argv=None):
+    """Every failure is a masked one-line message and exit 2; no traceback (review L5)."""
+    try:
+        return _main(argv)
+    except SystemExit:
+        raise
+    except Exception as e:                                    # noqa: BLE001
+        print(f"gate error ({e.__class__.__name__}); nothing was approved", file=sys.stderr)
+        return 2
+
+
+def _main(argv=None):
     ap = argparse.ArgumentParser(prog="verify_public")
     ap.add_argument("files", nargs="+")
     ap.add_argument("--terms", default=str(ROOT / ".local" / "redact_terms.local.json"))

@@ -199,7 +199,7 @@
 2. **Text 字段**（类型 `text`）：要么是 `{"masked": true…}`，要么它的值在 `.local/public.local.toml` 里**这个字段**的允许名单中。允许名单按字段分开；公开仓库名由 GitHub 可见性自动加入 `repo` 和 `project` 两个字段的名单。
 3. **逐值类型校验**：闸门对每条路径上的每个值，按表里声明的类型校验，不符合就拒绝。类型取值：
    - 基本类型：`number`、`bool`、`null`；
-   - 时间与版本：`iso`（ISO 时间）、`date`（`YYYY-MM-DD`）、`hash`（`^[0-9a-f]{7,40}$`）、`semver`；
+   - 时间与版本：`iso`（ISO 时间）、`date`（`YYYY-MM-DD`）、`hash`（`^[0-9a-f]{7,40}$`）、`semver`（`\d+.\d+.\d+`，可带 `-alpha`、`-beta`、`-rc` 和序号，例如 `1.0.0-rc.1`；不接受构建元数据）；
    - 取值受限：`enum:a|b|…`（封闭枚举）、`const:…`（固定值）；`code`（机器或账号代号，`^[A-Z]$`，或 `.local` 里配置的代号）；`model`（价格表里出现过的模型名，或 `"other"`）；
    - 需要特殊处理：`url:public-repo`（必须指向公开仓库）、`title`（走规则 5）、`text`（规则 2）。
    - 类型后面加 `?` 表示也可以是 `null`。
