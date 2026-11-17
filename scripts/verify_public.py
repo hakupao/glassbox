@@ -249,6 +249,10 @@ def walk_items(node, path):
     return [x for n in nodes if isinstance(n, list) for x in n if isinstance(x, dict)]
 
 
+GENERIC_BRANCH_WORDS = {"main", "master", "dev", "develop", "development", "feature", "features", "feat", "fix",
+                        "fixes", "bugfix", "hotfix", "release", "releases", "wip", "trunk", "stage", "staging",
+                        "prod", "production", "test", "tests", "chore", "docs", "refactor", "update", "patch",
+                        "draft", "temp", "backup", "experiment"}
 SITES = [("activity", "repo"), ("today.byProject", "project"), ("code.commits", "repo"), ("code.repos", "repo"),
          ("usageDays[].byProject", "project")]
 TEXT_PATHS = [p for p, t in FIELDS.items() if t.rstrip("?") == "text" and p != "activity[].branch"]
@@ -277,7 +281,7 @@ def derive(private, private_projects):
             v = e.get(key) if isinstance(e, dict) else None
             if isinstance(v, str) and norm(v) not in {norm(p) for p in public}:
                 names.add(v)
-    branches, hashes = set(), set()
+    branches, hashes, frags = set(), set(), set()
     for path in ("activity", "code.commits"):
         for e in walk_items(private, path):
             if isinstance(e.get("repo"), str) and e["repo"] in public:
@@ -286,11 +290,14 @@ def derive(private, private_projects):
             else:
                 if isinstance(e.get("hash"), str):
                     hashes.add(e["hash"])
+                if isinstance(e.get("branch"), str):     # review M3: telling parts of private branches
+                    frags.update(f for f in re.split(r"[/\-_]+", e["branch"])
+                                 if len(f) >= 4 and f.casefold() not in GENERIC_BRANCH_WORDS)
                 if isinstance(e.get("url"), str):
                     host = re.sub(r"^\w+://([^/]+).*", r"\1", e["url"]).lower()
                     if host not in ("github.com", "www.github.com"):
                         hashes.add(host)
-    return public, names | hashes, branches
+    return public, names | hashes | frags, branches, hashes | frags
 
 
 class Gate:
@@ -307,7 +314,7 @@ class Gate:
         self.private_titles = config.get("privateTitles", "prefix-only")      # default: owner's decision 2026-11-17
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
-        public, derived, branches = derive(private or {}, self.private_projects)
+        public, derived, branches, whole_words = derive(private or {}, self.private_projects)
         self.public_repos = public
         for f in ("activity[].repo", GROUP_FIELD):
             self.allow.setdefault(f, set()).update(public)
@@ -330,9 +337,8 @@ class Gate:
         words = [t for t in terms.get("terms", []) if t and t.casefold() not in allow_words]
         self.names = sorted(set(words) | set(runtime) | set(self.keywords) | self.private_projects,
                             key=len, reverse=True)
-        for n in derived:                        # commit ids: whole words only, never inside digit runs
-            if re.fullmatch(r"[0-9a-f]{7,40}", n):
-                self.modes.setdefault(n.casefold(), "word")
+        for n in whole_words:                    # commit ids, branch parts: whole words only
+            self.modes.setdefault(n.casefold(), "word")
         self.matchers = self._compile(self.names)
         # A name both public and private is a contradiction the exporter must not have resolved
         # towards public (review H1): allowlists or visibility flags disagree.

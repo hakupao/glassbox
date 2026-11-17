@@ -147,6 +147,21 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(pub["activity"][0]["title"], "feat:")
         self.assertEqual(self.gate(pub), [])
 
+    def test_private_branch_parts_are_private(self):
+        """Review M3: telling parts of a private branch name may not appear elsewhere."""
+        self.page["activity"][3]["branch"] = "feat/kestrel-client"
+        self.page["activity"][0]["title"] = "merge kestrel-client work"
+        self.page["activity"][5]["title"] = "feat: new feature flag for main dev"
+        pub, ctx = self.run_export()
+        self.assertTrue({"kestrel", "client"} <= set(ctx["privateNames"]))
+        self.assertNotIn("feat", ctx["privateNames"])
+        self.assertNotIn("kestrel", json.dumps(pub))
+        self.assertEqual(pub["activity"][5]["title"], "feat: new feature flag for main dev")
+        self.assertEqual(self.gate(pub), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][5]["title"] = "feat: kestrel"
+        self.assertTrue(self.gate(forged))
+
     def test_gate_rejects_forged_public_name(self):
         pub, _ = self.run_export()
         pub["today"]["byProject"].insert(0, {"project": "falcon-ledger", "public": True, "requests": 1, "costUsd": 0.1})
@@ -163,7 +178,7 @@ class ExportTest(unittest.TestCase):
         pages.append(p)
         for page in pages:
             pub, ctx = self.run_export(page=page)
-            g_public, g_names, _ = vp.derive(page, self.cfg["privateProjects"])
+            g_public, g_names, _, _ = vp.derive(page, self.cfg["privateProjects"])
             self.assertLessEqual(set(ctx["publicRepos"]), g_public)
             self.assertLessEqual(g_public, set(ctx["publicRepos"]))
             norm_g = {vp.norm(n) for n in g_names}

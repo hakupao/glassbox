@@ -54,6 +54,10 @@ RED = "******"
 HIDEABLE = set(FIELDS["hidden[]"].partition(":")[2].split("|"))
 COMMIT_TYPES = {"feat", "fix", "docs", "style", "refactor", "perf", "test", "tests", "build", "ci",
                 "chore", "revert", "wip", "merge", "release", "deps", "init"}
+GENERIC_BRANCH = {"main", "master", "dev", "develop", "development", "feature", "features", "feat", "fix", "fixes",
+                  "bugfix", "hotfix", "release", "releases", "wip", "trunk", "stage", "staging", "prod",
+                  "production", "test", "tests", "chore", "docs", "refactor", "update", "patch", "draft", "temp",
+                  "backup", "experiment"}
 NAME_FIELDS_SKIP = {"activity[].branch"}     # branches are not names; private ones are nulled anyway
 
 # Title scrubbing, applied in this order. The gate has its own, independent set.
@@ -450,7 +454,7 @@ def export(page, cfg, terms):
     private_keys = {k for k, v in verdict.items() if not v}
     allow_all = {a for a in allow_all if norm(a) not in private_keys}
     # Codes (A, K, ...) are public by design; a label that equals its code reveals nothing.
-    hashes, hosts = set(), set()
+    hashes, hosts, frags = set(), set(), set()
     clash = {c for c in cfg["codes"] if c in names}
     if clash:
         raise ExportError(f"config codes: {len(clash)} code(s) equal a private name")
@@ -461,10 +465,14 @@ def export(page, cfg, terms):
                 hashes.add(e["hash"])
             if isinstance(e.get("url"), str):
                 hosts.add(url_host(e["url"]))
+            if isinstance(e.get("branch"), str):          # review M3: telling parts of private branches
+                frags.update(f for f in re.split(r"[-/_]+", e["branch"])
+                             if len(f) >= 4 and f.lower() not in GENERIC_BRANCH)
     hosts.discard("")
+    frags = {f for f in frags if norm(f) not in VOCAB and f not in allow_all and not is_code(f, cfg)}
     modes = dict(terms["match"])
-    modes.update({h.casefold(): "word" for h in hashes})       # hex ids: whole tokens, not substrings
-    matcher = Matcher(names | hashes | hosts | set(terms["terms"]) | set(cfg["keywords"]), modes)
+    modes.update({h.casefold(): "word" for h in hashes | frags})   # whole tokens, not substrings
+    matcher = Matcher(names | hashes | hosts | frags | set(terms["terms"]) | set(cfg["keywords"]), modes)
 
     url_rx = public_url_rx(public_repos, cfg["githubOwners"])
     branches = set()
@@ -528,7 +536,7 @@ def export(page, cfg, terms):
     _check(pub, "", cfg, url_rx, bad)
     if bad:
         raise ExportError("export would publish mistyped values:\n  " + "\n  ".join(bad))
-    ctx = {"privateNames": sorted(names | hashes | hosts), "publicRepos": sorted(public_repos),
+    ctx = {"privateNames": sorted(names | hashes | hosts | frags), "publicRepos": sorted(public_repos),
            "publicBranches": sorted(branches)}
     return pub, ctx
 
