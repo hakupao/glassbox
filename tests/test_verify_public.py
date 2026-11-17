@@ -120,20 +120,35 @@ class GateCliTest(unittest.TestCase):
             cfg.write_text('privateTitles = "full"\n', encoding="utf-8")
             self.assertEqual(run(p, "--terms", terms, "--config", cfg, "--private", ctx)[0], 2)
 
-    def test_assets_get_text_checks(self):
+    def test_publish_directory_is_single_file(self):
+        """Review M2c: index.html plus an optional one-line CNAME; any other entry is refused."""
+        page = (RT / "samples" / "pass-page.html").read_text(encoding="utf-8")
+        ctx = RT / "context" / "private.json"
         with tempfile.TemporaryDirectory() as d:
-            ok, bad, odd = Path(d) / "app.js", Path(d) / "style.css", Path(d) / "font.woff2"
-            ok.write_text("const a = 1; // render masked placeholders\n", encoding="utf-8")
-            bad.write_text('@import url("https://fonts.example.net/a.css");\n', encoding="utf-8")
-            odd.write_bytes(b"wOF2")
-            ctx = RT / "context" / "private.json"
-            self.assertEqual(run(ok, *self.common, "--private", ctx)[0], 0)
-            rc, out = run(bad, *self.common, "--private", ctx)
-            self.assertEqual(rc, 1)
-            self.assertIn("external URL", out)
-            rc, out = run(odd, *self.common, "--private", ctx)
-            self.assertEqual(rc, 1)
-            self.assertIn("unknown file type", out)
+            site = Path(d) / "site"
+            site.mkdir()
+            (site / "index.html").write_text(page, encoding="utf-8")
+            self.assertEqual(run(site, *self.common, "--private", ctx)[0], 0)
+            (site / "CNAME").write_text("dash.example.org\n", encoding="ascii")
+            self.assertEqual(run(site, *self.common, "--private", ctx)[0], 0)
+            for name, setup in {
+                "extra js": lambda: (site / "app.js").write_text("const a = 1;\n", encoding="utf-8"),
+                "dotfile": lambda: (site / ".nojekyll").write_text("", encoding="utf-8"),
+                "subdir": lambda: (site / "assets").mkdir(),
+                "bad CNAME": lambda: (site / "CNAME").write_text("a.example.org\nb.example.org\n", encoding="ascii"),
+            }.items():
+                with self.subTest(name):
+                    setup()
+                    rc, out = run(site, *self.common, "--private", ctx)
+                    self.assertEqual(rc, 1, out)
+                    for extra in ("app.js", ".nojekyll"):
+                        (site / extra).unlink(missing_ok=True)
+                    if (site / "assets").exists():
+                        (site / "assets").rmdir()
+                    (site / "CNAME").write_text("dash.example.org\n", encoding="ascii")
+            js = Path(d) / "app.js"
+            js.write_text("const a = 1;\n", encoding="utf-8")
+            self.assertEqual(run(js, *self.common, "--private", ctx)[0], 1)
 
     def test_unreadable_artifact_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:

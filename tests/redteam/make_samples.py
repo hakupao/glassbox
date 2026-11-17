@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; "
+       "font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'")
 S = OUT / "samples"
 BASE = {
  "schema": "glassbox.page/1", "view": "public", "generatedAt": "2026-11-17T10:30:00+09:00",
@@ -113,7 +115,7 @@ def page_js(o): return "window.GB = " + json.dumps(o, ensure_ascii=False) + ";"
 def ht(name, why, expect, reason, head="", body="", data=None):
     o = copy.deepcopy(BASE) if data is None else data
     gb = "" if data is False else f"<script>{page_js(o)}</script>"
-    doc = f"<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>glassbox</title>{head}<style>body{{background:#111}}</style></head>\n<body><main>\n{body}\n</main>{gb}</body></html>\n"
+    doc = f"<!doctype html>\n<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"{CSP}\"><meta charset=\"utf-8\"><title>glassbox</title>{head}<style>body{{background:#111}}</style></head>\n<body><main>\n{body}\n</main>{gb}</body></html>\n"
     (S / f"{name}.html").write_text(doc, encoding="utf-8")
     cases.append({"file": f"{name}.html", "expect": expect, "reason": reason, "why": why})
 
@@ -127,7 +129,26 @@ ht("block-html-css-import", "S12: CSS @import", "block", "external URL", head='<
 ht("block-html-protocol-relative", "S12: protocol-relative font url()", "block", "protocol-relative", head='<style>@font-face{font-family:x;src:url(//fonts.example.net/x.woff2)}</style>')
 ht("block-html-protocol-relative-img", "S12: protocol-relative image", "block", "protocol-relative", body='<img src="//img.example.net/a.png" alt="">')
 ht("block-html-image", "S12: external image", "block", "external URL", body='<img src="https://img.example.net/a.png" alt="">')
-ht("block-html-no-data", "HTML without embedded window.GB", "block", "no embedded window.GB", data=False)
+ht("block-html-no-data", "HTML without embedded window.GB", "block", "needs exactly one <script>", data=False)
+ht("block-html-script-src", "M2c: no external or local script files", "block", "<script src>", body='<script src="app.js"></script>')
+ht("block-html-link", "M2c: no <link> at all", "block", "<link>", head='<link rel="icon" href="data:,">')
+ht("block-html-second-data", "M2d: a second data script", "block", "exactly one <script>", body="<script>window.GB = {};</script>")
+ht("block-html-gb-write", "M2d: another script writes GB", "block", "writes GB", body="<script>GB.tailnet = [];</script>")
+ht("block-html-gb-bracket", "M2d: window['GB'] in another script", "block", "writes GB", body="<script>window['GB'].x = 1;</script>")
+ht("block-html-meta-refresh", "M2b: a second http-equiv", "block", "http-equiv", head='<meta http-equiv="refresh" content="0">')
+ht("block-html-attr-url", "M2: URL attribute that is not #, empty or data:", "block", "must be empty", body='<a href="page2.html">x</a>')
+ht("block-html-css-url", "M2: CSS url() to a file", "block", "url()", head="<style>b{background:url(x.png)}</style>")
+(S / "block-html-no-csp.html").write_text("<!doctype html><html><head><meta charset=\"utf-8\"></head><body><script>window.GB = "
+    + json.dumps(BASE) + ";</script></body></html>\n", encoding="utf-8")
+cases.append({"file": "block-html-no-csp.html", "expect": "block", "reason": "exact CSP", "why": "M2b: no CSP meta"})
+(S / "block-html-csp-late.html").write_text("<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\""
+    + CSP + "\"></head><body><script>window.GB = " + json.dumps(BASE) + ";</script></body></html>\n", encoding="utf-8")
+cases.append({"file": "block-html-csp-late.html", "expect": "block", "reason": "exact CSP", "why": "M2b: CSP not first in head"})
+(S / "block-html-csp-weak.html").write_text("<!doctype html><html><head><meta http-equiv=\"Content-Security-Policy\" content=\"default-src *\"></head><body><script>window.GB = "
+    + json.dumps(BASE) + ";</script></body></html>\n", encoding="utf-8")
+cases.append({"file": "block-html-csp-weak.html", "expect": "block", "reason": "exact CSP", "why": "M2b: a weaker CSP"})
+(S / "block-json-duplicate-key.json").write_text(json.dumps(BASE)[:-1] + ', "view": "public"}\n', encoding="utf-8")
+cases.append({"file": "block-json-duplicate-key.json", "expect": "block", "reason": "duplicate key", "why": "M2a: repeated key"})
 ht("block-html-comment-name", "rule 6: private name in an HTML comment, other spelling", "block", "private name", body="<!-- todo: Falcon.Ledger link -->")
 ht("block-html-js-comment-name", "rule 6: private name in a JS comment", "block", "private name", body="<script>// from orchid_batch\nvar a=1;</script>")
 ht("block-html-u-escape", "rule 6: \\u-escaped private name in JS", "block", "private name", body='<script>var s="\\u006frchid-b\\u0061tch";</script>')

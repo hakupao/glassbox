@@ -19,8 +19,12 @@ Checks every file given (the public page JSON and the final HTML):
   `"match": {term: "substring"|"word"}` in the terms file overrides. Text is also checked after
   undoing HTML entities, \\uXXXX escapes and %-encoding.
 - patterns: e-mails, IPv4/IPv6, absolute paths, secrets.
-- other published files (.js .css .svg .txt .webmanifest) get the text checks only; any other
-  file type is rejected, so nothing is published unchecked.
+- single file (review M2): the publish directory holds index.html and optionally CNAME (one
+  domain), nothing else. index.html starts with <!doctype html><html><head> and the exact CSP
+  <meta> (see CSP below), has no <script src>, <link>, <base>, frames or forms, no URL attribute
+  other than empty, #fragment, data: or a public commit link, no CSS url() / @import except data:,
+  exactly one <script> holding only `window.GB = {...};`, and no other script writing GB.
+  JSON is parsed with duplicate keys refused.
 - resources: no external fonts / CDN / any absolute or protocol-relative URL, except commit URLs
   of public repos and XML namespace URIs.
 
@@ -39,6 +43,7 @@ import sys
 import tomllib
 import unicodedata
 import urllib.parse
+from html.parser import HTMLParser
 from datetime import datetime
 from pathlib import Path
 
@@ -75,8 +80,65 @@ SVG_TAG = re.compile(r"(?i)<(?:svg|path|polyline|polygon|g|use|rect|circle|ellip
 SVG_GEOMETRY = re.compile(r"(?i)(?<![\w-])(?:d|points|viewBox|transform)\s*=\s*\"[-0-9\s.,+eEMmLlHhVvCcSsQqTtAaZz()]*\"")
 PREFIX_ONLY = re.compile(r"\*{6}|(?:feat|fix|docs|style|refactor|perf|tests?|build|ci|chore|revert|wip|merge"
                          r"|release|deps|init):")
-GB_MARK = re.compile(r"window\.GB\s*=\s*")
-TEXT_ONLY = {".js", ".mjs", ".css", ".svg", ".txt", ".webmanifest"}
+# Review M2: the public snapshot is ONE self-contained HTML file whose head starts with this CSP.
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; "
+       "font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'")
+HEAD_RX = re.compile(r"\A\ufeff?\s*<!doctype html>\s*<html(?:\s+lang=\"[A-Za-z-]+\")?\s*>\s*<head>\s*"
+                     r"<meta http-equiv=\"Content-Security-Policy\" content=\"" + re.escape(CSP) + r"\"\s*/?>", re.I)
+GB_SCRIPT = re.compile(r"\s*window\.GB\s*=\s*(.*?)\s*;?\s*", re.S)
+GB_WRITE = re.compile(r"\bGB\w*\b(?:\s*(?:\.\s*[\w$]+|\[[^\]]*\]))*\s*(?:[-+*/%&|^]?=(?!=)|\+\+|--)|\bGB\w*\s*\["
+                      r"|[\"'`]GB\w*[\"'`]")
+PROTO_REL = re.compile(r"[\"'`(=]\s*[/\\]\s*[/\\]\s*[\w-]+(?:\.[\w-]+)+"             # '//host', '/\t/host', '\\host'
+                       r"|\b[A-Za-z][\w+.-]*:\s*(?:\\|/\s+/|/\\)\s*[/\\]?\s*[\w-]+(?:\.[\w-]+)+")  # 'https:\\host'
+
+DENY_TAGS = {"link", "base", "iframe", "frame", "frameset", "object", "embed", "applet", "portal", "form"}
+URL_ATTRS = {"src", "srcset", "href", "action", "formaction", "poster", "background", "data", "ping", "xlink:href",
+             "codebase", "cite", "longdesc", "manifest", "icon", "lowsrc", "dynsrc", "archive", "classid", "usemap"}
+CSS_URL = re.compile(r"(?i)url\(\s*([\"']?)\s*(?!data:)[^)]*\)|@import")
+CNAME_RX = re.compile(r"(?=.{1,253}\Z)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}")
+
+
+class DuplicateKey(ValueError):
+    pass
+
+
+def strict_object(pairs):
+    """object_pairs_hook: a repeated key could smuggle a second value past the checks (review M2a)."""
+    out = {}
+    for k, v in pairs:
+        if k in out:
+            raise DuplicateKey("duplicate key")
+        out[k] = v
+    return out
+
+
+def strict_json(text):
+    return json.loads(text, object_pairs_hook=strict_object)
+
+
+class _Parse(HTMLParser):
+    """Collects tags, attributes and script / style bodies the way a browser tokenises them."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tags, self.scripts, self.styles, self._in = [], [], [], None
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, attrs))
+        if tag in ("script", "style"):
+            self._in = (tag, attrs, [])
+
+    def handle_startendtag(self, tag, attrs):
+        self.tags.append((tag, attrs))
+
+    def handle_data(self, data):
+        if self._in:
+            self._in[2].append(data)
+
+    def handle_endtag(self, tag):
+        if self._in and tag == self._in[0]:
+            (self.scripts if tag == "script" else self.styles).append((self._in[1], "".join(self._in[2])))
+            self._in = None
 
 
 class SetupError(Exception):
@@ -326,10 +388,11 @@ class Gate:
                 if not (XMLNS.fullmatch(u) or (self.repo_url and self.repo_url.fullmatch(u))) and ("url", u) not in seen:
                     seen.add(("url", u))
                     bad.append(f"{where}: external URL {hide(u)} ({how})")
-            for m in REL_URL.finditer(t):
-                if ("rel", m.start()) not in seen:
-                    seen.add(("rel", m.start()))
-                    bad.append(f"{where}: protocol-relative external resource ({how})")
+            for rx in (REL_URL, PROTO_REL):
+                for m in rx.finditer(t):
+                    if ("rel", m.group(0)) not in seen:
+                        seen.add(("rel", m.group(0)))
+                        bad.append(f"{where}: protocol-relative external resource ({how})")
         return bad
 
     # --- structure ----------------------------------------------------------------------------
@@ -476,34 +539,102 @@ class Gate:
 
     # --- files --------------------------------------------------------------------------------
 
+    def check_dir(self, d):
+        """The publish directory: index.html and optionally CNAME, nothing else (review M2c)."""
+        d = Path(d)
+        bad, entries = [], sorted(d.rglob("*"))
+        for e in entries:
+            rel = e.relative_to(d).as_posix()
+            if e.is_symlink() or e.is_dir() or rel not in ("index.html", "CNAME"):
+                bad.append(f"{d.name}/: unexpected entry #{entries.index(e) + 1} "
+                           f"({'directory' if e.is_dir() else 'symlink' if e.is_symlink() else 'file'}); "
+                           "only index.html and CNAME may be published")
+        if not (d / "index.html").is_file():
+            bad.append(f"{d.name}/: no index.html")
+        cname = d / "CNAME"
+        if cname.is_file() and not cname.is_symlink():
+            try:
+                lines = cname.read_text(encoding="ascii").strip().splitlines()
+            except (OSError, UnicodeDecodeError):
+                lines = []
+            if len(lines) != 1 or not CNAME_RX.fullmatch(lines[0].strip()):
+                bad.append(f"{d.name}/CNAME: must be exactly one domain name")
+        index = d / "index.html"
+        if index.is_file() and not index.is_symlink():
+            bad += self.check_file(index)
+        return bad
+
+    def check_html_structure(self, text, where):
+        """CSP head, one inline data script, no external or extra writers of GB (review M2b-d)."""
+        bad = []
+        if not HEAD_RX.match(text):
+            bad.append(f"{where}: must start with <!doctype html><html><head> and the exact CSP <meta> first")
+        if len(re.findall(r"(?i)http-equiv", text)) != 1:
+            bad.append(f"{where}: exactly one http-equiv <meta> (the CSP) is allowed")
+        p = _Parse()
+        try:
+            p.feed(text)
+            p.close()
+        except Exception:                             # noqa: BLE001 — any parser failure rejects
+            return bad + [f"{where}: HTML could not be parsed"], None
+        for tag, attrs in p.tags:
+            if tag in DENY_TAGS:
+                bad.append(f"{where}: <{tag}> is not allowed in the snapshot")
+            for k, v in attrs:
+                k, v = (k or "").lower(), (v or "").strip()
+                if k in URL_ATTRS and v and not v.startswith("#") and not (
+                        k in ("src", "srcset", "poster") and v.lower().startswith("data:") and "," in v) and not (
+                        tag == "a" and k == "href" and self.repo_url and self.repo_url.fullmatch(v)):
+                    bad.append(f"{where}: <{tag} {k}=...> must be empty, #fragment or data:")
+                if k == "style" and CSS_URL.search(v):
+                    bad.append(f"{where}: <{tag} style> loads a resource")
+                if k.startswith("on") and PROTO_REL.search(v):
+                    bad.append(f"{where}: <{tag} {k}> refers to an external host")
+        for attrs, body in p.styles:
+            if CSS_URL.search(body):
+                bad.append(f"{where}: <style> uses url() or @import that is not data:")
+        data, page = [], None
+        for attrs, body in p.scripts:
+            if any((k or "").lower() == "src" for k, _ in attrs):
+                bad.append(f"{where}: <script src> is not allowed; inline everything")
+            m = GB_SCRIPT.fullmatch(body)
+            if m and m.group(1).startswith("{"):
+                data.append(m.group(1))
+            elif GB_WRITE.search(body):
+                bad.append(f"{where}: a script other than the data script writes GB")
+        if len(data) != 1:
+            bad.append(f"{where}: needs exactly one <script> holding only window.GB = {{...}}; (found {len(data)})")
+        else:
+            try:
+                page = strict_json(data[0])
+            except ValueError as e:
+                bad.append(f"{where}: window.GB is not valid JSON ({'duplicate key' if isinstance(e, DuplicateKey) else 'syntax'})")
+        return bad, page
+
     def check_file(self, path):
         p = Path(path)
+        if p.is_dir():
+            return self.check_dir(p)
         try:
             text = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
             return [f"{p.name}: unreadable ({e.__class__.__name__})"]
         suffix = p.suffix.lower()
         is_html = suffix in (".html", ".htm")
-        bad = self.check_text(text, p.name, is_html or suffix == ".svg")
-        if suffix in TEXT_ONLY:                 # assets published next to the page: text checks only
-            return bad
         if suffix not in (".json", ".html", ".htm"):
-            return bad + [f"{p.name}: unknown file type {suffix or '(none)'}; the gate checks .html .json {' '.join(sorted(TEXT_ONLY))}"]
+            return [f"{p.name}: only the publish directory, index.html or the page JSON can be checked; "
+                    "a snapshot has no other files"]
+        bad = self.check_text(text, p.name, is_html)
         if is_html:
-            m = GB_MARK.search(text)
-            if not m:
-                return bad + [f"{p.name}: no embedded window.GB data"]
-            try:
-                page, _ = json.JSONDecoder().raw_decode(text, m.end())
-            except ValueError:
-                return bad + [f"{p.name}: window.GB is not valid JSON"]
-            if len(GB_MARK.findall(text)) > 1:
-                bad.append(f"{p.name}: more than one window.GB assignment")
+            more, page = self.check_html_structure(text, p.name)
+            bad += more
+            if page is None:
+                return bad
         else:
             try:
-                page = json.loads(text)
-            except ValueError:
-                return bad + [f"{p.name}: not valid JSON"]
+                page = strict_json(text)
+            except ValueError as e:
+                return bad + [f"{p.name}: not valid JSON ({'duplicate key' if isinstance(e, DuplicateKey) else 'syntax'})"]
         bad += self.check_page(page, p.name)
         values = []
         _strings(page, values)
@@ -527,7 +658,7 @@ def _strings(node, out):
 
 def load_json(path, what):
     try:
-        return json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+        return strict_json(Path(path).expanduser().read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         raise SetupError(f"{what} {Path(path).name}: {e.__class__.__name__}") from None
 

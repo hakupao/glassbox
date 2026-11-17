@@ -410,8 +410,80 @@
  {
   "file": "block-html-no-data.html",
   "expect": "block",
-  "reason": "no embedded window.GB",
+  "reason": "needs exactly one <script>",
   "why": "HTML without embedded window.GB"
+ },
+ {
+  "file": "block-html-script-src.html",
+  "expect": "block",
+  "reason": "<script src>",
+  "why": "M2c: no external or local script files"
+ },
+ {
+  "file": "block-html-link.html",
+  "expect": "block",
+  "reason": "<link>",
+  "why": "M2c: no <link> at all"
+ },
+ {
+  "file": "block-html-second-data.html",
+  "expect": "block",
+  "reason": "exactly one <script>",
+  "why": "M2d: a second data script"
+ },
+ {
+  "file": "block-html-gb-write.html",
+  "expect": "block",
+  "reason": "writes GB",
+  "why": "M2d: another script writes GB"
+ },
+ {
+  "file": "block-html-gb-bracket.html",
+  "expect": "block",
+  "reason": "writes GB",
+  "why": "M2d: window['GB'] in another script"
+ },
+ {
+  "file": "block-html-meta-refresh.html",
+  "expect": "block",
+  "reason": "http-equiv",
+  "why": "M2b: a second http-equiv"
+ },
+ {
+  "file": "block-html-attr-url.html",
+  "expect": "block",
+  "reason": "must be empty",
+  "why": "M2: URL attribute that is not #, empty or data:"
+ },
+ {
+  "file": "block-html-css-url.html",
+  "expect": "block",
+  "reason": "url()",
+  "why": "M2: CSS url() to a file"
+ },
+ {
+  "file": "block-html-no-csp.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "M2b: no CSP meta"
+ },
+ {
+  "file": "block-html-csp-late.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "M2b: CSP not first in head"
+ },
+ {
+  "file": "block-html-csp-weak.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "M2b: a weaker CSP"
+ },
+ {
+  "file": "block-json-duplicate-key.json",
+  "expect": "block",
+  "reason": "duplicate key",
+  "why": "M2a: repeated key"
  },
  {
   "file": "block-html-comment-name.html",

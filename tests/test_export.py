@@ -52,7 +52,8 @@ class ExportTest(unittest.TestCase):
                     vp.load_toml(Path(self.tmp.name) / "public.toml"))
         name = "page.html" if html else "page.json"
         body = json.dumps(pub, ensure_ascii=False)
-        text = f"<!doctype html><html><body><script>window.GB = {body};</script></body></html>" if html else body
+        text = (f'<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="{vp.CSP}"></head>'
+                f"<body><script>window.GB = {body};</script></body></html>") if html else body
         p = Path(self.tmp.name) / name
         p.write_text(text, encoding="utf-8")
         return g.check_file(p)
