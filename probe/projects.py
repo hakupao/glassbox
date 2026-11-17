@@ -27,8 +27,8 @@ def _git(args, cwd):
 
 
 def normalize_remote(url, aliases=None):
-    """Return host/owner/repo: no scheme, credentials, port or .git; lower-case host;
-    ssh host aliases mapped back to the real host."""
+    """Return host/owner/repo, all lower case (GitHub and Gitea paths are case-insensitive):
+    no scheme, credentials, port or .git; ssh host aliases mapped back to the real host."""
     if not url:
         return None
     u = url.strip()
@@ -40,7 +40,7 @@ def normalize_remote(url, aliases=None):
     host, path = m.group(1).lower(), m.group(2)
     host = (aliases or {}).get(host, host).lower()
     path = re.sub(r"\.git/?$", "", path.strip("/"))
-    return f"{host}/{path}" if path else None
+    return f"{host}/{path}".lower() if path else None
 
 
 def _existing(cwd):

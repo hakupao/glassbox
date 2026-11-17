@@ -63,8 +63,10 @@ def main(argv=None):
         print(token)
         print(f"machine {args.id}: token shown once; store it in that machine's probe config", file=sys.stderr)
     elif args.cmd == "machine" and args.action == "rebaseline":
-        conn.execute("UPDATE machines SET rebaseline_until=? WHERE id=?", (time.time() + 3600, args.id))
+        cur = conn.execute("UPDATE machines SET rebaseline_until=? WHERE id=?", (time.time() + 3600, args.id))
         conn.commit()
+        if not cur.rowcount:
+            sys.exit(f"no machine {args.id}")
         print(f"machine {args.id}: next report may rebaseline (valid 1 hour)")
     elif args.cmd == "collect":
         from . import sources

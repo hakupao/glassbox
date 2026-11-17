@@ -1,15 +1,38 @@
 """HTTP server. Binds to 127.0.0.1 by default; on the deploy machine `tailscale serve`
 in the sidecar container is the only way in (PLAN §2)."""
-import gzip
 import hashlib
 import hmac
 import json
+import sys
 import threading
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import ingest
 
-MAX_BODY = 32 * 1024 * 1024
+MAX_BODY = 8 * 1024 * 1024          # compressed request body
+MAX_JSON = 64 * 1024 * 1024          # after gzip; a normal report is well under 1 MB
+
+
+class TooLarge(Exception):
+    pass
+
+
+def gunzip_bounded(raw, limit=MAX_JSON):
+    """Decompress gzip without trusting the ratio (gzip bombs)."""
+    d = zlib.decompressobj(wbits=31)
+    out, chunk = [], raw
+    size = 0
+    while chunk:
+        part = d.decompress(chunk, limit + 1 - size)
+        size += len(part)
+        out.append(part)
+        if size > limit:
+            raise TooLarge()
+        chunk = d.unconsumed_tail
+    if not d.eof:
+        raise ValueError("truncated gzip")
+    return b"".join(out)
 
 
 def token_sha(token):
@@ -35,6 +58,7 @@ def make_handler(hub):
     class Handler(BaseHTTPRequestHandler):
         server_version = "glassbox"
         sys_version = ""
+        timeout = 30                              # slow or stalled clients
 
         def _send(self, code, obj):
             body = json.dumps(obj).encode("utf-8")
@@ -59,21 +83,31 @@ def make_handler(hub):
                 machine = hub.machine_for(self.headers.get("Authorization"))
             if not machine:
                 return self._send(401, {"error": "bad token"})
-            n = int(self.headers.get("Content-Length") or 0)
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._send(400, {"error": "bad Content-Length"})
             if n <= 0 or n > MAX_BODY:
                 return self._send(413, {"error": "body size"})
             raw = self.rfile.read(n)
             try:
                 if self.headers.get("Content-Encoding") == "gzip":
-                    raw = gzip.decompress(raw)
+                    raw = gunzip_bounded(raw)
+                elif len(raw) > MAX_JSON:
+                    raise TooLarge()
                 rep = json.loads(raw)
-            except (OSError, ValueError):
+            except TooLarge:
+                return self._send(413, {"error": "report too large"})
+            except (zlib.error, ValueError):
                 return self._send(400, {"error": "not JSON"})
             try:
                 with hub.lock:
                     summary = ingest.apply(hub.conn, machine, rep)
             except ingest.Rejected as e:
                 return self._send(400, {"error": str(e)})
+            except Exception as e:            # never echo data; one line, no traceback with values
+                print(f"ingest error from {machine}: {type(e).__name__}", file=sys.stderr, flush=True)
+                return self._send(500, {"error": "internal error"})
             return self._send(200, {"ok": True, **summary})
 
     return Handler

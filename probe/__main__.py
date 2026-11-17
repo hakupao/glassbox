@@ -80,6 +80,7 @@ def cmd_report(conn, cfg, args):
 def cmd_push(conn, cfg, args):
     """Scan, build the report and POST it to the hub (CONTRACT §1)."""
     import gzip
+    import http.client
     import urllib.error
     import urllib.request
     cmd_scan(conn, cfg, args)
@@ -97,6 +98,9 @@ def cmd_push(conn, cfg, args):
         sys.exit(1)
     except urllib.error.URLError as e:
         print(f"hub unreachable: {e.reason}", file=sys.stderr)
+        sys.exit(1)
+    except (OSError, http.client.HTTPException) as e:
+        print(f"hub connection failed: {type(e).__name__}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -90,6 +90,65 @@ class IngestTest(unittest.TestCase):
         self.assertEqual([r[0] for r in self.conn.execute("SELECT hash FROM commits")], ["c" * 40])
 
 
+class HardeningTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "hub.sqlite")
+        self.conn.execute("INSERT INTO machines(id) VALUES('A')")
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def bad(self, mutate):
+        rep = report([("2026-11-17T01:00:00Z", 3)])
+        mutate(rep)
+        with self.assertRaises(ingest.Rejected):
+            ingest.apply(self.conn, "A", rep, NOW)
+
+    def test_hostile_values_are_rejected_not_crashing(self):
+        row = lambda rep: rep["usage"]["rows"][0]
+        self.bad(lambda r: row(r).__setitem__("requests", 10 ** 30))
+        self.bad(lambda r: row(r).__setitem__("requests", -1))
+        self.bad(lambda r: row(r).__setitem__("requests", True))
+        self.bad(lambda r: row(r).__setitem__("hourStart", 12))
+        self.bad(lambda r: row(r).__setitem__("costUsd", float("nan")))
+        self.bad(lambda r: row(r).__setitem__("model", {"x": 1}))
+        self.bad(lambda r: r["usage"]["range"].__setitem__("from", "2026-11-13T00:30:00Z"))
+        self.bad(lambda r: r["usage"]["range"].__setitem__("from", "2026-11-13T00:00:00"))   # no timezone
+        self.bad(lambda r: r["usage"]["range"].__setitem__("to", "2099-01-01T00:00:00Z"))
+        self.bad(lambda r: r["projects"].__setitem__("p_x", "string"))
+        with self.assertRaises(ingest.Rejected):
+            ingest.apply(self.conn, "A", [1], NOW)
+
+    def test_duplicate_keys_are_summed(self):
+        rep = report([("2026-11-17T01:00:00Z", 3), ("2026-11-17T01:00:00Z", 4)])
+        ingest.apply(self.conn, "A", rep, NOW)
+        self.assertEqual(self.conn.execute("SELECT requests FROM usage").fetchone()[0], 7)
+
+    def test_project_key_must_match_remote_and_owner(self):
+        self.bad(lambda r: r["projects"].__setitem__("p_x", {"name": "x", "remote": "github.com/a/public"}))
+        ok = report([])
+        key = ingest.project_key("github.com/a/b")
+        ok["projects"] = {key: {"name": "b", "remote": "github.com/a/b"}}
+        ingest.apply(self.conn, "A", ok, NOW)
+        self.conn.execute("INSERT INTO machines(id) VALUES('B')")
+        other = report([])
+        other["machine"] = "B"
+        with self.assertRaises(ingest.Rejected):                 # p_x (remote-less) belongs to A
+            ingest.apply(self.conn, "A", report([]), NOW)
+            ingest.apply(self.conn, "B", other, NOW)
+
+    def test_gzip_bomb_is_refused(self):
+        import zlib
+        bomb = gzip.compress(b"0" * (server.MAX_JSON + 10))
+        with self.assertRaises(server.TooLarge):
+            server.gunzip_bounded(bomb)
+        self.assertEqual(server.gunzip_bounded(gzip.compress(b'{"a":1}')), b'{"a":1}')
+        with self.assertRaises((ValueError, zlib.error)):
+            server.gunzip_bounded(gzip.compress(b"x" * 100)[:20])
+
+
 class HttpTest(unittest.TestCase):
     def test_token_required_and_gzip_accepted(self):
         with tempfile.TemporaryDirectory() as d:

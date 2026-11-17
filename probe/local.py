@@ -68,7 +68,7 @@ def git_activity(conn, cfg):
             h, t, _, src, title = parts
             branch = re.sub(r"^refs/(heads|remotes/[^/]+|tags)/", "", src) if src else None
             commits.append({"t": _zulu_from_iso(t), "hash": h, "branch": branch or None,
-                            "title": scrub(title), "pushed": h not in unpushed})
+                            "title": scrub(title)[:300], "pushed": h not in unpushed})
         if not commits:
             continue
         key, name, remote = projects.resolve(conn, str(repo), cfg["machine"], cfg.get("ssh_aliases"))

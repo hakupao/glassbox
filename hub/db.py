@@ -18,8 +18,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   machine TEXT, hour TEXT, agent TEXT, project TEXT, count INTEGER,
   PRIMARY KEY (machine, hour, agent, project)
 );
+-- visibility NULL means "not checked yet" and is treated as private everywhere.
+-- owner: the machine a remote-less project belongs to.
 CREATE TABLE IF NOT EXISTS projects (
-  key TEXT PRIMARY KEY, name TEXT, remote TEXT, visibility TEXT, checked REAL
+  key TEXT PRIMARY KEY, name TEXT, remote TEXT, visibility TEXT, checked REAL, owner TEXT
 );
 CREATE TABLE IF NOT EXISTS quota (
   account TEXT, agent TEXT, window TEXT, sampled_at TEXT, used_pct REAL, resets_at TEXT, machine TEXT,
@@ -33,12 +35,12 @@ CREATE TABLE IF NOT EXISTS jobs (
   machine TEXT, name TEXT, last_run TEXT, last_success TEXT, ok INTEGER, reported REAL,
   PRIMARY KEY (machine, name)
 );
--- Commits from every source. One row per (source, hash); the page dedups by hash with
--- priority github > gitea > local (CONTRACT §2.1).
+-- Commits from every source. One row per (source, hash, machine); machine is '' for github
+-- and gitea. The page dedups by hash with priority github > gitea > local (CONTRACT §2.1).
 CREATE TABLE IF NOT EXISTS commits (
-  source TEXT, hash TEXT, t TEXT, repo TEXT, remote TEXT, project TEXT, branch TEXT, title TEXT,
-  url TEXT, machine TEXT, pushed INTEGER, private INTEGER,
-  PRIMARY KEY (source, hash)
+  source TEXT, hash TEXT, machine TEXT, t TEXT, repo TEXT, remote TEXT, project TEXT, branch TEXT,
+  title TEXT, url TEXT, pushed INTEGER, private INTEGER,
+  PRIMARY KEY (source, hash, machine)
 );
 CREATE INDEX IF NOT EXISTS commits_t ON commits(t);
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);

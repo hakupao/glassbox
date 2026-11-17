@@ -32,8 +32,8 @@ class FakeGitea(BaseHTTPRequestHandler):
             return
         u = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(u.query)
-        if u.path == "/api/v1/repos/search":
-            body = {"ok": True, "data": REPOS if q.get("page") == ["1"] else []}
+        if u.path == "/api/v1/user/repos":
+            body = REPOS if q.get("page") == ["1"] else []
         elif u.path == "/api/v1/repos/team/app/commits":
             body = COMMITS if q.get("page") == ["1"] else []
         else:
@@ -59,7 +59,7 @@ class GiteaTest(unittest.TestCase):
                 "name": "test", "url": f"http://127.0.0.1:{httpd.server_address[1]}", "user": "me",
                 "token_env": "FAKE_GITEA_TOKEN"}]}
             out = sources.gitea(conn, cfg)
-            self.assertEqual(out["test"], {"repos": 1, "commits": 2})
+            self.assertEqual(out["test"], {"repos": 1, "commits": 2, "failed": 0})
             rows = conn.execute("SELECT hash, t, title, private, remote FROM commits ORDER BY t").fetchall()
             self.assertEqual([r[2] for r in rows], ["feat: mine", "chore: by e-mail"])
             self.assertEqual(rows[0][1], "2026-11-16T00:00:00Z")          # normalized to UTC
@@ -68,6 +68,15 @@ class GiteaTest(unittest.TestCase):
             conn.close()
         httpd.shutdown()
         httpd.server_close()
+
+    def test_visibility_flip_relabels_stored_commits(self):
+        with tempfile.TemporaryDirectory() as d:
+            conn = db.connect(Path(d) / "hub.sqlite")
+            conn.execute(sources.INSERT, ("github", "d" * 40, "2026-11-16T00:00:00Z", "r", "github.com/o/r",
+                                          "main", "t", "u", 0))
+            sources.set_visibility(conn, "github.com/o/r", "private")
+            self.assertEqual(conn.execute("SELECT private FROM commits").fetchone()[0], 1)
+            conn.close()
 
     def test_next_link(self):
         h = {"Link": '<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=9>; rel="last"'}
