@@ -21,8 +21,8 @@ Rules for every runbook:
 | # | Follow-up (from `_progress.json`, S13) | Handled in |
 |---|---|---|
 | 1 | Install the pre-commit privacy hook on every clone (`.git/hooks` is not versioned) | install-probe.md step 1 (also do it on every other clone, including the deploy machine's) |
-| 2 | Gitea read-only tokens for both instances; GitHub fine-grained read-only token | deploy/README.md section 1 (what to create); deploy-hub.md step 2 (who hands them over) |
-| 3 | Verify Gitea `/user/repos` includes organisation repositories on both instances, else add `/orgs/{org}/repos` | deploy-hub.md step 5 (check procedure; code change needed only if the check fails) |
+| 2 | Gitea read-only token (single instance); GitHub fine-grained read-only token | deploy/README.md section 1 (what to create); deploy-hub.md step 2 (who hands them over) |
+| 3 | Verify Gitea `/user/repos` includes organisation repositories on the instance, else add `/orgs/{org}/repos` | deploy-hub.md step 5 (check procedure; code change needed only if the check fails) |
 | 4 | Start the deploy hub from a fresh database | deploy/README.md section 2; deploy-hub.md step 3 |
 | 5 | Beszel agents on A, B, D | install-beszel-agent.md |
 | 6 | Tailscale on A (the probe pushes over the tailnet) | install-tailscale.md |

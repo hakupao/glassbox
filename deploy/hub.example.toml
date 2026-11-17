@@ -40,11 +40,8 @@ url = "<GITEA_URL>"
 user = "<GITEA_USER>"
 token_env = "GITEA_MAIN_TOKEN"
 
-[[gitea]]
-name = "second"
-url = "<GITEA2_URL>"
-user = "<GITEA2_USER>"
-token_env = "GITEA_SECOND_TOKEN"
+# Only one Gitea instance. For a second one add another [[gitea]] block with its own token_env,
+# its own file under secrets/, and the same file name in the workflow's preflight list.
 
 [beszel]
 url = "http://host.docker.internal:<BESZEL_PORT>"

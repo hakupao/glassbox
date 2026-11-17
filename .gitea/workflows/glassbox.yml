@@ -73,7 +73,7 @@ jobs:
           for d in /s /s/secrets; do
             { [ -d "$d" ] && [ -x "$d" ] && [ -r "$d" ]; } || miss="$miss $d/(目录不可遍历)"
           done
-          for f in hub.toml serve.json secrets/github_token secrets/gitea_main_token secrets/gitea_second_token secrets/beszel_password; do
+          for f in hub.toml serve.json secrets/github_token secrets/gitea_main_token secrets/beszel_password; do
             { [ -r "/s/$f" ] && [ -s "/s/$f" ]; } || miss="$miss $f"
           done
           if [ -n "$miss" ]; then

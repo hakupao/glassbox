@@ -45,7 +45,7 @@ docker exec glassbox glassbox-entrypoint collect all
 ```
 **Verify**: no `error` entries in the `monitors:` line; `github:` and `gitea:` print counts.
 
-Organisation repositories (S13 follow-up 3): for each Gitea instance, pick one organisation repository you contribute to and check that `GET /api/v1/user/repos?limit=50` lists it. The user runs this check (it needs the token): `printf 'Authorization: token %s\n' "$(sudo cat /opt/glassbox/secrets/gitea_main_token)" | curl -sS -H @- "<GITEA_URL>/api/v1/user/repos?limit=50"` (the token goes through stdin, not the command line). If it is missing on either instance, report to the lead: the collector in `hub/sources.py` needs a `/orgs/{org}/repos` listing added. Do not patch it on the VM.
+Organisation repositories (S13 follow-up 3): pick one organisation repository you contribute to and check that `GET /api/v1/user/repos?limit=50` lists it. The user runs this check (it needs the token): `printf 'Authorization: token %s\n' "$(sudo cat /opt/glassbox/secrets/gitea_main_token)" | curl -sS -H @- "<GITEA_URL>/api/v1/user/repos?limit=50"` (the token goes through stdin, not the command line). If it is missing on either instance, report to the lead: the collector in `hub/sources.py` needs a `/orgs/{org}/repos` listing added. Do not patch it on the VM.
 
 ## 8. Register machines and hand out tokens (the user)
 

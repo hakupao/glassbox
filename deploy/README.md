@@ -38,10 +38,10 @@ Layout of `/opt/glassbox` (bind-mounted read-only into the containers; compose n
 | `ts_authkey` | Tailscale auth key: one-off, pre-approved, tagged `tag:glassbox` | `root:root` `0600` | sidecar (root) |
 | `secrets/` | directory | `root:10001` `0750` | hub |
 | `secrets/github_token` | GitHub fine-grained read-only token (Contents/Metadata read, plus the profile contribution calendar) | `root:10001` `0640` | hub |
-| `secrets/gitea_main_token`, `secrets/gitea_second_token` | one read-only Gitea token per instance (`read:repository`, `read:user`) | `root:10001` `0640` | hub |
+| `secrets/gitea_main_token` | read-only Gitea token (`read:repository`, `read:user`) | `root:10001` `0640` | hub |
 | `secrets/beszel_password` | password of a read-only Beszel account (not an admin) | `root:10001` `0640` | hub |
 
-The hub runs as uid 10001 with all capabilities dropped and bind mounts keep the host owner and mode, so a `0600` file owned by your login user is **unreadable in the container**; the container then exits with `cannot read secret file: <name>` (it never runs degraded). `root:10001` with `0640` is the minimum that works. `ts_authkey` is kept outside `secrets/` on purpose: the entrypoint turns every file in `secrets/` into an environment variable of the hub, and the hub must not have the auth key. After the node has joined, `ts_authkey` may be an empty file (the bind mount needs the file to exist). With fewer Gitea instances, delete the unused `[[gitea]]` block in `hub.toml`, remove the file name from the preflight list in the workflow, and run `check-secrets` (section 5) to see what the hub loads.
+The hub runs as uid 10001 with all capabilities dropped and bind mounts keep the host owner and mode, so a `0600` file owned by your login user is **unreadable in the container**; the container then exits with `cannot read secret file: <name>` (it never runs degraded). `root:10001` with `0640` is the minimum that works. `ts_authkey` is kept outside `secrets/` on purpose: the entrypoint turns every file in `secrets/` into an environment variable of the hub, and the hub must not have the auth key. After the node has joined, `ts_authkey` may be an empty file (the bind mount needs the file to exist). There is a single Gitea instance. To add a second, add a `[[gitea]]` block to `hub.toml`, its token file under `secrets/`, and the file name to the workflow's preflight list.
 
 ```sh
 sudo install -d -o root -g 10001 -m 0750 /opt/glassbox /opt/glassbox/secrets
@@ -49,7 +49,7 @@ sudo install -o root -g 10001 -m 0640 deploy/hub.example.toml /opt/glassbox/hub.
 sudo install -o root -g root  -m 0644 deploy/serve.json /opt/glassbox/serve.json
 sudo install -o root -g root  -m 0600 /dev/null /opt/glassbox/ts_authkey
 sudo install -o root -g 10001 -m 0640 /dev/null /opt/glassbox/secrets/github_token
-# repeat the last line for gitea_main_token, gitea_second_token, beszel_password
+# repeat the last line for gitea_main_token and beszel_password
 ```
 
 Fill each secret file by typing the value with echo off, never as a command-line argument and never through an agent:
@@ -150,7 +150,7 @@ Each item has an expected result. Do not call the deploy done until all hold.
 8. **Secrets loaded** (names only, no values):
    ```sh
    docker exec glassbox glassbox-entrypoint check-secrets
-   # expect: one "NAME: set" line per file in secrets/ (GITHUB_TOKEN, GITEA_MAIN_TOKEN, GITEA_SECOND_TOKEN, BESZEL_PASSWORD)
+   # expect: one "NAME: set" line per file in secrets/ (GITHUB_TOKEN, GITEA_MAIN_TOKEN, BESZEL_PASSWORD)
    ```
 9. **Docker proxy lists only.**
    ```sh
@@ -162,7 +162,7 @@ for p in ('/containers/json?all=1','/containers/x/json','/containers/x/logs','/i
    ```
    If `docker-proxy` does not start with `read_only` and `cap_drop`, drop `read_only` first, then `cap_drop`, and note which one was needed.
 10. **Ingest needs a token.** `curl -s -X POST https://<NODE>.<TAILNET_NAME>.ts.net/ingest -d '{}'` returns HTTP 401 `{"error": "bad token"}`.
-11. **A collector run works.** `docker exec glassbox glassbox-entrypoint collect all` prints lines for github, gitea and `monitors:` without `error`. (A plain `docker exec glassbox python -m hub ...` would not have the secrets: always go through `glassbox-entrypoint`.) Confirm both Gitea instances list their organisation repositories (the collector asks `/user/repos`); see `docs/runbooks/deploy-hub.md`.
+11. **A collector run works.** `docker exec glassbox glassbox-entrypoint collect all` prints lines for github, gitea and `monitors:` without `error`. (A plain `docker exec glassbox python -m hub ...` would not have the secrets: always go through `glassbox-entrypoint`.) Confirm the Gitea instance lists its organisation repositories (the collector asks `/user/repos`); see `docs/runbooks/deploy-hub.md`.
 
 ## Rollback
 
