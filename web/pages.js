@@ -184,7 +184,8 @@ function xLabels(dates, flat){
   const idx = dates.length < 3 ? dates.map((_, i) => i) : [0, Math.floor((dates.length - 1) / 2), dates.length - 1];
   return `<div class="xl${flat ? ' flat' : ''}">${idx.map(k => `<span>${esc(F.dmd(dates[k]))}</span>`).join('')}</div>`;
 }
-const legend = series => `<span class="leg">${series.map(s => `<span><i style="background:${s.color}"></i>${s.label}</span>`).join('')}</span>`;
+/* series: label is plain text (tooltips); html, when given, is the legend markup */
+const legend = series => `<span class="leg">${series.map(s => `<span><i style="background:${s.color}"></i>${s.html || esc(s.label)}</span>`).join('')}</span>`;
 
 /* ================================================================== #/ overview */
 P.overview = () => {
@@ -356,19 +357,18 @@ P.usage = params => {
     }else{
       const top = (dim === 'model' ? A.models : A.projects).slice(0, 7), keyOf = x => dim === 'model' ? x.model + '\u0000' + x.agent : G.Tkey(x.project);
       const keys = new Set(top.map(keyOf));
-      series = top.map((x, i) => ({key: keyOf(x), label: dim === 'model' ? esc(x.model) : T(x.project), color: dim === 'model' ? MODEL_COLORS[i % MODEL_COLORS.length] : (typeof x.project === 'string' ? G.hue(x.project) : C.DIM)}));
+      series = top.map((x, i) => ({key: keyOf(x), label: dim === 'model' ? x.model : G.Tplain(x.project), html: dim === 'model' ? esc(x.model) : T(x.project), color: dim === 'model' ? MODEL_COLORS[i % MODEL_COLORS.length] : (typeof x.project === 'string' ? G.hue(x.project) : C.DIM)}));
       const rest = (dim === 'model' ? A.models : A.projects).length > top.length;
-      if(rest) series.push({key: '\u0000rest', label: esc(t('usage.other')), color: C.DIM});
+      if(rest) series.push({key: '\u0000rest', label: t('usage.other'), color: C.DIM});
       series.reverse();
       partOf = d => { const o = {}; for(const x of (dim === 'model' ? d.byModel : d.byProject)){ const k = keys.has(keyOf(x)) ? keyOf(x) : '\u0000rest'; o[k] = (o[k] || 0) + val(x); } return o; };
     }
-    const tipSeries = series.map(s => ({...s, label: s.label.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'") || G.Tplain({masked: true})}));
     const fmt = metric === 'cost' ? F.usd : F.n;
     h += G.grpH('02', 'usage.grpDaily');
     h += G.pn('u-daily', G.ph('u-daily', 'bars', 'or', esc(t(metric === 'cost' ? 'usage.dailyCost' : 'usage.dailyReq')), esc(t('usage.days', {n: range})), legend(series.slice().reverse())) +
       `<div class="bar-f"><span class="flab">${esc(t('usage.by'))}</span>${seg(dims.map(d => [d, esc(t('usage.by.' + d))]), dim, v => link({by: v}))}
         <span class="flab">${esc(t('usage.metric'))}</span>${seg([['cost', esc(t('kpi.cost'))], ['requests', esc(t('kpi.requests'))]], metric, v => link({m: v === 'cost' ? null : v}))}</div>` +
-      `<div class="chart">${G.fit('u-chart', w => stackChart(w, days.map(d => ({date: d.date, parts: partOf(d)})), tipSeries, fmt))}</div>` + xLabels(days.map(d => d.date)));
+      `<div class="chart">${G.fit('u-chart', w => stackChart(w, days.map(d => ({date: d.date, parts: partOf(d)})), series, fmt))}</div>` + xLabels(days.map(d => d.date)));
 
     h += G.grpH('03', 'usage.grpBreakdown');
     h += `<div class="grid2 even">` + G.pn('u-agent', G.ph('u-agent', 'term', 'vio', esc(t('usage.byAgent')), esc(t('usage.days', {n: range})), '') + `<table class="tb">${agentRows(A.agents, tt.cost, days)}</table>`) +
@@ -392,7 +392,7 @@ P.usage = params => {
     const hr = D.today.hourly.slice().sort((a, b) => a.hour - b.hour), reqs = hr.map(x => x.requests), cost = hr.map(x => x.costUsd);
     const peak = max(reqs), pk = reqs.indexOf(peak);
     h += G.grpH('0' + n0, 'usage.grpHourly');
-    h += G.pn('u-hour', G.ph('u-hour', 'clock', 'fg', esc(t('usage.hourly')), esc(t('usage.hourPeak', {h: peak ? String(hr[pk].hour).padStart(2, '0') + ':00' : '—'})), legend([{label: esc(t('kpi.requests')), color: C.BLUE}])) +
+    h += G.pn('u-hour', G.ph('u-hour', 'clock', 'fg', esc(t('usage.hourly')), esc(t('usage.hourPeak', {h: peak ? String(hr[pk].hour).padStart(2, '0') + ':00' : '—'})), legend([{label: t('kpi.requests'), color: C.BLUE}])) +
       `<div class="chart">${G.fit('u-hourc', w => hourChart(w, hr))}</div><div class="xl">${[0, 6, 12, 18, 23].map(x => `<span>${String(x).padStart(2, '0')}</span>`).join('')}</div>` +
       `<div class="stats">${[['usage.hourBusy', F.n(reqs.filter(v => v > 0).length)], ['kpi.requests', F.n(sum(reqs))], ['kpi.cost', F.usd(sum(cost))], ['usage.hourMaxCost', F.usd(max(cost))]].map(([k, v]) => `<div><p class="lab">${esc(t(k))}</p><div class="val">${v}</div></div>`).join('')}</div>`);
   }
@@ -402,7 +402,7 @@ P.usage = params => {
   h += `<div id="sec-quota"></div>` + quotaPanel('u-quota', false);
   if(D.quota.length){
     const multi = G.multiAcct();
-    h += `<div class="grid2 even">` + D.quota.map((q, i) => G.pn('u-qh' + i, G.ph('u-qh' + i, 'gauge', 'or', `${G.agTag(q.agent)} ${G.lbl('win.', q.window)}${multi ? ' ' + G.code(q.account) : ''}`, esc(t('quota.samples', {n: q.history.length})), legend([{label: esc(t('quota.used')), color: C.BLUE}, {label: esc(t('quota.pace')), color: C.HI}]), 'h3') +
+    h += `<div class="grid2 even">` + D.quota.map((q, i) => G.pn('u-qh' + i, G.ph('u-qh' + i, 'gauge', 'or', `${G.agTag(q.agent)} ${G.lbl('win.', q.window)}${multi ? ' ' + G.code(q.account) : ''}`, esc(t('quota.samples', {n: q.history.length})), legend([{label: t('quota.used'), color: C.BLUE}, {label: t('quota.pace'), color: C.HI}]), 'h3') +
       G.fit('u-qc' + i, w => quotaChart(w, q)) + `<div class="xl flat"><span>${esc(F.when(isFinite(Date.parse(q.resetsAt)) ? new Date(Date.parse(q.resetsAt) - (G.WMS[q.window] || 0)).toISOString() : null))}</span><span>${esc(F.when(q.resetsAt))}</span></div>`)).join('') + `</div>`;
   }
 
@@ -485,7 +485,7 @@ P.code = params => {
   </div><div class="sep"></div>` + G.fit('c-heat', w => heat(w, days, 26)) + `<div class="hfoot"><span>${esc(t('heat.stat', {a: F.n(st.active), s: F.n(st.cur), m: F.n(st.peak)}))}</span><span class="hleg">${heatLegend()}</span></div>`, 'hero');
 
   /* rhythm: weekday (year) and hour of day (commit list) */
-  const hours = Array(24).fill(0); commits.forEach(c => { if(c.t) hours[F.localHour(c.t)]++; });
+  const hours = Array(24).fill(0); commits.forEach(c => { const hh = c.t ? F.localHour(c.t) : null; if(hh !== null) hours[hh]++; });
   h += `<div class="grid2 even">` + G.pn('c-wk', G.ph('c-wk', 'bars', 'or', esc(t('code.byWeekday')), esc(t('code.yearAvg')), '') + G.fit('c-wkc', w => weekdayCount(w, days))) +
     G.pn('c-hr', G.ph('c-hr', 'clock', 'fg', esc(t('code.byHour')), esc(t('code.nCommits', {n: F.n(commits.length)})), '') + G.fit('c-hrc', w => hourCount(w, hours)) + `<div class="xl flat">${[0, 6, 12, 18, 23].map(x => `<span>${String(x).padStart(2, '0')}</span>`).join('')}</div>`) + `</div>`;
 
@@ -558,7 +558,7 @@ P.machines = () => {
     ${kpi('mach.kCpu', withSys.length ? G.roll(sum(withSys.map(m => m.system.cpuPct)) / withSys.length / 100, 'pct1') : '—', esc(t('mach.ofN', {n: withSys.length})), 'c')}
     ${kpi('mach.kActive', G.roll(sum(live.map(r => r.activeSessions)), 'n'), esc(t('mach.kProc', {n: F.n(sum(live.map(r => r.processes)))})), 'w')}
     ${kpi('mach.kProbes', `${G.roll(fresh, 'n')}<span class="c-dim" style="font-size:.6em"> / ${F.n(probes)}</span>`, esc(t('mach.freshHint')), fresh < probes ? 'w' : 'v')}
-    ${kpi('mach.kServices', G.roll(D.services.length, 'n'), esc(t('svc.bad', {n: D.services.filter(s => s.status === 'down').length})), D.services.some(s => s.status === 'down') ? 'b' : '')}
+    ${D.hidden.has('services') ? kpi('mach.kServices', '\u2014', esc(t('hidden.online'))) : kpi('mach.kServices', G.roll(D.services.length, 'n'), esc(t('svc.bad', {n: D.services.filter(s => s.status === 'down').length})), D.services.some(s => s.status === 'down') ? 'b' : '')}
   </div>`, 'hero');
   h += G.grpH('02', 'mach.grpEach');
   if(!D.machines.length) h += G.pn('m-none', G.ph('m-none', 'server', 'ok', esc(t('mach.title')), '', '') + G.empty());
@@ -617,26 +617,29 @@ P.services = params => {
   const ups = all.map(s => s.uptimePct24h).filter(v => v != null);
   const lk = o => G.href('services', {st: stF === 'all' ? null : stF, machine: machF, q: q || null, sort: sort === 'status' ? null : sort, ...o});
   let h = G.grpH('01', 'svc.grpSummary');
-  h += G.pn('s-sum', G.ph('s-sum', 'box', 'ok', esc(t('svc.title')), esc(t('svc.count', {n: all.length})), counts.down ? bd(esc(t('svc.bad', {n: counts.down})), 'c-bad', true) : bd(esc(t('svc.allOk')), 'c-ok', true)) + `<div class="kpis sm" style="--n:5">
-    ${kpi('svc.kTotal', G.roll(all.length, 'n'), esc(t('svc.kinds', {c: all.filter(s => s.kind === 'container').length, m: all.filter(s => s.kind === 'monitor').length, b: all.filter(s => s.kind === 'both').length})))}
-    ${kpi('st.up', G.roll(counts.up, 'n'), esc(t('svc.ofAll', {p: all.length ? F.pct(counts.up / all.length) : '—'})), 'g')}
-    ${kpi('st.down', G.roll(counts.down, 'n'), counts.down ? all.filter(s => s.status === 'down').slice(0, 3).map(s => G.Tplain(s.name)).map(esc).join(' · ') : esc(t('svc.allOk')), counts.down ? 'b' : '')}
-    ${kpi('svc.kUp', ups.length ? G.roll(sum(ups) / ups.length / 100, 'pct1') : '—', esc(t('svc.monitored', {n: ups.length})), 'v')}
-    ${kpi('svc.kMem', G.roll(sum(all.map(s => s.memBytes || 0)), 'bytes'), esc(t('svc.memOf', {n: all.filter(s => s.memBytes != null).length})), 'w')}
-  </div>`, 'hero');
+  const HID = D.hidden.has('services');           /* not in this snapshot: say so instead of "0 services, all up" */
+  if(HID) h += G.pn('s-sum', G.ph('s-sum', 'box', 'ok', esc(t('svc.title')), '', '') + `<div class="hiddenpn">${esc(t('hidden.online'))}</div>`);
+  else{
+    h += G.pn('s-sum', G.ph('s-sum', 'box', 'ok', esc(t('svc.title')), esc(t('svc.count', {n: all.length})), counts.down ? bd(esc(t('svc.bad', {n: counts.down})), 'c-bad', true) : bd(esc(t('svc.allOk')), 'c-ok', true)) + `<div class="kpis sm" style="--n:5">
+      ${kpi('svc.kTotal', G.roll(all.length, 'n'), esc(t('svc.kinds', {c: all.filter(s => s.kind === 'container').length, m: all.filter(s => s.kind === 'monitor').length, b: all.filter(s => s.kind === 'both').length})))}
+      ${kpi('st.up', G.roll(counts.up, 'n'), esc(t('svc.ofAll', {p: all.length ? F.pct(counts.up / all.length) : '—'})), 'g')}
+      ${kpi('st.down', G.roll(counts.down, 'n'), counts.down ? all.filter(s => s.status === 'down').slice(0, 3).map(s => G.Tplain(s.name)).map(esc).join(' · ') : esc(t('svc.allOk')), counts.down ? 'b' : '')}
+      ${kpi('svc.kUp', ups.length ? G.roll(sum(ups) / ups.length / 100, 'pct1') : '—', esc(t('svc.monitored', {n: ups.length})), 'v')}
+      ${kpi('svc.kMem', G.roll(sum(all.map(s => s.memBytes || 0)), 'bytes'), esc(t('svc.memOf', {n: all.filter(s => s.memBytes != null).length})), 'w')}
+    </div>`, 'hero');
 
-  h += G.grpH('02', 'svc.grpList');
-  const machines = [...new Set(all.map(s => s.machine || ''))].sort();
-  h += G.pn('s-list', G.ph('s-list', 'box', 'ok', esc(t('svc.all')), esc(t('svc.shown', {n: list.length, m: all.length})), esc(t('detail.hint'))) +
-    `<div class="bar-f">${seg(STS.filter(s => s === 'all' || counts[s]).map(s => [s, esc(t(s === 'all' ? 'filter.all' : s === 'other' ? 'svc.other' : 'st.' + s)) + `<small>${F.n(counts[s])}</small>`]), stF, v => lk({st: v === 'all' ? null : v}))}
-      ${machines.length > 1 ? `<span class="flab">${esc(t('svc.machine'))}</span>${seg([['', esc(t('filter.all'))]].concat(machines.map(m => [m, m ? esc(m) : esc(t('svc.noMachine'))])), machF || '', v => lk({machine: v || null}))}` : ''}
-      <span class="flab">${esc(t('filter.sort'))}</span>${seg(['status', 'name', 'up', 'cpu', 'mem'].map(s => [s, esc(t('sort.' + s))]), sort, v => lk({sort: v === 'status' ? null : v}))}
-      <input class="search" id="s-q" type="search" value="${esc(params.get('q') || '')}" placeholder="${esc(t('svc.search'))}" aria-label="${esc(t('svc.search'))}"></div>` +
-    (list.length ? `<table class="tb">${serviceRows(list)}</table>` : G.empty('filter.none')));
-  G.after(() => { const el = G.$('s-q'); if(!el) return; let tm;
-    el.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { const pos = el.selectionStart; history.replaceState(null, '', lk({q: el.value || null})); G.render(true); const n2 = G.$('s-q'); if(n2){ n2.focus(); try{ n2.setSelectionRange(pos, pos); }catch(e){} } }, 250); }); });
-
-  h += G.grpH('03', 'svc.grpOps');
+    h += G.grpH('02', 'svc.grpList');
+    const machines = [...new Set(all.map(s => s.machine || ''))].sort();
+    h += G.pn('s-list', G.ph('s-list', 'box', 'ok', esc(t('svc.all')), esc(t('svc.shown', {n: list.length, m: all.length})), esc(t('detail.hint'))) +
+      `<div class="bar-f">${seg(STS.filter(s => s === 'all' || counts[s]).map(s => [s, esc(t(s === 'all' ? 'filter.all' : s === 'other' ? 'svc.other' : 'st.' + s)) + `<small>${F.n(counts[s])}</small>`]), stF, v => lk({st: v === 'all' ? null : v}))}
+        ${machines.length > 1 ? `<span class="flab">${esc(t('svc.machine'))}</span>${seg([['', esc(t('filter.all'))]].concat(machines.map(m => [m, m ? esc(m) : esc(t('svc.noMachine'))])), machF || '', v => lk({machine: v || null}))}` : ''}
+        <span class="flab">${esc(t('filter.sort'))}</span>${seg(['status', 'name', 'up', 'cpu', 'mem'].map(s => [s, esc(t('sort.' + s))]), sort, v => lk({sort: v === 'status' ? null : v}))}
+        <input class="search" id="s-q" type="search" value="${esc(params.get('q') || '')}" placeholder="${esc(t('svc.search'))}" aria-label="${esc(t('svc.search'))}"></div>` +
+      (list.length ? `<table class="tb">${serviceRows(list)}</table>` : G.empty('filter.none')));
+    G.after(() => { const el = G.$('s-q'); if(!el) return; let tm;
+      el.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { const pos = el.selectionStart; history.replaceState(null, '', lk({q: el.value || null})); G.render(true); const n2 = G.$('s-q'); if(n2){ n2.focus(); try{ n2.setSelectionRange(pos, pos); }catch(e){} } }, 250); }); });
+  }
+  h += G.grpH(HID ? '02' : '03', 'svc.grpOps');
   const TN = D.tailnet, showTn = !D.hidden.has('tailnet');
   const jobsPn = G.pn('s-jobs', G.ph('s-jobs', 'clock', 'or', esc(t('job.title')), esc(t('job.count', {n: D.jobs.length})), D.jobs.some(j => !j.ok) ? bd(esc(t('job.failN', {n: D.jobs.filter(j => !j.ok).length})), 'c-bad', true) : '') + `<div id="sec-jobs"></div><table class="tb">${jobRows(D.jobs, true)}</table>`);
   const tnPn = showTn ? G.pn('s-tn', G.ph('s-tn', 'net', 'fg', esc(t('tn.title')), esc(t('tn.onlineN', {a: TN.filter(d => d.online).length, b: TN.length})), '') + (TN.length ? `<table class="tb"><tr><th>${esc(t('tn.device'))}</th><th>${esc(t('tn.os'))}</th><th>${esc(t('svc.status'))}</th><th class="v">${esc(t('mach.lastSeen'))}</th></tr>` +

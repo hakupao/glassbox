@@ -67,10 +67,11 @@ class WebTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             page.bundle({}, self.web)
         shutil.copy(ROOT / "web" / "index.html", self.web / "index.html")
-        self.edit("app.js", "'use strict';", "'use strict'; const s = '</script>';")
-        with self.assertRaises(ValueError):
-            page.bundle({}, self.web)
-        shutil.copy(ROOT / "web" / "app.js", self.web / "app.js")
+        for bad in ("'</script>'", "'<!-- x'", "'<script>'", "'<SCRIPT '"):
+            self.edit("app.js", "'use strict';", f"'use strict'; const s = {bad};")
+            with self.assertRaises(ValueError, msg=bad):
+                page.bundle({}, self.web)
+            shutil.copy(ROOT / "web" / "app.js", self.web / "app.js")
         self.edit("index.html", page.CSP + "\n", "")
         with self.assertRaises(ValueError):
             page.bundle({}, self.web)

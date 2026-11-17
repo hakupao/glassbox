@@ -408,7 +408,7 @@ CSP = ('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'
        'form-action \'none\'">')
 _LINK = re.compile(r'<link rel="stylesheet" href="([a-z0-9-]+\.css)">')
 _SCRIPT = re.compile(r'<script src="([a-z0-9-]+\.js)"></script>')
-_CLOSE = re.compile(r"</(script|style)", re.I)
+_CLOSE = re.compile(r"</(script|style)|<!--|<script", re.I)     # would end or confuse the inline element
 _FAVICON = re.escape('<link rel="icon" href="data:,">')                  # the one link allowed
 
 
@@ -436,7 +436,7 @@ def bundle(page, web=WEB):
         def sub(m):
             text = (web / m.group(1)).read_text(encoding="utf-8")
             if _CLOSE.search(text):
-                raise ValueError(f"web/{m.group(1)} contains a closing script/style tag")
+                raise ValueError(f"web/{m.group(1)} contains </script, </style, <!-- or <script")
             return f"<{kind}>\n{text}</{kind}>"
         return sub
 

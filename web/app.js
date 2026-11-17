@@ -121,7 +121,6 @@ function makeFormatters(){
   const n0 = new Intl.NumberFormat(L, {maximumFractionDigits: 0});
   const n1 = new Intl.NumberFormat(L, {maximumFractionDigits: 1, minimumFractionDigits: 1});
   const cmp = new Intl.NumberFormat(L, {notation: 'compact', maximumSignificantDigits: 4});
-  const cmp2 = cmp;
   const usd = new Intl.NumberFormat(L, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2});
   const usd0 = new Intl.NumberFormat(L, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0});
   const pct0 = new Intl.NumberFormat(L, {style: 'percent', maximumFractionDigits: 0});
@@ -134,27 +133,30 @@ function makeFormatters(){
   const dmd = dUTC({month: '2-digit', day: '2-digit'}), dymd = dUTC({year: 'numeric', month: '2-digit', day: '2-digit'});
   const dmon = dUTC({month: 'short'}), dwk = dUTC({weekday: 'short'}), dwkn = dUTC({weekday: 'narrow'});
   const rtf = new Intl.RelativeTimeFormat(L, {numeric: 'auto', style: 'short'});
-  const day = s => new Date(s + 'T00:00:00Z');
+  /* every date formatter shows a dash for a missing or unparsable value instead of throwing */
+  const at = v => { if(v === null || v === undefined || v === '') return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; };
+  const day = s => at(typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T00:00:00Z' : null);
+  const fmt = (f, d) => d ? f.format(d) : '\u2014';
   const units = [['terabyte', 1e12], ['gigabyte', 1e9], ['megabyte', 1e6], ['kilobyte', 1e3]];
   const unitF = {};
   Object.assign(F, {
     n: v => n0.format(num(v)),
     n1: v => n1.format(num(v)),
-    tok: v => { v = num(v); return v < 1e4 ? n0.format(v) : (v < 1e6 ? cmp : cmp2).format(v); },
+    tok: v => { v = num(v); return v < 1e4 ? n0.format(v) : cmp.format(v); },
     usd: v => usd.format(num(v)),
     usd0: v => usd0.format(num(v)),
     pct: f => pct0.format(num(f)),
     pct1: f => pct1.format(num(f)),
     pctN: p => pct1.format(num(p) / 100),
     bytes: b => { b = num(b); for(const [u, k] of units){ if(b >= k * 0.95 || u === 'kilobyte'){ const key = u; unitF[key] = unitF[key] || new Intl.NumberFormat(L, {style: 'unit', unit: key, unitDisplay: 'short', maximumFractionDigits: b / k >= 100 ? 0 : 1}); return unitF[key].format(b / k); } } return n0.format(b); },
-    md: iso => iso ? md.format(new Date(iso)) : '—',
-    hm: iso => iso ? hm.format(new Date(iso)) : '—',
-    when: iso => iso ? md.format(new Date(iso)) + ' ' + hm.format(new Date(iso)) : '—',
-    full: iso => iso ? full.format(new Date(iso)) : '—',
-    clock: ms => hms.format(new Date(ms)),
-    dmd: s => s ? dmd.format(day(s)) : '—',
-    dfull: s => s ? dymd.format(day(s)) + ' ' + dwk.format(day(s)) : '—',
-    mon: s => dmon.format(day(s)),
+    md: iso => fmt(md, at(iso)),
+    hm: iso => fmt(hm, at(iso)),
+    when: iso => { const d = at(iso); return d ? md.format(d) + ' ' + hm.format(d) : '\u2014'; },
+    full: iso => fmt(full, at(iso)),
+    clock: ms => fmt(hms, at(ms)),
+    dmd: s => fmt(dmd, day(s)),
+    dfull: s => { const d = day(s); return d ? dymd.format(d) + ' ' + dwk.format(d) : '\u2014'; },
+    mon: s => fmt(dmon, day(s)),
     wk: i => dwk.format(new Date(Date.UTC(2026, 10, 15 + i))),       /* 2026-11-15 is a Sunday: i = 0..6, Sunday first */
     wkn: i => dwkn.format(new Date(Date.UTC(2026, 10, 15 + i))),
     ago: iso => {
@@ -168,13 +170,13 @@ function makeFormatters(){
     },
     dur: sec => { sec = num(sec); const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
       return d ? t('dur.dh', {d, h}) : h ? t('dur.hm', {h, m}) : t('dur.m', {m}); },
-    cd: ms => { ms = Math.max(0, ms); const d = Math.floor(ms / 864e5); ms -= d * 864e5; const h = Math.floor(ms / 36e5); ms -= h * 36e5; const m = Math.floor(ms / 6e4);
+    cd: ms => { if(!isFinite(ms)) return '\u2014'; ms = Math.max(0, ms); const d = Math.floor(ms / 864e5); ms -= d * 864e5; const h = Math.floor(ms / 36e5); ms -= h * 36e5; const m = Math.floor(ms / 6e4);
       const z = x => String(x).padStart(2, '0'); return d ? t('dur.cdD', {d, hm: z(h) + ':' + z(m)}) : z(h) + ':' + z(m); },
   });
   const ld = new Intl.DateTimeFormat('en-CA', {timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit'});
   const lh = new Intl.DateTimeFormat('en-GB', {timeZone: TZ, hour: '2-digit', hour12: false});
-  F.localDate = iso => ld.format(new Date(iso));                    /* YYYY-MM-DD in the page zone */
-  F.localHour = iso => parseInt(lh.format(new Date(iso)), 10) % 24;
+  F.localDate = iso => { const d = at(iso); return d ? ld.format(d) : ''; };             /* YYYY-MM-DD in the page zone */
+  F.localHour = iso => { const d = at(iso); return d ? parseInt(lh.format(d), 10) % 24 : null; };
 }
 makeFormatters();
 
@@ -416,9 +418,9 @@ G.render = (keep) => {
   const y = scrollY;
   view.innerHTML = G.pages[r.name](r.params);
   G.runFits();
-  afters.forEach(f => f());
   if(!G.STATIC && !sameRoute && !keep){ document.body.classList.remove('anim'); void document.body.offsetWidth; document.body.classList.add('anim'); rollAll(); }
   if(!sameRoute && !keep) scrollTo(0, 0); else scrollTo(0, y);
+  afters.forEach(f => f());                     /* after the scroll reset, so a section jump (sec=) is kept */
   lastRoute = r.name;
   tick(G.STATIC ? (FROZEN || 0) : (performance.now() - start) / 1000, true);
 };
