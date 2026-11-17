@@ -114,3 +114,25 @@
 - 2026-11-17：环境细节从本文件拆到 `.local/`。
 - 2026-11-17：视觉定为 c-v9（分组疏密、语义色、徽章、机器一台一行、克制动效），底色更暗、面板半透明。
 - 2026-11-17：参照参考站做 5 个页面（概览 / 用量 / 代码 / 机器 / 服务），面板可"查看全部"、行可展开；界面支持中文、日本語、English。其余 4 页直接用真实数据做，逐页给用户确认。
+
+## 7. 交接（2026-11-17 session 3 结束）
+
+**新 session 先读**：本文件 → `_progress.json`（步骤状态与 followups）→ `schema/CONTRACT.md` → `design/ASCII_STYLE_NOTES.md` 末尾几条 → `.local/HANDOFF.local.md`（环境、凭据位置、并行分工细节）。
+
+**已完成**：S01–S09。
+- 探针（`probe/`）：用量已和独立计数器、ccusage 核对一致；额度、本地 git、运行时也已完成。
+- hub（`hub/`）：收件接口、GitHub/Gitea 采集、Beszel/Kuma/Docker/tailscale 采集，独立审阅都已 APPROVE。
+- 设计定稿：`design/mockups/c-v9.html`。
+- 测试：`~/.local/bin/python3.12 -m unittest discover -s tests`（34 个）。
+- 隐私：pre-commit 钩子运行 `scripts/privacy_scan.py`。
+
+**可以并行的车道**（各自独立，建议每条一个 subagent，各用独立 worktree，最后由主控合并）：
+
+| 车道 | 内容 | 依赖 | 产出 |
+|---|---|---|---|
+| A | S10a：`hub/page.py` 从 sqlite 生成 page/1，hub 提供私有视图；同时为 4 个详情页扩充数据格式（标注 provisional） | 无 | 本机真实数据渲染概览，数字与 `probe daily` 一致 |
+| B | S11 + S12：导出器（白名单重建、模糊占位、关键词屏蔽、服务合并后再打码）+ 发布闸门 + 红队样本；先用 `schema/examples/` 的虚构数据开发 | 只依赖已冻结的契约 | `hub/export.py`、`scripts/verify_public.py`、测试 |
+| C | S13/S14 的准备：docker compose（glassbox + tailscale sidecar + docker-socket-proxy）、给各台电脑上 agent 用的安装手册（Tailscale、Beszel agent、探针 + 定时） | 无（只写文件，不碰部署机） | `deploy/`、`docs/runbooks/` |
+| D | S10b + S10c：5 个页面和 i18n | A 的 page/1 输出 | `web/`，逐页截图给用户确认 |
+
+**硬性约束**：部署机、公司 Gitea 等任何外部改动先问用户；公开仓库仍是 private，改公开前要过闸门、补看剩余截图；writer 和 reviewer 不能是同一个 agent。
