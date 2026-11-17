@@ -32,10 +32,13 @@ examples only) means the strictest settings.
 """
 import argparse
 import copy
+import html
 import json
 import re
 import sys
 import tomllib
+import unicodedata
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
@@ -145,14 +148,42 @@ def load_terms(path=DEFAULT_TERMS):
 
 # --- name matching (CONTRACT §3 rule 6) --------------------------------------------------------
 
+# Look-alike letters folded to Latin before matching (review M1). Cyrillic and Greek only.
+HOMOGLYPHS = str.maketrans({
+    "а": "a", "в": "b", "е": "e", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p", "с": "c", "т": "t",
+    "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "ӏ": "l", "ԛ": "q", "ԝ": "w",
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T",
+    "Х": "X", "І": "I", "Ј": "J", "Ѕ": "S",
+    "α": "a", "β": "b", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t", "υ": "u",
+    "χ": "x", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N",
+    "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+})
+
+
+def _fold(s):
+    s = unicodedata.normalize("NFKC", s)
+    return "".join(c for c in s if unicodedata.category(c) != "Cf").translate(HOMOGLYPHS)
+
+
 def norm(s):
-    return re.sub(r"[-_.\s]", "", s).casefold()
+    """Long-term form: NFKC, look-alikes folded, case-folded, only letters and digits kept."""
+    return "".join(c for c in _fold(s).casefold() if unicodedata.category(c)[0] in "LN")
+
+
+def tokens(s):
+    """Words for short terms: split on anything that is not a letter or digit (so _ too), on
+    camelCase, on letter/digit changes and on Latin/other-script changes (review L2)."""
+    s = _fold(s)
+    s = re.sub(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", s)
+    s = re.sub(r"(?<=[^\W\d_])(?=\d)|(?<=\d)(?=[^\W\d_])", " ", s)
+    s = re.sub(r"(?<=[A-Za-z])(?=[^\W\d_A-Za-z])|(?<=[^\W\d_A-Za-z])(?=[A-Za-z])", " ", s)
+    return [w.casefold() for w in re.split(r"[^\w]|_", s) if w]
 
 
 def _vocabulary():
     """Words the public page is made of: enum / const values and keys. A private name equal to
     one of them reveals nothing and would otherwise block every export (e.g. p_other's "other")."""
-    words = {"other", "masked", "group", "private", "public"}
+    words = {"other", "masked", "group", "private", "public", "glassbox"}
     for path, typ in FIELDS.items():
         words.update(k for k in re.split(r"[.\[\]]+", path) if k)
         kind, _, arg = typ.rstrip("?").partition(":")
@@ -165,47 +196,52 @@ def _vocabulary():
 VOCAB = _vocabulary()
 
 
-def find_spans(text, term, mode=None):
-    """Raw-text spans where `term` occurs: normalised substring for long terms, word boundary
-    for short ones (CONTRACT §3 rule 6); `mode` overrides."""
-    n = norm(term)
-    if not n:
-        return []
-    mode = mode or ("substring" if len(n) >= 5 else "word")
-    if mode == "word":
-        rx = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(term) + r"(?![A-Za-z0-9_])", re.I)
-        return [m.span() for m in rx.finditer(text)]
-    chars, idx = [], []
-    for i, c in enumerate(text):
-        if c in "-_." or c.isspace():
-            continue
-        for f in c.casefold():
-            chars.append(f)
-            idx.append(i)
-    flat, spans, start = "".join(chars), [], 0
-    while (k := flat.find(n, start)) >= 0:
-        spans.append((idx[k], idx[k + len(n) - 1] + 1))
-        start = k + 1
-    return spans
+class Matcher:
+    """CONTRACT §3 rule 6. Long terms (5+ after norm) or non-Latin ones: substring of norm(text).
+    Short terms: a run of whole tokens. `modes` maps a casefolded term to "substring" or "word"."""
+
+    def __init__(self, names, modes):
+        self.long, self.short = set(), []
+        for t in names:
+            n = norm(t)
+            if not n:
+                continue
+            mode = modes.get(t.casefold()) or (
+                "substring" if len(n) >= 5 or not n.isascii() else "word")
+            if mode == "substring":
+                self.long.add(n)
+            elif tokens(t):
+                self.short.append(tokens(t))
+
+    def hit(self, text):
+        flat = norm(text)
+        if any(n in flat for n in self.long):
+            return True
+        toks = tokens(text)
+        for tt in self.short:
+            k = len(tt)
+            if any(toks[i:i + k] == tt for i in range(len(toks) - k + 1)):
+                return True
+        return False
 
 
-def redact_names(text, names, modes):
-    spans = sorted(s for t in names for s in find_spans(text, t, modes.get(t.casefold())))
-    if not spans:
-        return text
-    out, pos = [], 0
-    for a, b in spans:
-        if b <= pos:
-            continue
-        a = max(a, pos)
-        out.append(text[pos:a] + RED)
-        pos = b
-    out.append(text[pos:])
-    return "".join(out)
+def decode(text, rounds=4):
+    """Undo %-encoding and HTML entities until nothing changes (review L9)."""
+    for _ in range(rounds):
+        nxt = html.unescape(urllib.parse.unquote(text))
+        if nxt == text:
+            break
+        text = nxt
+    return text
 
 
-def scrub_title(title, names, modes):
-    t = redact_names(title, names, modes)
+def scrub_title(title, matcher):
+    """A title that mentions a private name is cut to its prefix (review L9); then regexes."""
+    t = decode(title)
+    if matcher.hit(t):
+        t = prefix_only(t)
+        if matcher.hit(t):
+            t = RED
     for rx in SCRUB:
         t = rx.sub(RED, t)
     return t
@@ -414,29 +450,32 @@ def export(page, cfg, terms):
     private_keys = {k for k, v in verdict.items() if not v}
     allow_all = {a for a in allow_all if norm(a) not in private_keys}
     # Codes (A, K, ...) are public by design; a label that equals its code reveals nothing.
+    hashes, hosts = set(), set()
     clash = {c for c in cfg["codes"] if c in names}
     if clash:
         raise ExportError(f"config codes: {len(clash)} code(s) equal a private name")
     names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all and not is_code(n, cfg)}
-    scrub_names = sorted(names | set(terms["terms"]) | set(cfg["keywords"]), key=len, reverse=True)
-    modes = terms["match"]
-
-    url_rx = public_url_rx(public_repos, cfg["githubOwners"])
-    branches, extra = set(), set()
-    for e in (src.get("code") or {}).get("commits") or []:        # §2.2: not exported, but its names count
+    for e in activity + [c for c in (src.get("code") or {}).get("commits") or [] if isinstance(c, dict)]:
         if isinstance(e, dict) and not is_public(e, "repo"):
             if isinstance(e.get("hash"), str):
-                extra.add(e["hash"])
+                hashes.add(e["hash"])
             if isinstance(e.get("url"), str):
-                extra.add(url_host(e["url"]))
+                hosts.add(url_host(e["url"]))
+    hosts.discard("")
+    modes = dict(terms["match"])
+    modes.update({h.casefold(): "word" for h in hashes})       # hex ids: whole tokens, not substrings
+    matcher = Matcher(names | hashes | hosts | set(terms["terms"]) | set(cfg["keywords"]), modes)
+
+    url_rx = public_url_rx(public_repos, cfg["githubOwners"])
+    branches = set()
     for e in activity:
         title = e.get("title") if isinstance(e.get("title"), str) else ""
-        title = scrub_title(title, scrub_names, modes)
+        title = scrub_title(title, matcher)
         if is_public(e, "repo"):
             if e.get("source") == "local":       # may live only on a private fork or mirror
                 e["branch"] = None
             b = e.get("branch")
-            if isinstance(b, str) and b and scrub_title(b, scrub_names, modes) == b:
+            if isinstance(b, str) and b and not matcher.hit(decode(b)) and scrub_title(b, matcher) == b:
                 branches.add(b)
             else:
                 e["branch"] = None if b is None else _PRIVATE_GROUP_BRANCH
@@ -447,9 +486,6 @@ def export(page, cfg, terms):
             if not is_code(e.get("machine"), cfg):
                 e["machine"] = None
         else:
-            for k in ("hash", "url"):
-                if isinstance(e.get(k), str):
-                    extra.add(e[k] if k == "hash" else url_host(e[k]))
             e.update(public=False, branch=None, hash=None, url=None, machine=None, t=_hour(e["t"]))
             e["repo"] = _PRIVATE_REPO
             if cfg["privateTitles"] == "prefix-only":
@@ -492,7 +528,7 @@ def export(page, cfg, terms):
     _check(pub, "", cfg, url_rx, bad)
     if bad:
         raise ExportError("export would publish mistyped values:\n  " + "\n  ".join(bad))
-    ctx = {"privateNames": sorted(names | (extra - {""})), "publicRepos": sorted(public_repos),
+    ctx = {"privateNames": sorted(names | hashes | hosts), "publicRepos": sorted(public_repos),
            "publicBranches": sorted(branches)}
     return pub, ctx
 

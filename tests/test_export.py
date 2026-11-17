@@ -5,6 +5,7 @@ import copy
 import io
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -142,7 +143,7 @@ class ExportTest(unittest.TestCase):
         self.page["activity"][0]["title"] = "feat: port HeronVault, kite_notes and Wren.Tools"
         pub, ctx = self.run_export()
         self.assertTrue({"heron-vault", "kite-notes", "wren-tools", "abcdef1"} <= set(ctx["privateNames"]))
-        self.assertEqual(pub["activity"][0]["title"].count("******"), 3)
+        self.assertEqual(pub["activity"][0]["title"], "feat:")
         self.assertEqual(self.gate(pub), [])
 
     def test_gate_rejects_forged_public_name(self):
@@ -207,16 +208,31 @@ class ExportTest(unittest.TestCase):
             self.page["activity"].append(a)
         pub, ctx = self.run_export()
         titles = [a["title"] for a in pub["activity"][-len(bad):]]
-        self.assertTrue(all("******" in t for t in titles), titles)
+        self.assertTrue(all("******" in t or re.fullmatch(r"[a-z]+:", t) for t in titles), titles)
         self.assertEqual(self.gate(pub, ctx), [])
-        self.assertEqual(titles[0], "feat: sync with ******")
+        self.assertEqual(titles[0], "feat:")                       # a private name cuts the title (L9)
         for t in bad:                                   # the gate rejects every original title
             self.assertTrue(vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.page,
                                     vp.load_toml(Path(self.tmp.name) / "public.toml")).title_problems(t), t)
         for ok in ("fix: v1.2.3 bump at 10:30", "refactor: split a/b/c w/ tests and/or docs"):
-            self.assertEqual(ex.scrub_title(ok, [], {}), ok)
-        self.assertEqual(ex.scrub_title("docs: nightjars and owls", ["nightjar", "owl"], {"nightjar": "word"}),
-                         "docs: nightjars and owls")
+            self.assertEqual(ex.scrub_title(ok, ex.Matcher([], {})), ok)
+        m = ex.Matcher(["nightjar", "owl"], {"nightjar": "word"})
+        self.assertEqual(ex.scrub_title("docs: nightjars and owls in bowling", m), "docs: nightjars and owls in bowling")
+
+    def test_name_spellings_and_encodings_are_caught(self):
+        """Review M1 / L2 / L9: one test word list, many spellings."""
+        m = ex.Matcher(["falcon-ledger", "owl", "青鸟计划"], {})
+        for t in ["falcon\u200bledger", "ｆａｌｃｏｎ-ledger", "falcon/ledger", "falcon:ledger", "f\u0430lcon-ledger",
+                  "falcon\u00adledger", "falcon\u2011ledger", "FALCON-LEDGER", "Falcon_Ledger", "owl_sync", "OwlSync",
+                  "修复owl问题", "OWL2 rollout", "项目青鸟计划完成"]:
+            with self.subTest(t):
+                self.assertTrue(m.hit(t))
+        for t in ["falcon%2Dledger", "falcon&#45;ledger", "falcon%252Dledger"]:
+            with self.subTest(t):
+                self.assertEqual(ex.scrub_title(f"fix: {t}", m), "fix:")
+        for t in ["bowling", "owls", "knowledge", "a falcon and a ledger"]:
+            with self.subTest(t):
+                self.assertFalse(m.hit(t))
 
     def test_prefix_only(self):
         cfg = write_cfg(self.tmp.name, CFG_TEXT.replace('"redacted"', '"prefix-only"'))

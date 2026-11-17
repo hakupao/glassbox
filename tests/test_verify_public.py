@@ -83,6 +83,17 @@ class GateCliTest(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertIn("both public and private", out)
 
+    def test_encoded_and_respelt_names_in_html(self):
+        """Review M1: every encoding of a test private word is still found."""
+        terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
+        g = vp.Gate(terms, None, {})
+        for t in ["\\x66alcon-ledger", "\\u{66}alcon-ledger", "%2566alcon-ledger", "&#37;66alcon-ledger",
+                  "falcon\u00adledger", "falcon\u2011ledger", "'falcon'+'-ledger'", "falc\\6f n-ledger",
+                  "f\u0430lcon-ledger", "ｆａｌｃｏｎ-ｌｅｄｇｅｒ", "Owl_sync", "OwlSync", "\\u9752\\u9e1f\\u8ba1\\u5212"]:
+            with self.subTest(t):
+                self.assertTrue(any("private name" in b for b in g.check_text(f"<p>{t}</p>", "x", True)), t)
+        self.assertEqual([b for b in g.check_text("<p>bowling owls nightjars</p>", "x", True) if "private" in b], [])
+
     def test_private_page_is_rejected(self):
         rc, out = run(ROOT / "schema" / "examples" / "page.private.json", *self.common,
                       "--private", RT / "context" / "private.json")

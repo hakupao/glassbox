@@ -37,6 +37,7 @@ import json
 import re
 import sys
 import tomllib
+import unicodedata
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
@@ -82,8 +83,69 @@ class SetupError(Exception):
     pass
 
 
+# Cyrillic / Greek letters that look Latin (review M1), folded before any comparison.
+LOOKALIKE = {ord(k): v for k, v in zip(
+    "аеорсухіјѕԁвкмнтАВЕКМНОРСТХІЈЅαβεικνορτυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧ",
+    "aeopcyxijsdbkmhtABEKMHOPCTXIJSabeikvoptuxABEZHIKMNOPTYX")}
+
+
+def clean(s):
+    """NFKC, format characters (zero-width, soft hyphen, ...) removed, look-alikes folded."""
+    s = unicodedata.normalize("NFKC", s)
+    return "".join(ch for ch in s if unicodedata.category(ch) != "Cf").translate(LOOKALIKE)
+
+
 def norm(s):
-    return re.sub(r"[-_.\s]", "", s).casefold()
+    return "".join(ch for ch in clean(s).casefold() if unicodedata.category(ch)[0] in "LN")
+
+
+def words(s):
+    """Word list for short terms: _ is a boundary, camelCase and letter/digit and script changes
+    split words (review L2, owner's decision 2026-11-17)."""
+    out, cur, prev = [], "", None
+    for ch in clean(s):
+        cat = unicodedata.category(ch)[0]
+        if cat not in "LN":
+            out.append(cur); cur, prev = "", None
+            continue
+        kind = "d" if cat == "N" else ("latin" if ch.isascii() else "other")
+        if cur and (kind != prev or (ch.isupper() and cur[-1].islower())):
+            out.append(cur); cur = ""
+        cur += ch
+        prev = kind
+    out.append(cur)
+    # "HTTPServer": an upper run followed by Capitalised word
+    split = []
+    for w in out:
+        split.extend(x for x in re.split(r"(?<=[A-Z])(?=[A-Z][a-z])", w) if x)
+    return [w.casefold() for w in split]
+
+
+def decodings(text, limit=8):
+    """Successive decodings of text: HTML entities, \\uXXXX, \\u{X}, \\xHH, CSS \\HH, %XX and JS string
+    concatenation, repeated until nothing changes (review M1)."""
+    out, t = [], text
+    for _ in range(limit):
+        n = html.unescape(t)
+        n = re.sub(r"\\u\{([0-9a-fA-F]{1,6})\}", lambda m: _chr(m.group(1)), n)
+        n = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: _chr(m.group(1)), n)
+        n = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: _chr(m.group(1)), n)
+        n = re.sub(r"\\([0-9a-fA-F]{1,6})\s?", lambda m: _chr(m.group(1)), n)
+        n = n.replace("\\/", "/")
+        n = urllib.parse.unquote(n)
+        n = re.sub(r"([\"'`])\s*\+\s*([\"'`])", "", n)
+        if n == t:
+            break
+        out.append(n)
+        t = n
+    return out
+
+
+def _chr(h):
+    try:
+        return chr(int(h, 16))
+    except (ValueError, OverflowError):
+        return ""
 
 
 def hide(s):
@@ -206,7 +268,10 @@ class Gate:
         words = [t for t in terms.get("terms", []) if t and t.casefold() not in allow_words]
         self.names = sorted(set(words) | set(runtime) | set(self.keywords) | self.private_projects,
                             key=len, reverse=True)
-        self.word_re, self.long = self._compile(self.names)
+        for n in derived:                        # commit ids: whole words only, never inside digit runs
+            if re.fullmatch(r"[0-9a-f]{7,40}", n):
+                self.modes.setdefault(n.casefold(), "word")
+        self.matchers = self._compile(self.names)
         # A name both public and private is a contradiction the exporter must not have resolved
         # towards public (review H1): allowlists or visibility flags disagree.
         private_keys = {norm(n) for n in set(words) | set(derived) | set(self.keywords) | self.private_projects}
@@ -214,38 +279,42 @@ class Gate:
         self.conflicts = sorted(v for v in shown if norm(v) in private_keys)
 
     def _compile(self, names):
-        word, long = [], set()
-        for t in names:
-            mode = self.modes.get(t.casefold()) or ("substring" if len(norm(t)) >= 5 else "word")
-            (long.add(norm(t)) if mode == "substring" else word.append(t))
-        rx = re.compile(r"(?<![A-Za-z0-9_])(?:" + "|".join(map(re.escape, word)) + r")(?![A-Za-z0-9_])", re.I) \
-            if word else None
-        return rx, long
+        """(index, 'sub', normalised) or (index, 'word', word list) per term."""
+        out = []
+        for i, t in enumerate(names, 1):
+            n = norm(t)
+            if not n:
+                continue
+            mode = self.modes.get(t.casefold()) or ("substring" if len(n) >= 5 or not n.isascii() else "word")
+            out.append((i, "sub", n) if mode == "substring" else (i, "word", words(t)))
+        return out
 
     # --- text checks --------------------------------------------------------------------------
 
     def name_hits(self, text):
-        hits = set()
-        if self.word_re:
-            hits.update(m.group(0) for m in self.word_re.finditer(text))
-        flat = norm(text)
-        hits.update(n for n in self.long if n in flat)
+        """Ordinals of the private words found (never the words themselves)."""
+        flat, ws, hits = norm(text), None, set()
+        for i, mode, pat in self.matchers:
+            if mode == "sub":
+                if pat in flat:
+                    hits.add(i)
+            else:
+                ws = ws if ws is not None else words(text)
+                k = len(pat)
+                if k and any(ws[j:j + k] == pat for j in range(len(ws) - k + 1)):
+                    hits.add(i)
         return hits
 
     def check_text(self, text, where, is_html=False):
         bad = []
-        variants = {"raw": text, "html-entities": html.unescape(text),
-                    "\\u-escapes": re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)),
-                                          text.replace("\\/", "/")),
-                    "%-encoding": urllib.parse.unquote(text)}
+        variants = {"raw": text}
+        variants.update((f"decoded x{i}", t) for i, t in enumerate(decodings(text), 1))
         seen = set()
         for how, t in variants.items():
-            if how != "raw" and t == text:
-                continue
-            for h in self.name_hits(t):
-                if norm(h) not in seen:
-                    seen.add(norm(h))
-                    bad.append(f"{where}: private name {hide(h)} ({how})")
+            for h in sorted(self.name_hits(t)):
+                if ("name", h) not in seen:
+                    seen.add(("name", h))
+                    bad.append(f"{where}: private name #{h} ({how})")
             no_svg = SVG_TAG.sub(lambda m: SVG_GEOMETRY.sub('d=""', m.group(0)), t) if is_html else t
             for kind, rx in PATTERNS.items():
                 for m in rx.finditer(no_svg if kind == "ipv4" else t):
