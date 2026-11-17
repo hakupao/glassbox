@@ -141,10 +141,10 @@
     "pushed": bool                              // provisional：false = 只在本地，还没推到远端
   }],
 
-  "machines": [{ … }],   // provisional：id、label: Text、role、os、online、lastSeen、probeLastReport、system、history
-  "services": [{ … }],   // provisional：一个服务一行（hub 在导出前合并容器与监控，打码后无法再合并）；name: Text、kind（container|monitor|both）、machine、status（up|down|paused|pending|maintenance|unknown）、uptimePct24h、cpuPct、memBytes
-  "runtimes": [{ … }],   // provisional：machine、agent、version、processes、activeSessions、stale
-  "tailnet":  [{ … }],   // provisional：name: Text、os、online、lastSeen
+  "machines": [{ … }],   // provisional：id、label: Text、role（可为 null）、os（可为 null）、online、lastSeen、probeLastReport、system、history
+  "services": [{ … }],   // provisional：一个服务一行（hub 在导出前合并容器与监控，打码后无法再合并）；name: Text、kind（container|monitor|both）、machine（可为 null：没配机器的监控）、status（up|down|paused|pending|maintenance|unknown）、uptimePct24h、cpuPct、memBytes
+  "runtimes": [{ … }],   // provisional：machine、agent、version（可为 null）、processes、activeSessions、stale
+  "tailnet":  [{ … }],   // provisional：name: Text、os、online、lastSeen（可为 null）
   "jobs":     [{ … }],   // provisional：name: Text、machine、lastRun、lastSuccess、ok
 
   "hidden": ["tailnet"]  // 公开版里整块不公开的面板；这些块的值为 []
