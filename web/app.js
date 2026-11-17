@@ -77,11 +77,12 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('keydown', e => {
   const m = $('lang-menu'); if(!m) return;
+  if(e.key === 'Escape' && !m.hidden && (e.target.id === 'lang-btn' || m.contains(e.target))){ e.preventDefault(); langMenu(false, true); return; }
   if(e.target.id === 'lang-btn' && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); langMenu(true, true); return; }
   if(m.hidden || !m.contains(e.target)) return;
   const items = [...m.querySelectorAll('[data-lang]')], i = items.indexOf(e.target);
-  if(e.key === 'Escape'){ e.preventDefault(); langMenu(false, true); }
-  else if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+  if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+  else if(e.key === 'Home' || e.key === 'End'){ e.preventDefault(); items[e.key === 'Home' ? 0 : items.length - 1].focus(); }
   else if(e.key === 'Tab') langMenu(false, false);
 });
 
@@ -129,7 +130,9 @@ function normalize(raw){
     machines: arr(g.machines).map(m => {
       const s = m.system && typeof m.system === 'object' ? m.system : null;
       return {id: m.id == null ? '?' : String(m.id), label: text(m.label), role: str(m.role), os: str(m.os), online: m.online === true,
-        icon: MICON[m.icon] ? m.icon : null, color: MCOLOR[m.color] ? m.color : null,
+        /* own keys only: "constructor" or "toString" are not icons */
+        icon: typeof m.icon === 'string' && Object.hasOwn(MICON, m.icon) ? m.icon : null,
+        color: typeof m.color === 'string' && Object.hasOwn(MCOLOR, m.color) ? m.color : null,
         lastSeen: str(m.lastSeen), probeLastReport: str(m.probeLastReport),
         system: s ? {cpuPct: num(s.cpuPct), memUsed: num(s.memUsed), memTotal: num(s.memTotal), diskUsed: num(s.diskUsed), diskTotal: num(s.diskTotal), uptimeSec: numOrNull(s.uptimeSec)} : null,
         history: arr(m.history).map(h => ({t: str(h.t), cpuPct: numOrNull(h.cpuPct), memPct: numOrNull(h.memPct), diskPct: numOrNull(h.diskPct)})).filter(h => h.t),

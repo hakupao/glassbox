@@ -282,6 +282,18 @@
   "why": "machine colour off the list (raw CSS)"
  },
  {
+  "file": "block-machine-icon-type.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "machine icon that is not a string (number, object)"
+ },
+ {
+  "file": "block-machine-icon-case.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "machine icon in another case: the list is exact"
+ },
+ {
   "file": "block-title-path.json",
   "expect": "block",
   "reason": "path",

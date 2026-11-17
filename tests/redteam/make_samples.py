@@ -101,6 +101,10 @@ js("block-machine-icon", "machine icon off the list (could carry text)", "block"
    lambda o: o.update(machines=[dict(MACHINE, icon="studio-dev")]))
 js("block-machine-color", "machine colour off the list (raw CSS)", "block", "is not enum",
    lambda o: o.update(machines=[dict(MACHINE, color="#ff0000")]))
+js("block-machine-icon-type", "machine icon that is not a string (number, object)", "block", "is not enum",
+   lambda o: o.update(machines=[dict(MACHINE, icon=3), dict(MACHINE, id="V", icon={"name": "laptop"})]))
+js("block-machine-icon-case", "machine icon in another case: the list is exact", "block", "is not enum",
+   lambda o: o.update(machines=[dict(MACHINE, icon="Laptop")]))
 js("block-title-path", "S12: absolute path in a title", "block", "path", title("fix: read /srv/data/app.db"))
 js("block-title-home-path", "S12: home path in a title (built at load time)", "block", "path", title("fix: read {{USERS}}someone/notes.md"))
 js("block-title-tilde-path", "S12: ~ path in a title", "block", "path", title("fix: write ~/notes/plan.txt"))

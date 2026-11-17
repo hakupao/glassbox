@@ -52,12 +52,13 @@ class WebTest(unittest.TestCase):
         for group in icons.values():
             for name, ic in group.items():
                 self.assertRegex(ic["fill"] + ic["line"], r"^[MmLlHhVvCcSsQqTtAaZz0-9.,\s-]+$", name)
-        lic = (ROOT / "web" / "vendor" / "LICENSE-phosphor.txt").read_text(encoding="utf-8")
-        self.assertIn("MIT License", lic)
-        self.assertIn("Phosphor Icons", lic)
+        lic = (ROOT / "web" / "vendor" / "LICENSE-phosphor.txt").read_text(encoding="utf-8").strip()
+        self.assertIn("Copyright (c) 2023 Phosphor Icons", lic)
+        self.assertIn("Permission is hereby granted", lic)
+        self.assertIn(lic, text)                                             # full text in icons.js ...
         doc = page.bundle({})
-        self.assertIn("Phosphor Icons \u2014 MIT License", doc)            # the notice travels with the paths
-        self.assertNotIn("Permission is hereby granted", doc)                # the full text stays in web/vendor/
+        self.assertIn(lic, doc)                                              # ... and so in the one-file snapshot
+        self.assertEqual(check_web.bundle_problems(doc, {}), [])
 
     def test_bundle_is_one_self_contained_document(self):
         from hub import page

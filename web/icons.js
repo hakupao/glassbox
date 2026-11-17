@@ -1,6 +1,29 @@
-/* Phosphor Icons — MIT License, Copyright (c) Phosphor Icons. Full licence text: web/vendor/LICENSE-phosphor.txt
+/* Phosphor Icons — MIT License, Copyright (c) Phosphor Icons. Licence text below (also web/vendor/LICENSE-phosphor.txt).
    Duotone weight, @phosphor-icons/core 2.1.1, 256x256 viewBox; "fill" is the 20% layer, "line" the outline.
-   machine: the machine icons (CONTRACT §2.1 machines[].icon); ui: interface icons. Generated: edit the lists, not the paths. */
+   machine: the machine icons (CONTRACT §2.1 machines[].icon); ui: interface icons. Generated: edit the lists, not the paths.
+
+MIT License
+
+Copyright (c) 2023 Phosphor Icons
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 window.GLASSBOX_ICONS = {
  "machine": {
   "laptop": {
