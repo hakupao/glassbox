@@ -24,8 +24,9 @@ Checks every path given: the publish directory, its index.html, or the page JSON
 - patterns: e-mails, IPv4/IPv6 (only <path d> / <polyline|polygon points> geometry exempt),
   absolute paths (any drive letter), LAN host names, secrets and tokens.
 - single file (review M2): the publish directory holds index.html and optionally CNAME (one
-  domain), nothing else. index.html starts with <!doctype html><html><head> and the exact CSP
-  <meta> (see CSP below), has no <script src>, <link>, <base>, frames or forms, no URL attribute
+  domain), nothing else. index.html, as parsed: <!doctype html>, <html> (lang only), <head>, and
+  the exact CSP <meta> (see CSP below) as head's first element; no <script src>, no <link> but one
+  exact <link rel="icon" href="data:,">, no <base>, frames or forms, no URL attribute
   other than empty, #fragment, data: or a public commit link, no CSS url() / @import except data:,
   exactly one <script> holding only `window.GB = {...};`, and no other script writing GB.
   JSON is parsed with duplicate keys refused.
@@ -96,8 +97,8 @@ PREFIX_ONLY = re.compile(r"\*{6}|(?:feat|fix|docs|style|refactor|perf|tests?|bui
 # Review M2: the public snapshot is ONE self-contained HTML file whose head starts with this CSP.
 CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; "
        "font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'")
-HEAD_RX = re.compile(r"\A\ufeff?\s*<!doctype html>\s*<html(?:\s+lang=\"[A-Za-z-]+\")?\s*>\s*<head>\s*"
-                     r"<meta http-equiv=\"Content-Security-Policy\" content=\"" + re.escape(CSP) + r"\"\s*/?>", re.I)
+CSP_ATTRS = [("http-equiv", "Content-Security-Policy"), ("content", CSP)]
+FAVICON_ATTRS = [("rel", "icon"), ("href", "data:,")]          # the one <link> allowed (lane D bundle)
 GB_SCRIPT = re.compile(r"\s*window\.GB\s*=\s*(.*?)\s*;?\s*", re.S)
 GB_WRITE = re.compile(r"\bGB\w*\b(?:\s*(?:\.\s*[\w$]+|\[[^\]]*\]))*\s*(?:[-+*/%&|^]?=(?!=)|\+\+|--)|\bGB\w*\s*\["
                       r"|\[\s*[\"'`]GB\w*[\"'`]\s*\]"                                  # window['GB']
@@ -141,16 +142,33 @@ class _Parse(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.tags, self.scripts, self.styles, self._in = [], [], [], None
+        self.events = []                      # document order, for the head check
+
+    def handle_decl(self, decl):
+        self.events.append(("decl", decl))
+
+    def handle_comment(self, data):
+        self.events.append(("comment", data))
+
+    def handle_pi(self, data):
+        self.events.append(("pi", data))
+
+    def unknown_decl(self, data):
+        self.events.append(("comment", data))
 
     def handle_starttag(self, tag, attrs):
+        self.events.append(("start", tag, attrs))
         self.tags.append((tag, attrs))
         if tag in ("script", "style"):
             self._in = (tag, attrs, [])
 
     def handle_startendtag(self, tag, attrs):
+        self.events.append(("start", tag, attrs))
         self.tags.append((tag, attrs))
 
     def handle_data(self, data):
+        if data.strip():
+            self.events.append(("data", data))
         if self._in:
             self._in[2].append(data)
 
@@ -609,18 +627,30 @@ class Gate:
     def check_html_structure(self, text, where):
         """CSP head, one inline data script, no external or extra writers of GB (review M2b-d)."""
         bad = []
-        if not HEAD_RX.match(text):
-            bad.append(f"{where}: must start with <!doctype html><html><head> and the exact CSP <meta> first")
-        if len(re.findall(r"(?i)http-equiv", text)) != 1:
-            bad.append(f"{where}: exactly one http-equiv <meta> (the CSP) is allowed")
         p = _Parse()
         try:
-            p.feed(text)
+            p.feed(text.removeprefix("\ufeff"))
             p.close()
         except Exception:                             # noqa: BLE001 — any parser failure rejects
             return bad + [f"{where}: HTML could not be parsed"], None
+        # Parsed, not byte-matched: doctype, <html> (lang only), <head>, then the exact CSP meta as
+        # head's first element. Whitespace may sit between them; nothing else may.
+        ev = p.events[:4]
+        ok = (len(ev) == 4 and ev[0][0] == "decl" and ev[0][1].strip().lower() == "doctype html"
+              and ev[1][:2] == ("start", "html") and all(k == "lang" and re.fullmatch(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", v or "")
+                                                         for k, v in ev[1][2])
+              and ev[2] == ("start", "head", []) and ev[3] == ("start", "meta", CSP_ATTRS))
+        if not ok:
+            bad.append(f"{where}: must be <!doctype html>, <html>, <head> with the exact CSP <meta> as head's first element")
+        if sum(1 for t, a in p.tags if t == "meta" and any(k.lower() == "http-equiv" for k, _ in a)) != 1:
+            bad.append(f"{where}: exactly one http-equiv <meta> (the CSP) is allowed")
+        links = [a for t, a in p.tags if t == "link"]
+        if any(a != FAVICON_ATTRS for a in links) or len(links) > 1:
+            bad.append(f"{where}: <link> is not allowed, except one exact <link rel=\"icon\" href=\"data:,\">")
         for tag, attrs in p.tags:
-            if tag in DENY_TAGS:
+            if tag == "link" and attrs == FAVICON_ATTRS:
+                continue
+            if tag in DENY_TAGS - {"link"}:
                 bad.append(f"{where}: <{tag}> is not allowed in the snapshot")
             for k, v in attrs:
                 k, v = (k or "").lower(), (v or "").strip()

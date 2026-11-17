@@ -423,7 +423,55 @@
   "file": "block-html-link.html",
   "expect": "block",
   "reason": "<link>",
-  "why": "M2c: no <link> at all"
+  "why": "M2c: no <link> except the exact favicon"
+ },
+ {
+  "file": "block-html-link-two-favicons.html",
+  "expect": "block",
+  "reason": "<link>",
+  "why": "M2c: the favicon link at most once"
+ },
+ {
+  "file": "block-html-link-favicon-variant.html",
+  "expect": "block",
+  "reason": "<link>",
+  "why": "M2c: favicon link must match exactly"
+ },
+ {
+  "file": "pass-html-head-lane-d.html",
+  "expect": "pass",
+  "reason": null,
+  "why": "lane D layout: lang, newlines, CSP first in head"
+ },
+ {
+  "file": "block-html-head-comment.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "a comment before the CSP"
+ },
+ {
+  "file": "block-html-head-text.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "text before the CSP"
+ },
+ {
+  "file": "block-html-head-attr.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "an attribute other than lang on <html>"
+ },
+ {
+  "file": "block-html-no-doctype.html",
+  "expect": "block",
+  "reason": "exact CSP",
+  "why": "no doctype"
+ },
+ {
+  "file": "pass-html-favicon.html",
+  "expect": "pass",
+  "reason": null,
+  "why": "the one exact favicon link of the lane D bundle"
  },
  {
   "file": "block-html-second-data.html",

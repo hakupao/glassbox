@@ -25,7 +25,10 @@ path (--context, off by default).
 
     python -m hub.export PRIVATE.json [--config .local/public.local.toml]
         [--terms .local/redact_terms.local.json] [--out out/page.public.json]
-        [--context .cache/export-context.json]
+        [--context .cache/export-context.json] [--site out/site]
+
+--site writes the publish directory: index.html = hub.bundle.bundle(public page), nothing else.
+Run scripts/verify_public.py on that directory before pushing it.
 
 Config format: docs/public.example.toml. A missing config file is an error; --no-config (fabricated
 examples only) means the strictest settings.
@@ -598,6 +601,8 @@ def _main(argv=None):
     ap.add_argument("--terms", default=str(DEFAULT_TERMS))
     ap.add_argument("--out", default=str(ROOT / "out" / "page.public.json"))
     ap.add_argument("--context")
+    ap.add_argument("--site", help="also write DIR/index.html = hub.bundle.bundle(public page); DIR must be "
+                                    "new or empty, so the gate sees exactly what is published")
     a = ap.parse_args(argv)
     try:
         page = json.loads(Path(a.private).read_text(encoding="utf-8"), parse_constant=_no_constant)
@@ -609,11 +614,20 @@ def _main(argv=None):
     except (OSError, ValueError) as e:
         print(f"export failed ({e.__class__.__name__})", file=sys.stderr)
         return 2
+    site = Path(a.site) if a.site else None
+    if site and site.exists() and any(site.iterdir()):
+        print("export failed: --site directory is not empty", file=sys.stderr)
+        return 2
     for path, obj in ((a.out, pub), (a.context, ctx)):
         if path:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"wrote {a.out}" + (f" and the context {a.context} (private: keep it out of git)" if a.context else ""))
+    if site:
+        from .bundle import bundle                    # lane D's single-file page
+        site.mkdir(parents=True, exist_ok=True)
+        (site / "index.html").write_text(bundle(pub), encoding="utf-8")
+    print(f"wrote {a.out}" + (f" and {site}/index.html" if site else "")
+          + (f" and the context {a.context} (private: keep it out of git)" if a.context else ""))
     return 0
 
 

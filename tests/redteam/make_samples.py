@@ -131,7 +131,26 @@ ht("block-html-protocol-relative-img", "S12: protocol-relative image", "block", 
 ht("block-html-image", "S12: external image", "block", "external URL", body='<img src="https://img.example.net/a.png" alt="">')
 ht("block-html-no-data", "HTML without embedded window.GB", "block", "needs exactly one <script>", data=False)
 ht("block-html-script-src", "M2c: no external or local script files", "block", "<script src>", body='<script src="app.js"></script>')
-ht("block-html-link", "M2c: no <link> at all", "block", "<link>", head='<link rel="icon" href="data:,">')
+ht("block-html-link", "M2c: no <link> except the exact favicon", "block", "<link>", head='<link rel="stylesheet" href="data:,">')
+ht("block-html-link-two-favicons", "M2c: the favicon link at most once", "block", "<link>",
+   head='<link rel="icon" href="data:,"><link rel="icon" href="data:,">')
+ht("block-html-link-favicon-variant", "M2c: favicon link must match exactly", "block", "<link>",
+   head='<link rel="icon" href="data:,x" type="image/png">')
+HEAD_PREFIX = '<meta http-equiv="Content-Security-Policy" content="' + CSP + '">'
+for name, why, expect, reason, doc in [
+    ("pass-html-head-lane-d", "lane D layout: lang, newlines, CSP first in head", "pass", None,
+     '<!doctype html>\n<html lang="zh-CN">\n<head>\n' + HEAD_PREFIX + '\n<meta charset="utf-8">\n</head>'),
+    ("block-html-head-comment", "a comment before the CSP", "block", "exact CSP",
+     '<!doctype html><html><head><!-- x -->' + HEAD_PREFIX + '</head>'),
+    ("block-html-head-text", "text before the CSP", "block", "exact CSP", '<!doctype html><html><head>x' + HEAD_PREFIX + '</head>'),
+    ("block-html-head-attr", "an attribute other than lang on <html>", "block", "exact CSP",
+     '<!doctype html><html lang="en" data-x="1"><head>' + HEAD_PREFIX + '</head>'),
+    ("block-html-no-doctype", "no doctype", "block", "exact CSP", '<html><head>' + HEAD_PREFIX + '</head>'),
+]:
+    (S / f"{name}.html").write_text(doc + "<body><script>window.GB = " + json.dumps(BASE) + ";</script></body></html>\n",
+                                    encoding="utf-8")
+    cases.append({"file": f"{name}.html", "expect": expect, "reason": reason, "why": why})
+ht("pass-html-favicon", "the one exact favicon link of the lane D bundle", "pass", None, head='<link rel="icon" href="data:,">')
 ht("block-html-second-data", "M2d: a second data script", "block", "exactly one <script>", body="<script>window.GB = {};</script>")
 ht("block-html-gb-write", "M2d: another script writes GB", "block", "writes GB", body="<script>GB.tailnet = [];</script>")
 ht("block-html-gb-bracket", "M2d: window['GB'] in another script", "block", "writes GB", body="<script>window['GB'].x = 1;</script>")
