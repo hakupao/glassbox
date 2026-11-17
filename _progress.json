@@ -65,12 +65,12 @@
       "note": "hub/page.py + private view; per-day numbers match probe daily (32/34 identical, 2 boundary days explained); local-fallback commit counting (user decision 2026-11-17); Host allowlist; review APPROVE x2"
     },
     "S10b": {
-      "status": "in_progress",
-      "note": "web/ merged (review APPROVE). User approved overview, usage, code, services on 2026-11-17; machines page reworked (per-machine agents, jobs, services, summary table) — awaiting re-approval"
+      "status": "done",
+      "note": "five pages approved by the user 2026-11-17 (machines page reworked: per-machine agents, jobs, services, summary table); reviews APPROVE"
     },
     "S10c": {
-      "status": "in_progress",
-      "note": "zh/ja/en merged with S10b; confirm with user alongside S10b"
+      "status": "done",
+      "note": "zh/ja/en: key sets identical, 0 missing keys in browser runs across 20 routes x 3 widths"
     }
   },
   "evidence": ".local/evidence/ (gitignored: contains real data)",
@@ -78,7 +78,8 @@
     "S10": [
       "front end must tolerate missing keys (e.g. machines[].system null is dropped)",
       "rename 'GitHub 贡献' heading: contributions are deduped commits",
-      "services/monitors/tailnet names are stored as-is (private store); the public export must mask or allowlist them — part of S10/S11 acceptance"
+      "services/monitors/tailnet names are stored as-is (private store); the public export must mask or allowlist them — part of S10/S11 acceptance",
+      "optional: per-machine icon + colour in [machines.X] (user asked 2026-11-17); labels already configurable via [machines.X] label"
     ],
     "S12": [
       "gate(): cross-field rule 4 (private entries: branch/hash/url/machine null, t on the hour) + red-team cases",
