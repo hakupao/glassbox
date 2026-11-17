@@ -14,7 +14,7 @@ i18n (S10c):
 Self-contained page (PLAN §3, S12; the publish gate's rules): in web/ sources no "://" or "//"
 (absolute or protocol-relative URLs), no CSS url() or @import, no a.b.c.d numbers, no
 "token:" / "password=" followed by a value, and no writes to window.GB. bundle_problems() applies
-the same rules to a bundled page (hub.page.bundle) outside its data script, and checks the CSP
+the same rules (plus e-mail- and path-shaped text) to a bundled page (hub.page.bundle) outside its data script, and checks the CSP
 meta comes first, nothing is loaded by src / link, and the data is one strict-JSON script.
 """
 import json
@@ -33,6 +33,8 @@ PREFIX = re.compile(r"'([a-z][A-Za-z]*(?:\.[A-Za-z0-9-]+)*\.)'\s*(?:\+|,)")
 
 
 FOUR = re.compile(r"(?<![\d.])\d+\.\d+\.\d+\.\d+(?![\d.])")
+EMAILISH = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+PATHISH = re.compile(r"/Users/|/home/|/private/|/Volumes/|~/|[A-Za-z]:\\(?=[A-Za-z])")
 SECRETISH = re.compile(r"(?:token\s*:|password\s*=)\s*\S{4,}", re.I)
 GB_WRITE = re.compile(r"\bGB\s*(?:\.\s*\w+\s*|\[[^\]]*\]\s*)(?:[-+*/]?=(?!=)|\+\+|--)|\bwindow\s*\.\s*GB\s*=(?!=)|globalThis\s*\.\s*GB\b")
 
@@ -47,6 +49,10 @@ def code_problems(name, src):
             out.append(f"{name}:{n}: url() / @import")
         if FOUR.search(line):
             out.append(f"{name}:{n}: a.b.c.d number")
+        if EMAILISH.search(line):
+            out.append(f"{name}:{n}: e-mail-shaped text")
+        if PATHISH.search(line):
+            out.append(f"{name}:{n}: file-path-shaped text")
         if SECRETISH.search(line):
             out.append(f"{name}:{n}: 'token:' / 'password=' with a value")
         if GB_WRITE.search(line):
@@ -61,7 +67,7 @@ def bundle_problems(doc, page):
     head = doc.split("<head>", 1)[1].lstrip() if "<head>" in doc else ""
     if not head.startswith(CSP):
         out.append("bundle: CSP meta is not the first element of <head>")
-    if re.search(r"<script\b[^>]*\bsrc=|<link\b", doc, re.I):
+    if re.search(r"<script\b[^>]*\bsrc=", doc, re.I) or doc.replace('<link rel="icon" href="data:,">', "").lower().count("<link"):
         out.append("bundle: loads a file (script src / link)")
     data = re.findall(r"<script>window\.GB = (.*?);</script>", doc, re.S)
     if len(data) != 1:

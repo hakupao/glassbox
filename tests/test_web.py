@@ -45,6 +45,8 @@ class WebTest(unittest.TestCase):
 
     def test_bundle_is_one_self_contained_document(self):
         from hub import page
+        from hub.bundle import bundle
+        self.assertIs(bundle, page.bundle)
         for name in ("page.public.json", "page.private.json"):
             data = json.loads((ROOT / "schema" / "examples" / name).read_text(encoding="utf-8"))
             doc = page.bundle(data)
@@ -76,9 +78,11 @@ class WebTest(unittest.TestCase):
     def test_bundle_problems_catch_gate_violations(self):
         from hub import page
         doc = page.bundle({})
-        bad = doc.replace("</body>", "<p>see 9.8.7.6 or token: abcdef</p><script>window.GB.x = 1; fetch('//cdn.example')</script></body>")
+        self.assertEqual(check_web.bundle_problems(doc, {}), [])
+        bad = doc.replace("</body>", "<p>see 9.8.7.6 or token: abcdef, me" + "@example.org, ~/notes</p>"
+                          "<link rel=\"stylesheet\" href=\"x.css\"><script>window.GB.x = 1; fetch('//cdn.example')</script></body>")
         out = "\n".join(check_web.bundle_problems(bad, {}))
-        for want in ("a.b.c.d", "'token:'", "write to window.GB", "'//'"):
+        for want in ("a.b.c.d", "'token:'", "write to window.GB", "'//'", "e-mail-shaped", "path-shaped", "loads a file"):
             self.assertIn(want, out)
 
     def test_detects_a_missing_translation(self):

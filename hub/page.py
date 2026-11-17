@@ -409,6 +409,7 @@ CSP = ('<meta http-equiv="Content-Security-Policy" content="default-src \'none\'
 _LINK = re.compile(r'<link rel="stylesheet" href="([a-z0-9-]+\.css)">')
 _SCRIPT = re.compile(r'<script src="([a-z0-9-]+\.js)"></script>')
 _CLOSE = re.compile(r"</(script|style)", re.I)
+_FAVICON = re.escape('<link rel="icon" href="data:,">')                  # the one link allowed
 
 
 def html(page, template):
@@ -441,6 +442,6 @@ def bundle(page, web=WEB):
 
     out = _LINK.sub(inline("style"), template)
     out = _SCRIPT.sub(inline("script"), out)
-    if re.search(r"<link\b|<script\b[^>]*\bsrc=", out, re.I):
+    if re.search(r"<script\b[^>]*\bsrc=", out, re.I) or re.sub(_FAVICON, "", out).lower().count("<link"):
         raise ValueError("web/index.html references a file the bundler cannot inline")
     return html(page, out)

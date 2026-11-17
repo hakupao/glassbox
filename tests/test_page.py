@@ -226,7 +226,8 @@ class PageTest(unittest.TestCase):
             self.assertNotIn(page.MARKER, body)
             self.assertNotIn("mockups", body)
             self.assertTrue(body.split("<head>", 1)[1].lstrip().startswith(page.CSP))
-            self.assertNotRegex(body, r"<script[^>]*\bsrc=|<link\b")
+            self.assertNotRegex(body, r"<script[^>]*\bsrc=|<link rel=\"stylesheet")
+            self.assertEqual(body.count("<link"), 1)                     # only the data: favicon
         finally:
             httpd.shutdown()
             httpd.server_close()
