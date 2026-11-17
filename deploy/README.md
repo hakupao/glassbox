@@ -55,6 +55,8 @@ An unreadable or empty secret file makes the container exit at start (see `docke
 
 `docker compose exec glassbox glassbox-entrypoint <args>` runs `python -m hub --config /etc/glassbox/hub.toml <args>` with the secrets in its environment. A plain `docker compose exec glassbox python -m hub ...` would not have them.
 
+Set `[serve] hosts` in `hub.toml` to the node's tailnet name (`<NODE>.<TAILNET_NAME>.ts.net`, where `<NODE>` is `TS_HOSTNAME`). Without it the hub answers every page request with **421** (see Troubleshooting in section 5).
+
 ## 2. Start from an empty database
 
 The hub refuses a database whose `schema_version` differs from the code (`hub/db.py`), so never copy a development database here. The volume `glassbox-data` starts empty, which is correct.
@@ -119,7 +121,13 @@ Not reachable from outside (and the exposure rules hold):
    ```
 3. Not on the internet. The node must not be in Funnel: `docker compose exec tailscale tailscale funnel status` should say funnel is off, and `https://glassbox.<TAILNET_NAME>.ts.net/healthz` must time out from a device without Tailscale (for example a phone on mobile data).
 4. Plain-HTTP hub port closed to the tailnet. From a second tailnet device: `curl -m 5 http://glassbox.<TAILNET_NAME>.ts.net:8787/healthz` must fail (timeout or refused). If it answers, the ACL in section 4 is not in force.
-5. Docker proxy allows only the listing. From the hub container's namespace (no values printed):
+5. Host allowlist. A foreign Host header is refused on the page routes:
+   ```sh
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: evil.example' https://glassbox.<TAILNET_NAME>.ts.net/page.json   # expect: 421
+   curl -s -o /dev/null -w '%{http_code}\n' https://glassbox.<TAILNET_NAME>.ts.net/page.json                          # expect: 200
+   ```
+   Whether `tailscale serve` forwards the original Host header unchanged is **not verified**: test on deployment. If the second call also returns 421, the browser sees 421 too: look at which Host the hub receives and put exactly that in `[serve] hosts`.
+6. Docker proxy allows only the listing. From the hub container's namespace (no values printed):
    ```sh
    docker compose exec glassbox python -c "import urllib.request as u,urllib.error as e
 for p in ('/containers/json?all=1','/containers/x/json','/containers/x/logs','/info'):
@@ -128,7 +136,9 @@ for p in ('/containers/json?all=1','/containers/x/json','/containers/x/logs','/i
    # expect: first path 200, the other three 403 (a 404 for /containers/x/json means the proxy let it through: fix the allowlist)
    ```
    If `docker-proxy` does not start with `read_only`/`cap_drop`, remove `read_only` first, then `cap_drop`, and note which one was needed.
-6. Without a token, ingest is refused: `curl -s -X POST https://glassbox.<TAILNET_NAME>.ts.net/ingest -d '{}'` returns `{"error": "bad token"}` (HTTP 401).
+7. Without a token, ingest is refused: `curl -s -X POST https://glassbox.<TAILNET_NAME>.ts.net/ingest -d '{}'` returns `{"error": "bad token"}` (HTTP 401).
+
+Troubleshooting: the browser shows **421 Misdirected Request** on `/` or `/page.json` = `[serve] hosts` is missing or does not match the Host the hub receives (typo, other `TS_HOSTNAME`, or a different tailnet name). Fix `hub.toml`, then `docker compose restart glassbox`. `/healthz` and `/ingest` are not subject to the check.
 
 ## 6. Run a collector once by hand
 

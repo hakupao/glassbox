@@ -14,6 +14,13 @@ tz = "Asia/Tokyo"             # must be a whole-hour offset zone (CONTRACT secti
 # Commit author addresses that count as yours on Gitea (used when the login does not match).
 author_emails = ["<AUTHOR_EMAIL>"]
 
+# Host headers the page routes (/, /index.html, /page.json) accept; anything else gets HTTP 421.
+# Default is only 127.0.0.1, localhost and ::1. `tailscale serve` proxies with the node's tailnet
+# name as Host, so list it here. Whether serve forwards the Host header unchanged is not
+# verified: test on deployment (README section 5).
+[serve]
+hosts = ["<NODE>.<TAILNET_NAME>.ts.net"]
+
 [github]
 login = "<GITHUB_LOGIN>"
 token_env = "GITHUB_TOKEN"    # fine-grained, read-only token
