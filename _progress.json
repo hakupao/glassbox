@@ -24,10 +24,12 @@
       "note": "git activity (author filter, pushed flag, path scrub), runtimes by exe name, jobs"
     },
     "S06": {
-      "status": "todo"
+      "status": "done",
+      "note": "hub ingest + probe push; loopback e2e with real report; idempotent"
     },
     "S07": {
-      "status": "todo"
+      "status": "done",
+      "note": "GitHub collector verified on real account (23 public repos, 2688 commits; privacy cross-checked via gh api). Gitea tested on a fake API only — needs real read-only tokens at deploy time"
     },
     "S08": {
       "status": "todo"
@@ -69,7 +71,8 @@
       "red-team a short (<5 chars) private name for word-boundary matching"
     ],
     "S13": [
-      "install the pre-commit privacy hook (.git/hooks is not versioned) on every clone"
+      "install the pre-commit privacy hook (.git/hooks is not versioned) on every clone",
+      "Gitea read-only tokens for both instances; GitHub fine-grained read-only token for the hub"
     ]
   }
 }
