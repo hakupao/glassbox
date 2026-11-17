@@ -9,7 +9,7 @@
   C-v7 = C-v6（slate）+ 机器、服务、Agent 运行时、tailnet、定时任务。
   - 直接读 glassbox.page/1（schema/CONTRACT.md §2）。数据：sample-page.js（generate.py 生成，虚构）。
   - ?view=public 看公开快照：私有名字是导出时就替换掉的占位块，再加模糊（真实文本不在页面里）。
-  - ?theme=slate（默认：暗底 + 原色面板）|slate0（上一版）|graphite|ink、?t=秒（冻结背景帧）、?fx=crt。
+  - ?theme=slate（默认：更暗的底 + 半透明面板）|slate1（上一版）|slate0（再上一版）|graphite|ink、?t=秒（冻结背景帧）、?fx=crt。
 -->
 <style>
   :root{
@@ -20,8 +20,10 @@
   }
   :root[data-theme="graphite"]{--bg:#1d2129;--panel:rgba(37,42,52,.72);--dim:#9b978c;--line:rgba(216,211,196,.14);--soft:rgba(216,211,196,.08)}
   :root[data-theme="slate0"]{--bg:#272c35;--panel:rgba(48,54,65,.7);--dim:#a6a297;--line:rgba(216,211,196,.16);--soft:rgba(216,211,196,.09)}
-  /* slate（默认）：底色压暗，面板保持原来看到的颜色（#2d333d，即旧版半透明面板叠在 #272c35 上的结果），几乎不透明 */
-  :root[data-theme="slate"]{--bg:#1b1f26;--panel:rgba(45,51,61,.94);--dim:#a6a297;--line:rgba(216,211,196,.16);--soft:rgba(216,211,196,.09)}
+  :root[data-theme="slate1"]{--bg:#1b1f26;--panel:rgba(45,51,61,.94);--dim:#a6a297;--line:rgba(216,211,196,.16);--soft:rgba(216,211,196,.09)}
+  /* slate（默认）：更暗的底；面板 75% 不透明，颜色按底色反推，使空白处看起来仍是 #2d333d，
+     而背景的流动能透过面板看到（模糊减半，保留形状） */
+  :root[data-theme="slate"]{--bg:#14171c;--panel:rgba(53,60,72,.75);--blur:3px;--dim:#a6a297;--line:rgba(216,211,196,.16);--soft:rgba(216,211,196,.09)}
   *{box-sizing:border-box}
   html{background:var(--bg)}
   body{margin:0;min-height:100vh;color:var(--text);font:14px/1.55 var(--sans);overflow-x:hidden;background:var(--bg);-webkit-font-smoothing:antialiased}
@@ -38,7 +40,7 @@
   .chip.line{background:none;color:var(--dim);border:1px solid var(--line);font-weight:400}
 
   .pn{background:var(--panel);border:1px solid var(--line);padding:16px 18px 18px;margin-bottom:14px;
-    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);min-width:0}
+    -webkit-backdrop-filter:blur(var(--blur,6px));backdrop-filter:blur(var(--blur,6px));min-width:0}
   .ph{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
   .ph h2{margin:0;font:600 15px var(--sans);color:var(--hi)}
   .ph .r{font:12px var(--mono);color:var(--dim);white-space:nowrap}
