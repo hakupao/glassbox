@@ -16,6 +16,8 @@ Checks every file given (the public page JSON and the final HTML):
   `"match": {term: "substring"|"word"}` in the terms file overrides. Text is also checked after
   undoing HTML entities, \\uXXXX escapes and %-encoding.
 - patterns: e-mails, IPv4/IPv6, absolute paths, secrets.
+- other published files (.js .css .svg .txt .webmanifest) get the text checks only; any other
+  file type is rejected, so nothing is published unchecked.
 - resources: no external fonts / CDN / any absolute or protocol-relative URL, except commit URLs
   of public repos and XML namespace URIs.
 
@@ -68,6 +70,7 @@ XMLNS = re.compile(r"http://www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink|XML/1
 SVG_TAG = re.compile(r"(?i)<(?:svg|path|polyline|polygon|g|use|rect|circle|ellipse|line)\b[^>]*>")
 SVG_GEOMETRY = re.compile(r"(?i)(?<![\w-])(?:d|points|viewBox|transform)\s*=\s*\"[-0-9\s.,+eEMmLlHhVvCcSsQqTtAaZz()]*\"")
 GB_MARK = re.compile(r"window\.GB\s*=\s*")
+TEXT_ONLY = {".js", ".mjs", ".css", ".svg", ".txt", ".webmanifest"}
 
 
 class SetupError(Exception):
@@ -337,8 +340,13 @@ class Gate:
             text = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
             return [f"{p.name}: unreadable ({e.__class__.__name__})"]
-        is_html = p.suffix.lower() in (".html", ".htm")
-        bad = self.check_text(text, p.name, is_html)
+        suffix = p.suffix.lower()
+        is_html = suffix in (".html", ".htm")
+        bad = self.check_text(text, p.name, is_html or suffix == ".svg")
+        if suffix in TEXT_ONLY:                 # assets published next to the page: text checks only
+            return bad
+        if suffix not in (".json", ".html", ".htm"):
+            return bad + [f"{p.name}: unknown file type {suffix or '(none)'}; the gate checks .html .json {' '.join(sorted(TEXT_ONLY))}"]
         if is_html:
             m = GB_MARK.search(text)
             if not m:

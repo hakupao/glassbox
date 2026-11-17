@@ -67,6 +67,21 @@ class GateCliTest(unittest.TestCase):
         self.assertIn("view must be 'public'", out)
         self.assertIn("today.h*****: field not in public_fields.json", out)   # today.hourly, key masked
 
+    def test_assets_get_text_checks(self):
+        with tempfile.TemporaryDirectory() as d:
+            ok, bad, odd = Path(d) / "app.js", Path(d) / "style.css", Path(d) / "font.woff2"
+            ok.write_text("const a = 1; // render masked placeholders\n", encoding="utf-8")
+            bad.write_text('@import url("https://fonts.example.net/a.css");\n', encoding="utf-8")
+            odd.write_bytes(b"wOF2")
+            ctx = RT / "context" / "gate-context.json"
+            self.assertEqual(run(ok, *self.common, "--context", ctx)[0], 0)
+            rc, out = run(bad, *self.common, "--context", ctx)
+            self.assertEqual(rc, 1)
+            self.assertIn("external URL", out)
+            rc, out = run(odd, *self.common, "--context", ctx)
+            self.assertEqual(rc, 1)
+            self.assertIn("unknown file type", out)
+
     def test_unreadable_artifact_is_rejected(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "page.json"
