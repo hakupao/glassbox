@@ -137,7 +137,8 @@
   "activity": [{                                // 新→旧，最多 50 条
     "t", "source": "github" | "gitea" | "local",
     "repo": Text, "public": bool, "title",
-    "branch", "hash", "url", "machine"          // 私有条目在公开版里这几项都是 null
+    "branch", "hash", "url", "machine",         // 私有条目在公开版里这几项都是 null
+    "pushed": bool                              // provisional：false = 只在本地，还没推到远端
   }],
 
   "machines": [{ … }],   // provisional：id、label: Text、role、os、online、lastSeen、probeLastReport、system、history

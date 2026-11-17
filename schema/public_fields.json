@@ -31,7 +31,7 @@
 
   "activity[].t": "iso", "activity[].source": "enum:github|gitea|local", "activity[].repo": "text",
   "activity[].public": "bool", "activity[].title": "title", "activity[].branch": "text?",
-  "activity[].hash": "hash?", "activity[].url": "url:public-repo?", "activity[].machine": "code?",
+  "activity[].hash": "hash?", "activity[].url": "url:public-repo?", "activity[].machine": "code?", "activity[].pushed": "bool",
 
   "machines[].id": "code", "machines[].label": "text", "machines[].role": "enum:dev|deploy|work|gitea",
   "machines[].os": "enum:macos|linux|windows", "machines[].online": "bool", "machines[].lastSeen": "iso?",
