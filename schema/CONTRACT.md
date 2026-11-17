@@ -156,6 +156,38 @@
 - **代码活动按 hash 跨来源去重**，同一个提交只保留一条，来源优先级 github > gitea > local。local 来源只保留 `remote=false` 的项目的提交，以及没有推送到远端的提交。
 - `contributions.days[].count` = 当天去重后的提交数。它不是 GitHub 官方的贡献数，所以 S10 要把 c-v6 的标题"GitHub 贡献"改成"提交"一类的说法。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
 - `trend` 的最后一项必须是今天，它的值与 `today` 一致。
+- 其余规则（`hub/page.py`）：
+  - 切日、切小时按 hub 配置的 `tz`；不是整点偏移就拒绝生成。页面里的时间一律换算成这个时区的偏移。
+  - `trend` 每一项都有 `claude-code` 和 `codex` 两个键，没有用量的日子为 0。
+  - `quota`：每个 `(account, agent, window)` 取最新样本；`history` 是 `resetsAt - 窗口长度` 之后的样本。代号来自 hub 配置 `[accounts]`，没配的显示哈希，并在 `warnings` 里提示。
+  - `services`：容器（Beszel 统计 / Docker 状态）和 Kuma 监控按 `(machine, 名字归一化后相等)` 合并；名字不同的用 hub 配置 `[services.merge]`（监控名 → 容器名）指定。合并行用监控名，状态取两者中更差的。
+  - `runtimes[].stale`：该机器探针超过 15 分钟没有上报。`machines[].online`：Beszel 15 分钟内报告在线，或探针 15 分钟内上报过。
+  - `machines[].system` 要么字段齐全，要么为 `null`。没有探针的机器，`role` / `os` / `label` 来自 hub 配置 `[machines.<代号>]`。
+
+### 2.2 详情页字段（*provisional*）
+
+只在私有版里出现。没有加进 `public_fields.json`，所以导出器默认丢弃它们。
+
+```jsonc
+{
+  "usageDays": [{                  // 近 90 天，旧→新，最后一项是今天；没有用量的日子全为 0
+    "date", "requests", "sessions", "unpricedRequests", "tokens": {…}, "cacheHitRate", "costUsd",
+    "byAgent":   [{"agent", "requests", "sessions", "tokens": {…}, "costUsd"}],
+    "byModel":   [{"model", "agent", "requests", "unpricedRequests", "tokens": {…}, "costUsd"}],   // costUsd 规则同 today.byModel
+    "byProject": [{"project": Text, "public", "requests", "sessions", "unpricedRequests", "costUsd"}]
+  }],
+  "code": {
+    "repos": [{"repo": Text, "public", "sources": ["github"|"gitea"|"local"], "commits", "unpushed",
+               "machines": ["A"], "lastCommit"}],      // 与 contributions 同一时间范围、同一份去重结果；按 lastCommit 新→旧
+    "commits": [{ …同 activity[] 的条目 }]              // 近 90 天，新→旧，最多 500 条
+  },
+  "warnings": [{"t", "machine", "kind", "detail"}]      // 近 7 天的 hub 告警（shrink、rebaseline-refused 等）和未命名账号；t 可为 null
+}
+```
+
+已有块的扩充（同样是 *provisional*）：
+- `machines[].history[]` 增加 `diskPct`。history 覆盖近 24 小时，每 20 分钟一个点（来自 Beszel）。
+- `contributions.githubOfficialTotal`：采集过 GitHub 日历后才给出。
 
 ## 3. 公开版不变量（导出器构建、闸门检查，任何一条不满足就拒绝发布）
 

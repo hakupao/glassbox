@@ -7,8 +7,11 @@ import sys
 import threading
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
-from . import ingest
+from . import ingest, page
+
+TEMPLATE = Path(__file__).resolve().parent.parent / "design" / "mockups" / "c-v9.html"   # until web/ exists
 
 MAX_BODY = 8 * 1024 * 1024          # compressed request body
 MAX_JSON = 64 * 1024 * 1024          # after gzip; a normal report is well under 1 MB
@@ -40,8 +43,9 @@ def token_sha(token):
 
 
 class Hub:
-    def __init__(self, conn):
+    def __init__(self, conn, cfg=None):
         self.conn = conn
+        self.cfg = cfg
         self.lock = threading.Lock()
 
     def machine_for(self, auth):
@@ -60,11 +64,13 @@ def make_handler(hub):
         sys_version = ""
         timeout = 30                              # slow or stalled clients
 
-        def _send(self, code, obj):
-            body = json.dumps(obj).encode("utf-8")
+        def _send(self, code, obj, ctype="application/json"):
+            body = obj.encode("utf-8") if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", ctype + "; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            if code == 200 and self.command == "GET":
+                self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
 
@@ -72,8 +78,24 @@ def make_handler(hub):
             pass
 
         def do_GET(self):
-            if self.path == "/healthz":
+            path = self.path.split("?", 1)[0]
+            if path == "/healthz":
                 return self._send(200, {"ok": True})
+            if path == "/favicon.ico":
+                self.send_response(204)
+                self.end_headers()
+                return
+            if path in ("/", "/index.html", "/page.json") and hub.cfg is not None:
+                # The private view (PLAN §2): reachable only where the hub listens (loopback / tailnet).
+                try:
+                    with hub.lock:
+                        data = page.build(hub.conn, hub.cfg)
+                    if path == "/page.json":
+                        return self._send(200, data)
+                    return self._send(200, page.html(data, TEMPLATE.read_text(encoding="utf-8")), "text/html")
+                except Exception as e:            # never echo data
+                    print(f"page error: {type(e).__name__}", file=sys.stderr, flush=True)
+                    return self._send(500, {"error": "internal error"})
             return self._send(404, {"error": "not found"})
 
         def do_POST(self):
@@ -113,8 +135,8 @@ def make_handler(hub):
     return Handler
 
 
-def serve(conn, host="127.0.0.1", port=8787):
-    httpd = ThreadingHTTPServer((host, port), make_handler(Hub(conn)))
+def serve(conn, host="127.0.0.1", port=8787, cfg=None):
+    httpd = ThreadingHTTPServer((host, port), make_handler(Hub(conn, cfg)))
     httpd.daemon_threads = True
     print(f"glassbox hub listening on http://{host}:{port}/", flush=True)
     httpd.serve_forever()

@@ -5,12 +5,16 @@
                                                   # prints a new token once; only its hash is stored
     python -m hub [--config FILE] machine rebaseline ID   # accept shrinking history from ID for 1 hour
     python -m hub [--config FILE] collect [github|gitea|all]
+    python -m hub [--config FILE] page [--out FILE]      # print the private glassbox.page/1 (also served at / and /page.json)
 
 Config (TOML, optional; defaults shown):
     db = "~/.glassbox/hub.sqlite"
     host = "127.0.0.1"
     port = 8787
-    tz = "Asia/Tokyo"
+    tz = "Asia/Tokyo"                               # days and hours are cut in this zone (whole-hour offset)
+    [accounts] "a_1f2e3d4c" = "K"                    # quota account hash -> code shown on the page
+    [machines.C] role = "deploy", os = "macos"       # machines without a probe (Beszel only)
+    [services.merge] "<monitor name>" = "<container name>"   # merge a Kuma monitor into its container's row
     [github]  login = "...", token_env = "GITHUB_TOKEN"
     [[gitea]] name = "...", url = "https://...", user = "...", token_env = "..."
     [beszel]  url = "...", user = "...", password_env = "BESZEL_PASSWORD"; [beszel.map] "<system name>" = "C"
@@ -52,12 +56,14 @@ def main(argv=None):
     rb.add_argument("id")
     c = sub.add_parser("collect")
     c.add_argument("what", nargs="?", default="all", choices=["github", "gitea", "monitors", "all"])
+    pg = sub.add_parser("page")
+    pg.add_argument("--out")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     conn = db.connect(cfg["db"])
 
     if args.cmd == "serve":
-        server.serve(conn, cfg["host"], int(cfg["port"]))
+        server.serve(conn, cfg["host"], int(cfg["port"]), cfg)
     elif args.cmd == "machine" and args.action == "add":
         token = secrets.token_urlsafe(32)
         conn.execute("INSERT INTO machines(id, token_sha, role, os) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
@@ -72,6 +78,14 @@ def main(argv=None):
         if not cur.rowcount:
             sys.exit(f"no machine {args.id}")
         print(f"machine {args.id}: next report may rebaseline (valid 1 hour)")
+    elif args.cmd == "page":
+        import json
+        from . import page
+        text = json.dumps(page.build(conn, cfg), ensure_ascii=False, indent=1) + "\n"
+        if args.out:
+            Path(args.out).expanduser().write_text(text, encoding="utf-8")
+        else:
+            sys.stdout.write(text)
     elif args.cmd == "collect":
         from . import monitors, sources
         if args.what in ("github", "gitea", "all"):
