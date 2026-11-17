@@ -121,16 +121,26 @@ button{font:inherit;color:inherit}
 /* machines (one per line) */
 .mh{display:flex;align-items:center;gap:8px;margin-bottom:2px;min-width:0}
 .code{font:700 12px var(--mono);color:var(--bg);background:var(--text);padding:0 5px;line-height:18px;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
-/* machine tile: duotone icon on a tinted rounded square (--mc), code as a small corner tag */
+/* machine tile: duotone icon on a tinted rounded square (--mc), 1px same-colour edge, a faint inner
+   glow; the code as a corner tag; a breathing dot when the machine is online */
 .mt{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;vertical-align:middle;
-  width:22px;height:20px;margin-right:7px;border-radius:4px;color:var(--mc);
-  background:color-mix(in srgb,var(--mc) 15%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mc) 40%,transparent)}
-.mt svg{display:block}
+  width:20px;height:20px;margin-right:8px;border-radius:5px;color:var(--mc);
+  background:linear-gradient(155deg,color-mix(in srgb,var(--mc) 24%,transparent),color-mix(in srgb,var(--mc) 9%,transparent));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mc) 50%,transparent),inset 0 0 6px color-mix(in srgb,var(--mc) 22%,transparent)}
+.mt svg{display:block;filter:drop-shadow(0 0 2px color-mix(in srgb,var(--mc) 35%,transparent))}
 .mt b{position:absolute;right:-6px;bottom:-4px;min-width:11px;padding:0 2px;border-radius:3px;text-align:center;
   font:700 9px/11px var(--mono);color:var(--bg);background:var(--mc);box-shadow:0 0 0 1.5px var(--bg)}
-.mt.big{width:32px;height:28px;border-radius:6px;margin-right:10px}
-.mt.big b{font-size:10.5px;line-height:13px;min-width:13px;right:-7px;bottom:-5px}
+.mt .on{position:absolute;top:-2px;right:-2px;width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 1.5px var(--bg)}
+@keyframes mt-breathe{0%,100%{box-shadow:0 0 0 1.5px var(--bg),0 0 0 1.5px color-mix(in srgb,var(--ok) 60%,transparent)}60%{box-shadow:0 0 0 1.5px var(--bg),0 0 0 5px transparent}}
+.anim .mt .on{animation:mt-breathe 2.4s ease-out infinite}
+.mt.big{width:38px;height:38px;border-radius:9px;margin-right:12px}
+.mt.big b{font-size:11px;line-height:14px;min-width:14px;right:-6px;bottom:-5px;border-radius:4px}
+.mt.big .on{width:8px;height:8px;top:-3px;right:-3px}
+:root[data-tile="round"] .mt{border-radius:50%}
+:root[data-tile="outline"] .mt{background:none;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mc) 60%,transparent)}
 .tb td .mt,.act .mt{margin-top:1px;margin-bottom:1px}
+.ph:has(.mt.big){align-items:center}
+.ph h2:has(.mt.big){gap:10px}
 .mh b{font-weight:600;color:var(--hi);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .st{width:8px;height:8px;display:inline-block;flex:none}
 .mlist{display:grid;gap:0}
