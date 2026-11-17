@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish gate: refuse a public glassbox snapshot that breaks CONTRACT §3.
 
-Checks every file given (the public page JSON and the final HTML):
+Checks every path given: the publish directory, its index.html, or the page JSON.
 
 - structure (rules 1, 3): no key outside schema/public_fields.json; every value has its declared
   type; placeholders are exactly {"masked": true} (or the merged {"masked": true, "group":
@@ -14,11 +14,15 @@ Checks every file given (the public page JSON and the final HTML):
   (--private), not taken from the exporter. A name is public only if every occurrence is public
   and not Gitea; a name that is both allowlisted / shown and private is rejected.
 - name list (rule 6): terms from .local/redact_terms.local.json and the derived private names
-  must not occur anywhere. Normalised length >= 5: substring match
-  on normalised text (case, - _ . and spaces ignored); shorter: word boundary on the raw text;
-  `"match": {term: "substring"|"word"}` in the terms file overrides. Text is also checked after
-  undoing HTML entities, \\uXXXX escapes and %-encoding.
-- patterns: e-mails, IPv4/IPv6, absolute paths, secrets.
+  (repos, Text values, private commit ids and hosts, telling branch parts) must not occur
+  anywhere. Text is NFKC-normalised, format characters dropped and Cyrillic / Greek look-alikes
+  folded. Long terms (5+ letters or digits, or non-Latin): substring of the letters-and-digits
+  stream. Short terms, commit ids, branch parts: whole words, with _ / camelCase / digit / script
+  changes as boundaries. `"match": {term: "substring"|"word"}` overrides. Entities, \\uXXXX,
+  \\u{X}, \\xHH, CSS escapes, %-encoding and JS concatenation are undone repeatedly and every
+  layer is checked.
+- patterns: e-mails, IPv4/IPv6 (only <path d> / <polyline|polygon points> geometry exempt),
+  absolute paths (any drive letter), LAN host names, secrets and tokens.
 - single file (review M2): the publish directory holds index.html and optionally CNAME (one
   domain), nothing else. index.html starts with <!doctype html><html><head> and the exact CSP
   <meta> (see CSP below), has no <script src>, <link>, <base>, frames or forms, no URL attribute
@@ -30,9 +34,10 @@ Checks every file given (the public page JSON and the final HTML):
 
     python3 scripts/verify_public.py FILE... --private PRIVATE.json
         [--terms .local/redact_terms.local.json] [--config .local/public.local.toml]
-    (--no-private only for fabricated examples)
+    (--no-private / --no-config only for fabricated examples; a missing config is an error)
 
-Exit status: 0 clean, 1 rejected (reasons listed, private words shown masked), 2 setup error.
+Exit status: 0 clean, 1 rejected (reasons listed; private values only as ordinals), 2 setup error
+or any unexpected failure (one line, no traceback).
 This file shares no code with hub/export.py on purpose: one bug must not pass both.
 """
 import argparse

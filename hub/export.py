@@ -483,7 +483,9 @@ def export(page, cfg, terms):
     if clash:
         raise ExportError(f"config codes: {len(clash)} code(s) equal a private name")
     names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all and not is_code(n, cfg)}
-    for e in activity + [c for c in (src.get("code") or {}).get("commits") or [] if isinstance(c, dict)]:
+    code = src.get("code") if isinstance(src.get("code"), dict) else {}
+    commits = code.get("commits") if isinstance(code.get("commits"), list) else []
+    for e in [x for x in activity + commits if isinstance(x, dict)]:
         if isinstance(e, dict) and not is_public(e, "repo"):
             if isinstance(e.get("hash"), str):
                 hashes.add(e["hash"])

