@@ -8,8 +8,10 @@
   --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   color-scheme:dark;
 }
-:root:lang(ja){--sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Noto Sans JP","Meiryo",system-ui,sans-serif}
-:root:lang(en){--sans:"Helvetica Neue","Segoe UI",system-ui,"PingFang SC","Hiragino Sans",sans-serif}
+/* per-language text stacks, on any element with a lang (the page, and each option in the language menu) */
+:lang(zh){--sans:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei","Helvetica Neue",system-ui,sans-serif}
+:lang(ja){--sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Noto Sans JP","Meiryo",system-ui,sans-serif}
+:lang(en){--sans:"Helvetica Neue","Segoe UI",system-ui,"PingFang SC","Hiragino Sans",sans-serif}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{background:var(--bg)}
