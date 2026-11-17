@@ -1,3 +1,4 @@
 secrets/
 .env
 hub.toml
+token-*.txt

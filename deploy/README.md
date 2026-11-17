@@ -40,7 +40,7 @@ sudo chmod 400 secrets/*
 sudo chown root:root secrets/ts_authkey     # only the sidecar (root) reads this one
 ```
 
-Without sudo: keep `secrets/` at mode 0700 and the files at 0444; the directory then protects them on the host. Type secret values with the terminal echo off (`stty -echo; read -r V; stty echo; printf '%s' "$V" > secrets/NAME`), never as a command-line argument.
+Without sudo: keep `secrets/` at mode 0700 and the files at 0444; the directory then protects them on the host. Type secret values with the terminal echo off (`(umask 077; stty -echo; read -r V; stty echo; printf '%s' "$V" > secrets/NAME)`), never as a command-line argument.
 
 The user hands these values over separately (password manager or direct paste into the terminal). They never go in the repository, in chat logs, or in a command line that ends up in shell history.
 
@@ -70,12 +70,11 @@ If the log says `hub database schema ... != ...`, the volume holds an old databa
 ## 3. Register the machines and hand out tokens
 
 ```sh
-docker compose exec -T glassbox glassbox-entrypoint machine add A --role dev --os macos > token-A.txt
-docker compose exec -T glassbox glassbox-entrypoint machine add B --role work --os windows > token-B.txt
-chmod 600 token-*.txt
+(umask 077; docker compose exec -T glassbox glassbox-entrypoint machine add A --role dev --os macos > secrets/token-A.txt)
+(umask 077; docker compose exec -T glassbox glassbox-entrypoint machine add B --role work --os windows > secrets/token-B.txt)
 ```
 
-Each command prints one token on stdout, once; the redirect keeps it off the terminal. Only its hash is stored. **The user should run these commands themselves**: a token printed in an agent's terminal lands in that agent's session transcript. Delete `token-*.txt` after handing the tokens over. Hand each token to the matching machine separately (see `docs/runbooks/install-probe.md`). Roles: `dev`, `work`, `deploy`, `gitea`. A lost token is replaced by running `machine add` again for the same id.
+Each command prints one token on stdout, once; the redirect keeps it off the terminal. Only its hash is stored. **The user should run these commands themselves**: a token printed in an agent's terminal lands in that agent's session transcript. The files are created with mode 0600 from the start (the `umask` in the subshell) and live in the git-ignored `secrets/` directory (`token-*.txt` is also ignored). Delete `secrets/token-*.txt` after handing the tokens over. Hand each token to the matching machine separately (see `docs/runbooks/install-probe.md`). Roles: `dev`, `work`, `deploy`, `gitea`. A lost token is replaced by running `machine add` again for the same id.
 
 ## 4. Restrict the tailnet ACL
 
