@@ -8,7 +8,7 @@ Three containers, no published host port:
 | `glassbox` | The hub (`python -m hub serve`) plus a background `collect all` loop. Shares the sidecar's network namespace (`network_mode: service:tailscale`), so it has no network of its own to expose. |
 | `docker-proxy` | Docker socket proxy with an exact allowlist (`wollomatic/socket-proxy`): only `GET /containers/json` (optionally `/vNN.NN/` prefixed) is forwarded; inspect, logs, exec, archive, export and all write methods answer 403, and only the sidecar's address may connect. |
 
-**Status: written and statically checked only.** The author's machine has no Docker, so `docker compose config` and `docker compose up` have never been run. Image parameters written from memory (socket-proxy flags and port, Tailscale health-check variables, image tags) are marked in `compose.yaml`: check them against the official documentation before deploying, and pin image digests. `read_only`, `cap_drop` and the `:ro` socket mount are also untested; the fallback for each is written next to it in `compose.yaml` or in section 5.
+**Status: written and statically checked only.** The author's machine has no Docker, so `docker compose config` and `docker compose up` have never been run. The image contains `hub/`, all of `probe/` (price table) and `design/mockups/c-v9.html` (the template; moves to `web/` later, see the comment in `Dockerfile`); without them `/` answers 500. Image parameters written from memory (socket-proxy flags and port, Tailscale health-check variables, image tags) are marked in `compose.yaml`: check them against the official documentation before deploying, and pin image digests. `read_only`, `cap_drop` and the `:ro` socket mount are also untested; the fallback for each is written next to it in `compose.yaml` or in section 5.
 
 Placeholders in this directory: `<TAILNET_NAME>`, `<GITEA_URL>` and so on. Real values go only in the git-ignored files `hub.toml`, `.env` and `secrets/`.
 
@@ -89,6 +89,8 @@ The sidecar runs Tailscale in userspace mode. Without an ACL, any tailnet member
   ]
 }
 ```
+
+**Security note: the hub's pages `/` and `/page.json` have no authentication.** The only protection is that the hub listens inside the tailnet and the ACL lets only your own devices reach `tag:glassbox:443`. Anything that can reach that port sees the full private view (project names, repositories, machines). Keep `<ALLOWED_USERS_OR_GROUP>` to your own devices and never enable Tailscale Funnel or share the node. (`/ingest` is separately protected by per-machine tokens.)
 
 Changing the tailnet policy is an external change: **ask the user first.** Tagged nodes do not expire their key; that is expected here. The auth key (`secrets/ts_authkey`) must be created with the tag `tag:glassbox`, and `.env` must carry `TS_EXTRA_ARGS=--advertise-tags=tag:glassbox` (the example does).
 

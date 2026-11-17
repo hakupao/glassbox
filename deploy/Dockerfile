@@ -10,6 +10,12 @@ RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin glas
 
 WORKDIR /app
 COPY hub/ /app/hub/
+# Runtime dependencies of the hub besides hub/: the price table (probe/pricing.py, pricing.json,
+# imported by hub/page.py; all of probe/ is copied) and the private-view template, which
+# hub/server.py reads from <repo root>/design/mockups/c-v9.html. When the template moves to
+# web/, replace the design/ line with a web/ copy and the matching line in Dockerfile.dockerignore.
+COPY probe/ /app/probe/
+COPY design/mockups/c-v9.html /app/design/mockups/c-v9.html
 COPY deploy/entrypoint.sh /usr/local/bin/glassbox-entrypoint
 RUN chmod 0755 /usr/local/bin/glassbox-entrypoint
 
