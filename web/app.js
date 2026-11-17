@@ -13,19 +13,26 @@ const $ = G.$ = id => document.getElementById(id);
 const DICT = window.GLASSBOX_I18N || {};
 const LANGS = ['zh', 'ja', 'en'], LOCALE = {zh: 'zh-CN', ja: 'ja-JP', en: 'en-US'};
 const missing = window.GLASSBOX_I18N_MISSING = new Set();
-function store(k, v){ try{ if(v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); }catch(e){ return null; } return null; }
-function pickLang(){
-  const q = (Q.get('lang') || '').toLowerCase();
-  if(LANGS.includes(q)){ store('gb.lang', q); return q; }
-  const s = store('gb.lang');
-  if(LANGS.includes(s)) return s;
+function store(k, v){ try{ if(v === undefined) return localStorage.getItem(k); if(v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(e){ return null; } return null; }
+/* Language preference: 'auto' (default: follow the browser) or a fixed language. A fixed choice is
+   kept in localStorage; ?lang=zh|ja|en sets it, ?lang=auto clears it. */
+const PREFS = ['auto', 'zh', 'en', 'ja'];
+function browserLang(){
   for(const l of (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''])){
     const p = String(l).toLowerCase().slice(0, 2);
     if(LANGS.includes(p)) return p;
   }
   return 'en';
 }
-G.lang = pickLang();
+function pickPref(){
+  const q = (Q.get('lang') || '').toLowerCase();
+  if(q === 'auto'){ store('gb.lang', null); return 'auto'; }
+  if(LANGS.includes(q)){ store('gb.lang', q); return q; }
+  const s = store('gb.lang');
+  return LANGS.includes(s) ? s : 'auto';
+}
+G.pref = pickPref();
+G.lang = G.pref === 'auto' ? browserLang() : G.pref;
 const t = G.t = (key, vars) => {
   let s = (DICT[G.lang] || {})[key];
   if(s === undefined){ missing.add(G.lang + ':' + key); s = (DICT.en || {})[key]; if(s === undefined) s = key; }
@@ -33,18 +40,50 @@ const t = G.t = (key, vars) => {
   return s;
 };
 G.has = key => (DICT[G.lang] || {})[key] !== undefined;
+/* the switcher: a trigger (globe, current choice, the language in effect when AUTO) and a menu */
+function langSwitcher(){
+  const open = !!($('lang-menu') && !$('lang-menu').hidden);
+  const cur = G.pref === 'auto' ? `<span>${esc(t('lang.auto'))}</span><small>${esc(t('lang.' + G.lang))}</small>` : `<span>${esc(t('lang.' + G.pref))}</span>`;
+  $('lang').innerHTML = `<button type="button" class="lang-btn" id="lang-btn" aria-haspopup="menu" aria-expanded="${open}" aria-controls="lang-menu" aria-label="${esc(t('lang.aria'))}">${G.uicon('globe', 14)}${cur}<i class="caret" aria-hidden="true"></i></button>
+    <div class="lang-menu" id="lang-menu" role="menu" aria-label="${esc(t('lang.aria'))}"${open ? '' : ' hidden'}><div class="lm-h" aria-hidden="true">${esc(t('lang.aria'))}</div>` +
+    PREFS.map(p => `<button type="button" role="menuitemradio" aria-checked="${p === G.pref}" data-lang="${p}" tabindex="-1"><span class="lm-n">${esc(t('lang.name.' + p))}</span>` +
+      `<small>${esc(p === 'auto' ? t('lang.now', {l: t('lang.name.' + G.lang)}) : t('lang.' + p))}</small><i class="lm-c" aria-hidden="true"></i></button>`).join('') + `</div>`;
+}
 function applyStatic(){
   document.documentElement.lang = LOCALE[G.lang];
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
-  $('lang').innerHTML = LANGS.map(l => `<button type="button" data-lang="${l}" aria-pressed="${l === G.lang}">${t('lang.' + l)}</button>`).join('');
+  langSwitcher();
 }
-G.setLang = l => {
-  if(!LANGS.includes(l) || l === G.lang) return;
-  G.lang = l; store('gb.lang', l);
-  if(Q.has('lang')){ Q.set('lang', l); history.replaceState(null, '', '?' + Q.toString() + location.hash); }
-  makeFormatters(); applyStatic(); G.render(true);
+function langMenu(open, focus){
+  const m = $('lang-menu'), b = $('lang-btn'); if(!m || !b) return;
+  m.hidden = !open; b.setAttribute('aria-expanded', String(open));
+  if(open && focus){ const items = [...m.querySelectorAll('[data-lang]')]; (items.find(i => i.getAttribute('aria-checked') === 'true') || items[0]).focus(); }
+  if(!open && focus) b.focus();
+}
+G.setLang = pref => {
+  if(!PREFS.includes(pref)) return;
+  const before = G.lang;
+  G.pref = pref; G.lang = pref === 'auto' ? browserLang() : pref;
+  store('gb.lang', pref === 'auto' ? null : pref);
+  if(Q.has('lang')){ Q.set('lang', pref); history.replaceState(null, '', '?' + Q.toString() + location.hash); }
+  if(G.lang !== before){ makeFormatters(); applyStatic(); G.render(true); } else applyStatic();
+  langMenu(false, true);
 };
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#lang-btn');
+  if(b){ langMenu($('lang-menu').hidden, false); return; }
+  if(!(e.target.closest && e.target.closest('#lang-menu'))) langMenu(false, false);
+}, true);
+document.addEventListener('keydown', e => {
+  const m = $('lang-menu'); if(!m) return;
+  if(e.target.id === 'lang-btn' && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); langMenu(true, true); return; }
+  if(m.hidden || !m.contains(e.target)) return;
+  const items = [...m.querySelectorAll('[data-lang]')], i = items.indexOf(e.target);
+  if(e.key === 'Escape'){ e.preventDefault(); langMenu(false, true); }
+  else if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus(); }
+  else if(e.key === 'Tab') langMenu(false, false);
+});
 
 /* ------------------------------------------------------------------ data */
 const num = v => typeof v === 'number' && isFinite(v) ? v : 0;
@@ -54,12 +93,9 @@ const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
 const str = v => typeof v === 'string' ? v : null;
 const tok = v => { v = obj(v); return {input: num(v.input), output: num(v.output), cacheRead: num(v.cacheRead), cacheWrite: num(v.cacheWrite), reasoning: num(v.reasoning)}; };
 G.totTok = k => k.input + k.output + k.cacheRead + k.cacheWrite;
-/* machine icons (5x5 cells, the panel-icon language) and colours: the closed lists of
-   CONTRACT §2.1; anything else is treated as unset and gets the default */
-const MICON = {laptop: ['01110', '01010', '01110', '00000', '11111'], desktop: ['11111', '10001', '11111', '00100', '01110'],
-  server: ['11111', '10011', '11111', '10011', '11111'], vm: ['11011', '10001', '00000', '10001', '11011'],
-  nas: ['11111', '10101', '11111', '10101', '11111'], mini: ['00000', '11111', '10001', '11111', '00000'],
-  cloud: ['00000', '01100', '11110', '11111', '00000'], pi: ['10101', '11111', '10001', '11111', '10101']};
+/* machine icons: Phosphor duotone paths from web/icons.js (window.GLASSBOX_ICONS); the names are the
+   closed list of CONTRACT §2.1; anything else is treated as unset and gets the default */
+const MICON = (window.GLASSBOX_ICONS || {}).machine || {}, UICON = (window.GLASSBOX_ICONS || {}).ui || {};
 const MCOLOR = {blue: '#6c97d6', green: '#79b98a', paper: '#efeadd', violet: '#a48ee0', orange: '#e3894d', cyan: '#5fb7b0', yellow: '#dba843', red: '#e0645a'};
 const MCOLORS = ['blue', 'green', 'paper', 'violet', 'orange', 'cyan', 'yellow', 'red'];
 const defIcon = (role, os) => role === 'dev' || role === 'work' ? (os === 'macos' || os === null || role === 'work' ? 'laptop' : 'desktop')
@@ -223,10 +259,13 @@ G.code = id => `<span class="code" title="${esc(id)}">${esc(id)}</span>`;
 /* machine chip: the code in the machine's colour with its icon; unknown ids get the defaults */
 G.mlook = id => { const m = D.machines.find(x => x.id === id);
   return {icon: (m && m.icon) || defIcon(m ? m.role : null, m ? m.os : null), color: (m && m.color) || defColor(id)}; };
-G.micon = (name, col, size = 10) => { const rows = MICON[name] || MICON.server, u = size / 5;
-  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">${rows.flatMap((row, r) => [...row].map((v, k) => v === '1' ? `<rect x="${(k * u).toFixed(2)}" y="${(r * u).toFixed(2)}" width="${(u * 0.84).toFixed(2)}" height="${(u * 0.84).toFixed(2)}" fill="${col}"/>` : '')).join('')}</svg>`; };
+G.uicon = (name, size) => { const ic = UICON[name]; if(!ic) return '';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${ic.fill}" opacity="0.2"/><path d="${ic.line}"/></svg>`; };
+G.micon = (name, size) => { const ic = MICON[name] || MICON.server; if(!ic) return '';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${ic.fill}" opacity="0.2"/><path d="${ic.line}"/></svg>`; };
+/* machine tile: the icon on a tinted rounded square in the machine's colour, its code as a corner tag */
 G.mc = (id, big) => { const L = G.mlook(id), col = MCOLOR[L.color];
-  return `<span class="mc${big ? ' big' : ''}" style="--mc:${col}" title="${esc(id)} \u00b7 ${esc(t('micon.' + L.icon))}">${G.micon(L.icon, col, big ? 15 : 12)}<b>${esc(id)}</b></span>`; };
+  return `<span class="mt${big ? ' big' : ''}" style="--mc:${col}" title="${esc(id)} \u00b7 ${esc(t('micon.' + L.icon))}">${G.micon(L.icon, big ? 20 : 14)}<b>${esc(id)}</b></span>`; };
 G.lbl = (prefix, v) => v == null ? '—' : G.has(prefix + v) ? esc(t(prefix + v)) : esc(v);
 G.OS = v => v === 'macos' ? 'macOS' : v === 'windows' ? 'Windows' : v === 'linux' ? 'Linux' : esc(v || '—');
 

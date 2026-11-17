@@ -36,11 +36,29 @@ button{font:inherit;color:inherit}
 .meta{display:flex;gap:8px;align-items:center;font:12px var(--mono);color:var(--dim);flex-wrap:wrap;justify-content:flex-end}
 .chip{color:var(--bg);background:var(--fg);padding:2px 8px;font-weight:600;white-space:nowrap}
 .chip.line{background:none;color:var(--dim);border:1px solid var(--line);font-weight:400}
-.lang{display:inline-flex;border:1px solid var(--line)}
-.lang button{background:none;border:0;padding:2px 8px;font:500 11.5px var(--sans);color:var(--dim);cursor:pointer}
-.lang button+button{border-left:1px solid var(--line)}
-.lang button[aria-pressed="true"]{color:var(--bg);background:var(--text)}
-.lang button:hover:not([aria-pressed="true"]){color:var(--hi)}
+.lang{position:relative}
+.lang-btn{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;background:none;border:1px solid var(--line);
+  color:var(--text);font:600 11.5px var(--mono);letter-spacing:.04em;cursor:pointer;white-space:nowrap}
+.lang-btn svg{color:var(--fg)}
+.lang-btn small{font:500 11px var(--sans);color:var(--dim);letter-spacing:0}
+.lang-btn small::before{content:"\00b7";margin-right:5px;color:var(--dim)}
+.lang-btn .caret{width:6px;height:6px;border-right:1.5px solid var(--dim);border-bottom:1.5px solid var(--dim);transform:translateY(-2px) rotate(45deg);transition:transform .15s}
+.lang-btn[aria-expanded="true"]{background:var(--panel);border-color:color-mix(in srgb,var(--fg) 50%,transparent)}
+.lang-btn[aria-expanded="true"] .caret{transform:translateY(1px) rotate(-135deg)}
+.lang-btn:hover{color:var(--hi);border-color:color-mix(in srgb,var(--text) 35%,transparent)}
+.lang-btn:focus-visible,.lang-menu button:focus-visible{outline:1px solid var(--fg);outline-offset:-1px}
+.lang-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:90;min-width:268px;max-width:calc(100vw - 32px);padding:6px;
+  background:rgba(24,28,35,.97);border:1px solid var(--line);box-shadow:0 12px 32px rgba(0,0,0,.45);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.lm-h{font:600 10.5px var(--mono);letter-spacing:.12em;color:var(--dim);padding:4px 8px 6px;text-transform:uppercase}
+.lang-menu button{display:grid;grid-template-columns:1fr auto 14px;align-items:center;gap:10px;width:100%;padding:7px 8px;
+  background:none;border:0;text-align:left;cursor:pointer;color:var(--text)}
+.lang-menu button:hover,.lang-menu button:focus-visible{background:color-mix(in srgb,var(--hi) 6%,transparent)}
+.lang-menu .lm-n{font:500 13px var(--sans);white-space:nowrap}
+.lang-menu small{font:500 11px var(--mono);color:var(--dim);white-space:nowrap}
+.lang-menu [aria-checked="true"]{background:color-mix(in srgb,var(--fg) 12%,transparent)}
+.lang-menu [aria-checked="true"] .lm-n{color:var(--hi);font-weight:600}
+.lang-menu [aria-checked="true"] .lm-c{width:5px;height:9px;border-right:1.5px solid var(--ok);border-bottom:1.5px solid var(--ok);transform:translate(3px,-1px) rotate(45deg)}
 @media (max-width:1060px){.top{grid-template-columns:auto 1fr}.nav{grid-column:1/-1;grid-row:2}}
 @media (max-width:640px){
   .top{gap:10px 12px;padding:14px 0 10px}
@@ -103,12 +121,16 @@ button{font:inherit;color:inherit}
 /* machines (one per line) */
 .mh{display:flex;align-items:center;gap:8px;margin-bottom:2px;min-width:0}
 .code{font:700 12px var(--mono);color:var(--bg);background:var(--text);padding:0 5px;line-height:18px;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
-/* machine chip: icon + code in the machine's colour (--mc) */
-.mc{display:inline-flex;align-items:center;gap:4px;padding:0 5px 0 4px;line-height:18px;vertical-align:middle;white-space:nowrap;
-  font:700 12px var(--mono);color:var(--mc);background:color-mix(in srgb,var(--mc) 16%,transparent);border:1px solid color-mix(in srgb,var(--mc) 55%,transparent)}
-.mc svg{display:block;flex:none}
-.mc b{font-weight:700;color:var(--mc)}
-.mc.big{font-size:14px;line-height:22px;gap:6px;padding:0 7px 0 6px}
+/* machine tile: duotone icon on a tinted rounded square (--mc), code as a small corner tag */
+.mt{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;vertical-align:middle;
+  width:22px;height:20px;margin-right:7px;border-radius:4px;color:var(--mc);
+  background:color-mix(in srgb,var(--mc) 15%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mc) 40%,transparent)}
+.mt svg{display:block}
+.mt b{position:absolute;right:-6px;bottom:-4px;min-width:11px;padding:0 2px;border-radius:3px;text-align:center;
+  font:700 9px/11px var(--mono);color:var(--bg);background:var(--mc);box-shadow:0 0 0 1.5px var(--bg)}
+.mt.big{width:32px;height:28px;border-radius:6px;margin-right:10px}
+.mt.big b{font-size:10.5px;line-height:13px;min-width:13px;right:-7px;bottom:-5px}
+.tb td .mt,.act .mt{margin-top:1px;margin-bottom:1px}
 .mh b{font-weight:600;color:var(--hi);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .st{width:8px;height:8px;display:inline-block;flex:none}
 .mlist{display:grid;gap:0}

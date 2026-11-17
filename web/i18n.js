@@ -342,7 +342,13 @@ window.GLASSBOX_I18N = {
   "micon.nas": "NAS",
   "micon.mini": "小主机",
   "micon.cloud": "云主机",
-  "micon.pi": "单板机"
+  "micon.pi": "单板机",
+  "lang.auto": "AUTO",
+  "lang.name.auto": "跟随浏览器",
+  "lang.name.zh": "简体中文",
+  "lang.name.ja": "日本語",
+  "lang.name.en": "English",
+  "lang.now": "当前：{l}"
  },
  "ja": {
   "brand": "glassbox",
@@ -686,7 +692,13 @@ window.GLASSBOX_I18N = {
   "micon.nas": "NAS",
   "micon.mini": "小型 PC",
   "micon.cloud": "クラウド",
-  "micon.pi": "シングルボード"
+  "micon.pi": "シングルボード",
+  "lang.auto": "AUTO",
+  "lang.name.auto": "ブラウザに合わせる",
+  "lang.name.zh": "简体中文",
+  "lang.name.ja": "日本語",
+  "lang.name.en": "English",
+  "lang.now": "現在：{l}"
  },
  "en": {
   "brand": "glassbox",
@@ -1030,6 +1042,12 @@ window.GLASSBOX_I18N = {
   "micon.nas": "NAS",
   "micon.mini": "mini PC",
   "micon.cloud": "cloud",
-  "micon.pi": "single-board"
+  "micon.pi": "single-board",
+  "lang.auto": "AUTO",
+  "lang.name.auto": "Match browser",
+  "lang.name.zh": "简体中文",
+  "lang.name.ja": "日本語",
+  "lang.name.en": "English",
+  "lang.now": "now: {l}"
  }
 };

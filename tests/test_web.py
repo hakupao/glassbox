@@ -43,6 +43,22 @@ class WebTest(unittest.TestCase):
         from hub import page
         self.assertEqual((ROOT / "web" / "index.html").read_text(encoding="utf-8").count(page.MARKER), 1)
 
+    def test_machine_icons_match_the_hub_list_and_keep_the_licence(self):
+        from hub import page
+        text = (ROOT / "web" / "icons.js").read_text(encoding="utf-8")
+        self.assertIn("Phosphor Icons \u2014 MIT License, Copyright (c) Phosphor Icons", text.splitlines()[0])
+        icons = json.loads(text.split("window.GLASSBOX_ICONS = ", 1)[1].rstrip().rstrip(";"))
+        self.assertEqual(set(icons["machine"]), set(page.MACHINE_ICONS))
+        for group in icons.values():
+            for name, ic in group.items():
+                self.assertRegex(ic["fill"] + ic["line"], r"^[MmLlHhVvCcSsQqTtAaZz0-9.,\s-]+$", name)
+        lic = (ROOT / "web" / "vendor" / "LICENSE-phosphor.txt").read_text(encoding="utf-8")
+        self.assertIn("MIT License", lic)
+        self.assertIn("Phosphor Icons", lic)
+        doc = page.bundle({})
+        self.assertIn("Phosphor Icons \u2014 MIT License", doc)            # the notice travels with the paths
+        self.assertNotIn("Permission is hereby granted", doc)                # the full text stays in web/vendor/
+
     def test_bundle_is_one_self_contained_document(self):
         from hub import page
         from hub.bundle import bundle
