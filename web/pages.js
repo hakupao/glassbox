@@ -161,7 +161,7 @@ function jobRows(list, full){
 /* stacked daily cell chart: days [{date, parts:{key:value}}], series [{key,label,color}] bottom-up */
 function stackChart(w, days, series, fmt, o = {}){
   const n = days.length; if(!n) return G.empty();
-  const p = 5, avail = w - 44, per = Math.max(1, Math.floor(avail / p / n)), nc = per * n, NR = o.rows || (w < 500 ? 18 : 24), gapCol = per >= 3 ? per - 1 : -1;
+  const avail = w - 44, p = Math.max(2, Math.min(5, Math.floor(avail / n))), per = Math.max(1, Math.floor(avail / p / n)), nc = per * n, NR = Math.round((o.rows || (w < 500 ? 18 : 24)) * 5 / p), gapCol = per >= 3 ? per - 1 : -1;
   const tot = days.map(d => sum(series.map(s => d.parts[s.key] || 0))), mx = max(tot) || 1;
   const cum = days.map(d => { let acc = 0; return series.map(s => (acc += (d.parts[s.key] || 0)) / mx * NR); });
   const svg = G.cells(nc, NR, (c, r) => {
@@ -173,7 +173,7 @@ function stackChart(w, days, series, fmt, o = {}){
       return [Math.min(1, top ? 1 : 0.42 + 0.42 * rb / f), series[si].color];
     }
     return [0.05, 0];
-  }, {pitch: p, px: 4, overlay: (pp, W, H) => days.map((d, i) => {
+  }, {pitch: p, px: p >= 5 ? 4 : p * 0.75, overlay: (pp, W, H) => days.map((d, i) => {
     const lines = [F.dfull(d.date) + '  ' + fmt(tot[i])].concat(series.filter(s => d.parts[s.key]).slice().reverse().map(s => `  ${s.label}  ${fmt(d.parts[s.key])}`));
     return `<rect class="ov" x="${i * per * pp}" y="0" width="${per * pp}" height="${H}" data-tip="${esc(lines.join('\n'))}"/>`; }).join('')});
   const ys = [mx, mx / 2, 0].map((v, i) => `<span class="yl" style="top:${i === 0 ? 0 : i === 1 ? (NR * p / 2 - 7) : (NR * p - 12)}px">${esc(fmt === F.usd ? F.usd0(v) : F.tok(v))}</span>`).join('');
@@ -295,9 +295,10 @@ function seriesDetail(w, days, pick, color, tokens, unpriced, sessions){
 }
 function miniBars(w, dates, vals, color, fmt, NR = 8){
   const n = vals.length; if(!n) return '';
-  const p = 4, per = Math.max(1, Math.floor(w / p / n)), nc = per * n, mx = max(vals) || 1;
+  const p = Math.max(2, Math.min(4, Math.floor(w / n))), per = Math.max(1, Math.floor(w / p / n)), nc = per * n, mx = max(vals) || 1;
+  NR = Math.round(NR * 4 / p);
   return G.cells(nc, NR, (c, r) => { const d = Math.floor(c / per); if(per >= 3 && c % per === per - 1) return null; const f = vals[d] / mx * NR, rb = NR - 1 - r;
-    return rb + 0.5 <= f && vals[d] > 0 ? [0.5 + 0.45 * rb / NR, color] : [0.05, 0]; }, {pitch: p, px: 3.2,
+    return rb + 0.5 <= f && vals[d] > 0 ? [0.5 + 0.45 * rb / NR, color] : [0.05, 0]; }, {pitch: p, px: p * 0.8,
     overlay: (pp, W, H) => vals.map((v, i) => `<rect class="ov" x="${i * per * pp}" y="0" width="${per * pp}" height="${H}" data-tip="${esc(F.dfull(dates[i]) + '  ' + fmt(v))}"/>`).join('')});
 }
 

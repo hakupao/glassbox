@@ -82,8 +82,9 @@ button{font:inherit;color:inherit}
 .kpis>div:first-child{padding-left:0;border-left:0}
 .kpis.sm .val{font-size:22px}
 .kpis .val{overflow:hidden;text-overflow:ellipsis}
-.hero .kpis[style*="--n:6"] .val{font-size:27px}
-@media (max-width:1200px){.hero .kpis[style*="--n:6"] .val{font-size:22px}}
+.hero .kpis[style*="--n:6"] .val{font-size:24px}
+@media (max-width:1200px){.kpis[style*="--n:6"]{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:16px}.kpis[style*="--n:6"]>div:nth-child(3n+1){padding-left:0;border-left:0}.hero .kpis[style*="--n:6"] .val{font-size:26px}}
+@media (max-width:560px){.kpis[style*="--n:6"]{grid-template-columns:1fr 1fr}.kpis[style*="--n:6"]>div{padding:0 0 0 14px;border-left:1px solid var(--soft)}.kpis[style*="--n:6"]>div:nth-child(odd){padding-left:0;border-left:0}.hero .kpis[style*="--n:6"] .val{font-size:20px}}
 @media (max-width:960px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:16px}.kpis>div:nth-child(3n+1){padding-left:0;border-left:0}}
 @media (max-width:560px){.kpis{grid-template-columns:1fr 1fr}.kpis>div{padding:0 0 0 14px;border-left:1px solid var(--soft)}.kpis>div:nth-child(3n+1){padding-left:14px;border-left:1px solid var(--soft)}.kpis>div:nth-child(odd){padding-left:0;border-left:0}
   .hero .val{font-size:28px}}
@@ -138,7 +139,8 @@ button{font:inherit;color:inherit}
 .tb tr:first-child td{border-top:0}
 .tb th{font:500 11px var(--sans);letter-spacing:.06em;color:var(--dim);border-top:0;padding-top:0;white-space:nowrap}
 .tb th+th,.tb td+td{padding-left:10px}
-.tb .n{color:var(--text);white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.tb .n{color:var(--text);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.tb td.n .bd{max-width:230px;vertical-align:middle}
 .tb .m{font-family:var(--mono)}
 .tb .v{font:12.5px var(--mono);color:var(--hi);text-align:right;white-space:nowrap}
 .tb th.v{font:500 11px var(--sans);color:var(--dim)}
@@ -149,7 +151,7 @@ button{font:inherit;color:inherit}
 @media (max-width:560px){.tb .bar{width:22%}.hide-s{display:none}}
 @media (max-width:760px){.hide-m{display:none}
   /* the name column takes what is left and ellipsises instead of widening the table */
-  .tb td.n{max-width:0;width:100%}.tb .bar{min-width:40px}}
+  .tb td.n{max-width:0;width:100%}.tb td.n .bd{max-width:calc(100% - 18px)}.tb .bar{min-width:40px}}
 .sep{height:16px}
 .tbw{overflow-x:auto}
 

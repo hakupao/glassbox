@@ -120,7 +120,7 @@ function makeFormatters(){
   const L = LOCALE[G.lang];
   const n0 = new Intl.NumberFormat(L, {maximumFractionDigits: 0});
   const n1 = new Intl.NumberFormat(L, {maximumFractionDigits: 1, minimumFractionDigits: 1});
-  const cmp = new Intl.NumberFormat(L, {notation: 'compact', maximumSignificantDigits: 3});
+  const cmp = new Intl.NumberFormat(L, {notation: 'compact', maximumSignificantDigits: 4});
   const cmp2 = cmp;
   const usd = new Intl.NumberFormat(L, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2});
   const usd0 = new Intl.NumberFormat(L, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0});
