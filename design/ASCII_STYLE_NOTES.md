@@ -97,3 +97,4 @@
 - 2026-11-17 用户：「可以不用这么深的颜色吗，同是深色，淡一点的深色可能有高级感」。c-v6 加了三档底色，`?theme=ink`（原 #0f1218）、`graphite`（#1d2129，现默认）、`slate`（#272c35），截图在 `shots/c-v6-{ink,graphite,slate}-full.png`。等用户定档。
 - 2026-11-17 用户定底色：**slate**（#272c35），c-v6 默认改为 slate。
 - 2026-11-17 S09：C-v7（`design/mockups/c-v7.html`）= C-v6（slate）+ 机器（每台：代号、角色、系统、在线状态、CPU/内存/磁盘条、24h CPU 格点、探针状态）、服务（一个服务一行：状态、24h 在线率、CPU、内存）、Agent 运行时、定时任务、tailnet；"GitHub 贡献"改名为"提交"（含 GitHub、Gitea、本地）。直接读 glassbox.page/1；`?view=public` 显示公开快照的模糊占位。截图 `shots/c-v7-{private,public}-full.png`、`c-v7-mobile.png`。
+- 2026-11-17 用户："背景暗一点，每个组件保持这个颜色"。slate 改为底色 #1b1f26，面板固定为旧版视觉色 #2d333d（rgba(45,51,61,.94)，几乎不透明）；旧版保留为 `?theme=slate0`，截图 `shots/c-v7-slate0-full.png`。
