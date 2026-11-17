@@ -16,7 +16,7 @@ Optional hub config used here:
 import json
 import re
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from probe import pricing
