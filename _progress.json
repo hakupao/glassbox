@@ -40,10 +40,12 @@
       "note": "c-v7 → c-v8 → c-v9 accepted as the overview page"
     },
     "S11": {
-      "status": "todo"
+      "status": "done",
+      "note": "hub/export.py: whitelist rebuild, masking, prefix-only private titles (user 2026-11-17), --site writes bundle; real data export clean with .local/public.local.toml"
     },
     "S12": {
-      "status": "todo"
+      "status": "done",
+      "note": "scripts/verify_public.py: independent visibility from --private, strict CSP head check per HTML spec, single-file site, homoglyph/encoding-aware name match; 4 security review rounds, APPROVE; reviewer red-team set (105 must-block) in tests/redteam/reviewer/"
     },
     "S13": {
       "status": "in_progress",
@@ -64,11 +66,11 @@
     },
     "S10b": {
       "status": "in_progress",
-      "note": "lane D running"
+      "note": "web/ five pages merged (review APPROVE); waiting for user's per-page screenshot approval (hard checkpoint)"
     },
     "S10c": {
       "status": "in_progress",
-      "note": "lane D running"
+      "note": "zh/ja/en merged with S10b; confirm with user alongside S10b"
     }
   },
   "evidence": ".local/evidence/ (gitignored: contains real data)",
@@ -95,6 +97,11 @@
       "decide Beszel agent<->hub connection direction for the off-LAN work machine (over the tailnet)",
       "set [serve] hosts to the tailnet name; verify tailscale serve forwards Host",
       "pin socket-proxy/tailscale/python image digests; verify wollomatic flags and TS health-check env vars"
+    ],
+    "S15": [
+      "decide githubOwners in .local/public.local.toml (no commit links in public view until set)",
+      "review every block of the public snapshot with the user before first push",
+      "known gate limits: aliased GB writes, rarer homoglyphs, bare domains in titles"
     ]
   }
 }
