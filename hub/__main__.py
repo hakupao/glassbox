@@ -15,6 +15,7 @@ Config (TOML, optional; defaults shown):
     [accounts] "a_1f2e3d4c" = "K"                    # quota account hash -> code shown on the page
     [machines.C] role = "deploy", os = "macos"       # machines without a probe (Beszel only)
     [services.merge] "<monitor name>" = "<container name>"   # merge a Kuma monitor into its container's row
+    [serve] hosts = ["glassbox.<tailnet>.ts.net"]   # Host names the private view answers to besides loopback
     [github]  login = "...", token_env = "GITHUB_TOKEN"
     [[gitea]] name = "...", url = "https://...", user = "...", token_env = "..."
     [beszel]  url = "...", user = "...", password_env = "BESZEL_PASSWORD"; [beszel.map] "<system name>" = "C"

@@ -3,6 +3,7 @@ import json
 import tempfile
 import threading
 import unittest
+import urllib.error
 import urllib.request
 from datetime import date, datetime, timezone
 from http.server import ThreadingHTTPServer
@@ -227,6 +228,78 @@ class PageTest(unittest.TestCase):
             httpd.shutdown()
             httpd.server_close()
 
+    # ---- review follow-ups
+    def test_zone_checks_every_offset_of_the_year(self):
+        self.assertEqual(str(page.zone({"tz": "America/New_York"}, NOW)), "America/New_York")   # DST, whole hours
+        with self.assertRaises(ValueError):
+            page.zone({"tz": "Australia/Lord_Howe"}, NOW)       # +10:30 / +11:00
+        with self.assertRaises(ValueError):                       # whole hour now, +10:30 half a year later
+            page.zone({"tz": "Australia/Lord_Howe"}, datetime(2026, 1, 15, tzinfo=UTC))
+
+    def test_null_token_columns_count_as_zero(self):
+        self.conn.execute("INSERT INTO usage VALUES('A', '2026-11-17T00:00:00Z', 'claude-code', 'm', 'p_pub', "
+                          "2, 0, 5, NULL, NULL, 1, NULL, 0.1)")
+        t = self.build()["today"]
+        self.assertEqual(t["tokens"], {"input": 5, "output": 0, "cacheRead": 0, "cacheWrite": 1, "reasoning": 0})
+
+    def test_repos_group_by_remote_not_name(self):
+        commit(self.conn, "github", "1" * 40, "2026-11-16T01:00:00Z", repo="Demo")
+        commit(self.conn, "local", "2" * 40, "2026-11-16T02:00:00Z", machine="A", repo="demo", project="p_pub")
+        (r,) = self.build()["code"]["repos"]
+        self.assertEqual((r["commits"], r["sources"]), (2, ["github", "local"]))
+
+    def test_monitor_without_machine_merges_only_a_unique_name(self):
+        c = self.conn
+        c.execute("INSERT INTO container_stats VALUES('C', 'web', 1.0, 10.0)")
+        c.execute("INSERT INTO container_stats VALUES('V', 'web', 2.0, 20.0)")
+        c.execute("INSERT INTO container_stats VALUES('V', 'db', 3.0, 30.0)")
+        c.execute("INSERT INTO monitors VALUES('1', 'web', NULL, 'up', 100.0)")    # two machines have 'web'
+        c.execute("INSERT INTO monitors VALUES('2', 'db', NULL, 'up', 99.0)")      # unique
+        rows = {(r["name"], r["machine"]): r["kind"] for r in self.build()["services"]}
+        self.assertEqual(rows, {("web", None): "monitor", ("web", "C"): "container", ("web", "V"): "container",
+                                ("db", "V"): "both"})
+
+    def test_quota_history_window_boundary(self):
+        c = self.conn
+        for t, pct in (("2026-11-13T00:59:59Z", 1), ("2026-11-13T01:00:00Z", 2), ("2026-11-17T01:00:00Z", 3)):
+            c.execute("INSERT INTO quota VALUES('a_1', 'claude-code', '7d', ?, ?, '2026-11-20T01:00:00Z', 'A')", (t, pct))
+        (q,) = self.build()["quota"]
+        self.assertEqual(q["usedPct"], 3)
+        self.assertEqual([h["usedPct"] for h in q["history"]], [2, 3])   # window start is inclusive
+
+    def test_html_escapes_line_separators(self):
+        out = page.html({"title": "a b c"}, '<script src="sample-page.js"></script>')
+        self.assertNotIn(" ", out)
+        self.assertNotIn(" ", out)
+        self.assertIn("a\\u2028b\\u2029c", out)
+
+    def test_private_view_checks_host_and_ingest_still_needs_a_token(self):
+        cfg = {**CFG, "serve": {"hosts": ["glassbox.example.ts.net"]}}
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(server.Hub(self.conn, cfg)))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        port = httpd.server_address[1]
+
+        def get(path, host):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers={"Host": host})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status
+            except urllib.error.HTTPError as e:
+                return e.code
+        try:
+            for host in (f"127.0.0.1:{port}", "localhost", f"[::1]:{port}", "GLASSBOX.example.ts.net:443"):
+                self.assertEqual(get("/page.json", host), 200, host)
+            for host in ("attacker.example", f"attacker.example:{port}", "", "127.0.0.1.attacker.example"):
+                self.assertEqual(get("/page.json", host), 421, host)
+                self.assertEqual(get("/", host), 421, host)
+            self.assertEqual(get("/healthz", "attacker.example"), 200)
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/ingest", data=b"{}", method="POST")
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(req, timeout=10)
+            self.assertEqual(e.exception.code, 401)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
 
 if __name__ == "__main__":
     unittest.main()

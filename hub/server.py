@@ -17,6 +17,9 @@ MAX_BODY = 8 * 1024 * 1024          # compressed request body
 MAX_JSON = 64 * 1024 * 1024          # after gzip; a normal report is well under 1 MB
 
 
+LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
 class TooLarge(Exception):
     pass
 
@@ -47,6 +50,18 @@ class Hub:
         self.conn = conn
         self.cfg = cfg
         self.lock = threading.Lock()
+        # Host names the private view answers to (DNS rebinding): loopback plus [serve] hosts,
+        # e.g. the tailnet name that `tailscale serve` forwards with.
+        self.hosts = LOOPBACK | {h.lower() for h in ((cfg or {}).get("serve") or {}).get("hosts", [])}
+
+    def host_ok(self, header):
+        """True when the Host header (port ignored) is an allowed name."""
+        h = (header or "").strip().lower()
+        if h.startswith("["):
+            h = h[1:].split("]", 1)[0]
+        elif h.count(":") == 1:
+            h = h.split(":", 1)[0]
+        return h in self.hosts
 
     def machine_for(self, auth):
         if not auth or not auth.startswith("Bearer "):
@@ -86,7 +101,11 @@ def make_handler(hub):
                 self.end_headers()
                 return
             if path in ("/", "/index.html", "/page.json") and hub.cfg is not None:
-                # The private view (PLAN §2): reachable only where the hub listens (loopback / tailnet).
+                # The private view (PLAN §2): reachable only where the hub listens (loopback / tailnet),
+                # and only under a known Host name, so a rebinding DNS name cannot read it.
+                # /ingest needs no such check: it takes a bearer token, never a cookie or ambient auth.
+                if not hub.host_ok(self.headers.get("Host")):
+                    return self._send(421, {"error": "unknown host"})
                 try:
                     with hub.lock:
                         data = page.build(hub.conn, hub.cfg)

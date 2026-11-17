@@ -157,13 +157,14 @@
   - **local 兜底**（2026-11-17 用户决定）：有远端、已经推送、但 GitHub / Gitea 采集里找不到同 hash 的本地提交（私有仓库、非默认分支、没配 token 等），也计入 `activity`、`contributions` 和 `code.commits`，来源记为 `local`。
   - 同一个 hash 只要 github 或 gitea 来源里有，就只保留那一条；`machine` 从同 hash 的 local 行补上。
   - 这取代了原来"local 只保留无远端项目和未推送提交"的规则。
+  - **已知偏差**：用 squash 或 rebase 合并时，远端上是一个新 hash，本地分支上的原始提交 hash 在远端找不到，会按 local 兜底再算一次。同一份工作因此被计两次，`contributions` 和 `code.commits` 偏高，偏高的幅度取决于这种合并方式用得多不多。hub 不按标题或时间猜测去重，因为猜错会漏掉真实提交。
 - `contributions.days[].count` = 当天去重后的提交数。它不是 GitHub 官方的贡献数，所以 S10 要把 c-v6 的标题"GitHub 贡献"改成"提交"一类的说法。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
 - `trend` 的最后一项必须是今天，它的值与 `today` 一致。
 - 其余规则（`hub/page.py`）：
-  - 切日、切小时按 hub 配置的 `tz`；不是整点偏移就拒绝生成。页面里的时间一律换算成这个时区的偏移。
+  - 切日、切小时按 hub 配置的 `tz`。前后半年内只要有一个偏移不是整点（例如夏令时切成半小时偏移），就拒绝生成。页面里的时间一律换算成这个时区的偏移。
   - `trend` 每一项都有 `claude-code` 和 `codex` 两个键，没有用量的日子为 0。
   - `quota`：每个 `(account, agent, window)` 取最新样本；`history` 是 `resetsAt - 窗口长度` 之后的样本。代号来自 hub 配置 `[accounts]`，没配的显示哈希，并在 `warnings` 里提示。
-  - `services`：容器（Beszel 统计 / Docker 状态）和 Kuma 监控按 `(machine, 名字归一化后相等)` 合并；名字不同的用 hub 配置 `[services.merge]`（监控名 → 容器名）指定。合并行用监控名，状态取两者中更差的。
+  - `services`：容器（Beszel 统计 / Docker 状态）和 Kuma 监控按 `(machine, 名字归一化后相等)` 合并；名字不同的用 hub 配置 `[services.merge]`（监控名 → 容器名）指定。没有配置机器的监控，只有在匹配的容器名在所有机器里唯一时才合并；否则单独成一行，`machine` 为 `null`。合并行用监控名，状态取两者中更差的。
   - `runtimes[].stale`：该机器探针超过 15 分钟没有上报。`machines[].online`：Beszel 15 分钟内报告在线，或探针 15 分钟内上报过。
   - `machines[].system` 要么字段齐全，要么为 `null`。没有探针的机器，`role` / `os` / `label` 来自 hub 配置 `[machines.<代号>]`。
 
@@ -180,7 +181,7 @@
     "byProject": [{"project": Text, "public", "requests", "sessions", "unpricedRequests", "costUsd"}]
   }],
   "code": {
-    "repos": [{"repo": Text, "public", "sources": ["github"|"gitea"|"local"], "commits", "unpushed",
+    "repos": [{"repo": Text,     /* 有远端时按远端归并，没有远端时按名字 */ "public", "sources": ["github"|"gitea"|"local"], "commits", "unpushed",
                "machines": ["A"], "lastCommit"}],      // 与 contributions 同一时间范围、同一份去重结果；按 lastCommit 新→旧
     "commits": [{ …同 activity[] 的条目 }]              // 近 90 天，新→旧，最多 500 条
   },

@@ -36,10 +36,13 @@ STATUS_RANK = {"down": 0, "paused": 1, "pending": 2, "maintenance": 3, "unknown"
 
 
 def zone(cfg, now):
+    """The hub zone; every offset it uses in the year around now must be a whole hour (a DST
+    switch can bring a half-hour offset, as in Australia/Lord_Howe). Offsets hold for weeks at a
+    time, so a daily sample finds every one of them."""
     tz = ZoneInfo(cfg.get("tz", "Asia/Tokyo"))
-    off = now.astimezone(tz).utcoffset()
-    if off.total_seconds() % 3600:
-        raise ValueError(f"hub tz {cfg.get('tz')} is not a whole-hour offset (usage is stored in UTC hours)")
+    for d in range(-183, 184):
+        if (now + timedelta(days=d)).astimezone(tz).utcoffset().total_seconds() % 3600:
+            raise ValueError(f"hub tz {cfg.get('tz')} is not a whole-hour offset (usage is stored in UTC hours)")
     return tz
 
 
@@ -69,10 +72,10 @@ class _Acc:
         self.tokens, self.cost, self.priced = _tok(), 0.0, False
 
     def add(self, req, unp, t, cost):
-        self.requests += req
-        self.unpriced += unp
+        self.requests += req or 0
+        self.unpriced += unp or 0
         for k, v in zip(self.tokens, t):
-            self.tokens[k] += v
+            self.tokens[k] += v or 0                          # a NULL column counts as 0
         if cost is not None:
             self.cost += cost
             self.priced = True
@@ -175,19 +178,22 @@ def _usage_day(d, day, projects):
 # ------------------------------------------------------------------------------ quota
 def _quota(conn, cfg, iso, warnings):
     codes = cfg.get("accounts") or {}
-    samples = defaultdict(list)
-    for acct, agent, win, t, pct, reset in conn.execute(
-            "SELECT account, agent, window, sampled_at, used_pct, resets_at FROM quota ORDER BY sampled_at"):
-        samples[(acct, agent, win)].append((t, pct, reset))
     out, unnamed = [], set()
-    for (acct, agent, win), rows in sorted(samples.items(), key=lambda kv: (kv[0][1], kv[0][0], kv[0][2])):
-        t, pct, reset = rows[-1]                                # latest sample (CONTRACT §1.1)
-        start = _parse(reset) - WINDOW[win]
+    # The latest sample per (account, agent, window) (CONTRACT §1.1); sampled_at is ISO Z text.
+    latest = conn.execute(
+        "SELECT q.account, q.agent, q.window, q.sampled_at, q.used_pct, q.resets_at FROM quota q JOIN "
+        "(SELECT account, agent, window, MAX(sampled_at) AS m FROM quota GROUP BY account, agent, window) l "
+        "ON q.account = l.account AND q.agent = l.agent AND q.window = l.window AND q.sampled_at = l.m "
+        "ORDER BY q.agent, q.account, q.window").fetchall()
+    for acct, agent, win, t, pct, reset in latest:
+        start = (_parse(reset) - WINDOW[win]).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        hist = conn.execute("SELECT sampled_at, used_pct FROM quota WHERE account=? AND agent=? AND window=? "
+                            "AND sampled_at >= ? AND sampled_at <= ? ORDER BY sampled_at", (acct, agent, win, start, t))
         if acct not in codes:
             unnamed.add(acct)
         out.append({"account": codes.get(acct, acct), "agent": agent, "window": win, "usedPct": pct,
                     "resetsAt": iso(reset), "sampledAt": iso(t),
-                    "history": [{"t": iso(st), "usedPct": sp} for st, sp, _ in rows if _parse(st) >= start]})
+                    "history": [{"t": iso(st), "usedPct": sp} for st, sp in hist]})
     for acct in sorted(unnamed):
         warnings.append({"t": None, "machine": None, "kind": "unnamed-account",
                          "detail": f"quota account {acct} has no code in [accounts]"})
@@ -230,7 +236,7 @@ def _activity_item(c, iso):
 def _repos(commits, iso):
     repos = {}
     for c in commits:                                         # newest first
-        k = (c["remote"] or "", c["repo"])
+        k = c["remote"] or ("", c["repo"])                     # one row per remote, whatever the name
         r = repos.get(k)
         if r is None:
             r = repos[k] = {"repo": c["repo"], "public": c["public"], "sources": set(), "commits": 0,
@@ -296,10 +302,12 @@ def _services(conn, cfg):
     used, out = set(), []
     for _, name, mach, status, up24 in conn.execute("SELECT id, name, machine, status, uptime24 FROM monitors ORDER BY name"):
         want = merge.get(name)
-        cands = [k for k in cont if k not in used and (mach is None or k[0] == mach)
+        cands = [k for k in cont if (mach is None or k[0] == mach)
                  and (k[1] == want if want else _norm(k[1]) == _norm(name))]
         row = {"name": name, "kind": "monitor", "machine": mach, "status": status or "unknown",
                "uptimePct24h": up24, "cpuPct": None, "memBytes": None}
+        # A monitor without a machine merges only with a container whose name is unique across machines.
+        cands = [k for k in cands if k not in used] if mach is not None or len(cands) == 1 else []
         if cands:
             k = cands[0]
             used.add(k)
