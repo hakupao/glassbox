@@ -1037,6 +1037,816 @@
    "files": {
     "data.js": "window.GB.machines[0].label = \"heron-host\"; window.GB.tailnet=[{\"name\":\"heron-tab\"}];"
    }
+  },
+  {
+   "id": "r2 zwsp",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon​ledger sync"
+    ]
+   ],
+   "probes": [
+    "falcon​ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 fullwidth",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: ｆａｌｃｏｎ-ledger"
+    ]
+   ],
+   "probes": [
+    "ｆａｌｃｏｎ"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 slash",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon/ledger"
+    ]
+   ],
+   "probes": [
+    "falcon/ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 cyr",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: fаlcon-ledger"
+    ]
+   ],
+   "probes": [
+    "fаlcon"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 shy",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon­ledger"
+    ]
+   ],
+   "probes": [
+    "falcon­ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 nbh",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon‑ledger"
+    ]
+   ],
+   "probes": [
+    "falcon‑ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 pct",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon%2Dledger"
+    ]
+   ],
+   "probes": [
+    "falcon%2Dledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 ent",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon&#45;ledger"
+    ]
+   ],
+   "probes": [
+    "falcon&#45;ledger"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 snake",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: owl_sync"
+    ]
+   ],
+   "probes": [
+    "owl_sync"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 camel",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: OwlSync"
+    ]
+   ],
+   "probes": [
+    "OwlSync"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 tsnet",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "deploy: hub at box.tail1a2b.ts.net"
+    ]
+   ],
+   "probes": [
+    "tail1a2b"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 domain",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "docs: see wiki.acmecorp.internal/page"
+    ]
+   ],
+   "probes": [
+    "acmecorp"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 stripe",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "chore: sk_live_51HxAbCdEfGhIj"
+    ]
+   ],
+   "probes": [
+    "sk_live_51"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 jwt",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "test eyJhbGciOiJI.eyJzdWIiOi.abc"
+    ]
+   ],
+   "probes": [
+    "eyJhbGci"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 double-enc",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon%252Dledger"
+    ]
+   ],
+   "probes": [
+    "falcon%25"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 8x-enc",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix falcon%25%25%25%25%25%25%25%25%252Dledger"
+    ]
+   ],
+   "probes": [
+    "falcon%25"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 short-digits",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: owl2 bug"
+    ]
+   ],
+   "probes": [
+    "owl2"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 ip-in-word",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix 10\u002e0.0.5:22"
+    ]
+   ],
+   "probes": [
+    "10\u002e0.0.5"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 prefix-name",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "falcon-ledger: fix"
+    ]
+   ],
+   "probes": [
+    "falcon"
+   ],
+   "normProbes": [],
+   "mustBeNull": [],
+   "why": ""
+  },
+  {
+   "id": "r2 semver",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "runtimes",
+      0,
+      "version"
+     ],
+     "2.0.1+build.secrethost"
+    ]
+   ],
+   "probes": [
+    "secrethost"
+   ],
+   "normProbes": [],
+   "mustBeNull": []
+  },
+  {
+   "id": "r2 branch-frag",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "branch"
+     ],
+     "feat/kestrel-client"
+    ],
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "merge kestrel-client work"
+    ]
+   ],
+   "probes": [
+    "kestrel"
+   ],
+   "normProbes": [],
+   "mustBeNull": []
+  },
+  {
+   "id": "r2 H1-lie",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "project"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "public"
+     ],
+     true
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "repo"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "source"
+     ],
+     "gitea"
+    ]
+   ],
+   "probes": [
+    "heron-vault"
+   ],
+   "normProbes": [],
+   "mustBeNull": []
+  },
+  {
+   "id": "r2 H1-lie-spelling",
+   "source": "atk4.py",
+   "kind": "export",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "project"
+     ],
+     "Heron-Vault"
+    ],
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "public"
+     ],
+     true
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "repo"
+     ],
+     "heron_vault"
+    ]
+   ],
+   "probes": [
+    "Heron-Vault"
+   ],
+   "normProbes": [],
+   "mustBeNull": []
+  },
+  {
+   "id": "r2 double-escaped-script",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script><!--<script></script>\nwindow.GB.tailnet=[{\"name\":\"heron-tab\"}];</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 title-rcdata-fake",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "",
+   "dataReplace": null,
+   "why": "",
+   "raw": "{HEAD}<title><script>window.GB = {BODY};</script></title></head><body><script><!--<script></script>\nwindow.GB = {\"x\":\"heron-tab\"};</script></body></html>"
+  },
+  {
+   "id": "r2 textarea-rcdata",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "",
+   "dataReplace": null,
+   "why": "",
+   "raw": "{HEAD}</head><body><textarea><script>window.GB = {BODY};</script></textarea><script>/*</textarea>*/window.GB={\"label\":\"heron-tab\"}</script></body></html>"
+  },
+  {
+   "id": "r2 computed-key",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script>window[\"G\"+\"B\"].tailnet=[{\"name\":\"heron-tab\"}]</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 this-GB",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script>self.G\\u0042.tailnet=[{\"name\":\"heron-tab\"}]</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 unicode-escape-ident",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script>window.\\u0047B.tailnet=[{\"name\":\"heron-tab\"}]</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 svg-script",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<svg><script>window.GB.tailnet=[]</script></svg>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 meta-refresh-2nd",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "<meta http-equiv=\"refresh\" content=\"0;url=https://x.example\">",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 meta-HTTP-EQUIV-entity",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "<meta http&#45;equiv=\"refresh\" content=\"0;url=//x.example\">",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 css-image-set",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "<style>a{background:image-set(\"//e.example/x.png\" 1x)}</style>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 css-escaped-url",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "<style>a{background:u\\72l(//e.example/x.png)}</style>",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 dns-prefetch-meta",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "<meta http-equiv=\"x-dns-prefetch-control\" content=\"on\">",
+   "body": "",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 a-href-external",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<a href=\"https://evil.example\">x</a>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 a-href-js",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<a href=\"javascript:location='//e.example'\">x</a>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 svg-a-xlink",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<svg><a xlink:href=\"//e.example\"><text>x</text></a></svg>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 svg-image-href",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<svg><image href=\"//e.example/x.png\"/></svg>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 svg-use-href",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<svg><use href=\"data:image/svg+xml,<svg/>#a\"/></svg>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 window-open",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script>window.open('htt'+'ps:'+'//e.example')</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 location-concat-var",
+   "source": "atk5.py",
+   "kind": "html",
+   "head": "",
+   "body": "<script>var h='e.example';location='https:'+'/'+'/'+h</script>",
+   "dataReplace": null,
+   "why": ""
+  },
+  {
+   "id": "r2 CNAME term",
+   "source": "atk5.py",
+   "kind": "dir",
+   "index": "",
+   "files": {
+    "CNAME": "falcon-ledger.example.com\n"
+   }
+  },
+  {
+   "id": "r2 dotfile",
+   "source": "atk5.py",
+   "kind": "dir",
+   "index": "",
+   "files": {
+    "CNAME": "dash.example.org\n",
+    ".nojekyll": ""
+   }
+  },
+  {
+   "id": "r2 forged public name (conflict)",
+   "source": "atk6.py",
+   "kind": "forged",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "project"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "public"
+     ],
+     true
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "repo"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "activity",
+      3,
+      "source"
+     ],
+     "gitea"
+    ]
+   ],
+   "pubInsert": [
+    [
+     "today",
+     "byProject"
+    ],
+    0,
+    {
+     "project": "heron-vault",
+     "public": true,
+     "requests": 1,
+     "costUsd": 1.0
+    }
+   ]
   }
  ]
 }

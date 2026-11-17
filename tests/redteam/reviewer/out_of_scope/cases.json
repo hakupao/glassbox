@@ -39,6 +39,182 @@
    "normProbes": [],
    "mustBeNull": [],
    "why": ""
+  },
+  {
+   "id": "r2 armenian-o",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcօn-ledger"
+    ]
+   ],
+   "probe": "falcօn",
+   "why": "known limitation (review 2): look-alikes beyond Cyrillic/Greek are not folded"
+  },
+  {
+   "id": "r2 latin-smallcap",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon-ʟedger"
+    ]
+   ],
+   "probe": "ʟedger",
+   "why": "known limitation (review 2): look-alikes beyond Cyrillic/Greek are not folded"
+  },
+  {
+   "id": "r2 cherokee",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcon-ledgᎬr"
+    ]
+   ],
+   "probe": "ledgᎬr",
+   "why": "known limitation (review 2): look-alikes beyond Cyrillic/Greek are not folded"
+  },
+  {
+   "id": "r2 combining-acute",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "fix: falcón-ledger"
+    ]
+   ],
+   "probe": "falcón",
+   "why": "known limitation (review 2): accented letters are not stripped to their base"
+  },
+  {
+   "id": "r2 bare-domain-nopath",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "docs: moved to acmecorp.co.jp"
+    ]
+   ],
+   "probe": "acmecorp",
+   "why": "known limitation (review 2): a bare domain without a path is not redacted in titles"
+  },
+  {
+   "id": "r2 prefix-bad",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "Update foo"
+    ]
+   ],
+   "probe": "Update",
+   "why": "by design: a PUBLIC commit keeps its scrubbed title"
+  },
+  {
+   "id": "r2 branch-frag-short",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "activity",
+      0,
+      "title"
+     ],
+     "merge kai work"
+    ]
+   ],
+   "probe": "kai",
+   "why": "by design (lead, review 2): branch parts shorter than 4 are not private names"
+  },
+  {
+   "id": "r2 H1-text-elsewhere",
+   "source": "atk4.py",
+   "ops": [
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "project"
+     ],
+     "heron-vault"
+    ],
+    [
+     "set",
+     [
+      "today",
+      "byProject",
+      2,
+      "public"
+     ],
+     true
+    ],
+    [
+     "set",
+     [
+      "jobs",
+      0,
+      "name"
+     ],
+     "heron-vault"
+    ]
+   ],
+   "probe": "heron-vault",
+   "why": "by design: a job named like a PUBLIC repo; visibility comes from repo/project sites only"
+  },
+  {
+   "id": "r2 noscript",
+   "source": "atk5.py",
+   "why": "by design: data inside <noscript> never runs with scripting on; nothing private"
+  },
+  {
+   "id": "r2 csp-weaker-dup",
+   "source": "atk5.py",
+   "why": "by design: <meta name=\"x\"> is not an http-equiv and changes no policy"
+  },
+  {
+   "id": "r2 event-handler-alias",
+   "source": "atk5.py",
+   "why": "known limitation (review 2): an alias (var d = window.GB; d.x = ...) is not detected; data still comes only from window.GB"
+  },
+  {
+   "id": "r2 CNAME private",
+   "source": "atk5.py",
+   "why": "by design: the name is not private in the example page"
   }
  ]
 }

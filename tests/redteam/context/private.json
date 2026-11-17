@@ -1,6 +1,6 @@
 {
  "_note": "Fabricated private page/1 the red-team samples were 'exported' from. The gate derives visibility and private names from it.",
- "schema": "glassbox.page/1", "view": "private",
+ "schema": "glassbox.page/1", "view": "private", "generatedAt": "2026-11-17T10:30:00+09:00",
  "today": {"byProject": [
   {"project": "sdtm-pedia", "public": true, "requests": 70, "costUsd": 2.5},
   {"project": "other", "public": false, "requests": 50, "costUsd": 1.7}]},

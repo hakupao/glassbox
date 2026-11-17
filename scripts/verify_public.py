@@ -28,7 +28,11 @@ Checks every path given: the publish directory, its index.html, or the page JSON
   the exact CSP <meta> (see CSP below) as head's first element; no <script src>, no <link> but one
   exact <link rel="icon" href="data:,">, no <base>, frames or forms, no URL attribute
   other than empty, #fragment, data: or a public commit link, no CSS url() / @import except data:,
-  exactly one <script> holding only `window.GB = {...};`, and no other script writing GB.
+  exactly one <script> holding only `window.GB = {...};`, and no other script writing GB (also
+  after decoding: \\u0047B, "G"+"B"). No script body may contain <!-- or <script, and every
+  "<script" in the text must be a parsed script (review 2: parser / browser disagreement).
+- provenance (review 2): the snapshot's generatedAt must equal the --private page's. Public /
+  private name conflicts and a CNAME holding a private name are reported with the file.
   JSON is parsed with duplicate keys refused.
 - resources: no external fonts / CDN / any absolute or protocol-relative URL, except commit URLs
   of public repos and XML namespace URIs.
@@ -363,6 +367,8 @@ class Gate:
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
         public, derived, branches, whole_words = derive(private or {}, self.private_projects)
+        # Review 2: the snapshot must come from this private page: same generatedAt (copied as is).
+        self.private_generated = None if private is None else (private.get("generatedAt") or "(missing)")
         self.public_repos = public
         for f in ("activity[].repo", GROUP_FIELD):
             self.allow.setdefault(f, set()).update(public)
@@ -619,6 +625,8 @@ class Gate:
                 lines = []
             if len(lines) != 1 or not CNAME_RX.fullmatch(lines[0].strip()):
                 bad.append(f"{d.name}/CNAME: must be exactly one domain name")
+            elif self.name_hits(lines[0]):
+                bad.append(f"{d.name}/CNAME: the domain contains a private name")
         index = d / "index.html"
         if index.is_file() and not index.is_symlink():
             bad += self.check_file(index)
@@ -668,13 +676,20 @@ class Gate:
             if CSS_URL.search(body):
                 bad.append(f"{where}: <style> uses url() or @import that is not data:")
         data, page = [], None
+        # Review 2: Python's parser and a browser disagree on "<!--<script" inside a script (the
+        # browser's double-escaped state runs code the parser never reports). Refuse both strings
+        # in any script body, and require every "<script" in the text to be a parsed script.
+        if len(re.findall(r"(?i)<script\b", text)) != len(p.scripts) or p._in is not None:
+            bad.append(f"{where}: <script> tags and parsed scripts do not match (unclosed or hidden script)")
         for attrs, body in p.scripts:
             if any((k or "").lower() == "src" for k, _ in attrs):
                 bad.append(f"{where}: <script src> is not allowed; inline everything")
+            if "<!--" in body or re.search(r"(?i)<script", body):
+                bad.append(f"{where}: a script body contains <!-- or <script")
             m = GB_SCRIPT.fullmatch(body)
             if m and m.group(1).startswith("{"):
                 data.append(m.group(1))
-            elif GB_WRITE.search(body):
+            elif any(GB_WRITE.search(v) for v in [body] + decodings(body)):     # also \u0047B, "G"+"B"
                 bad.append(f"{where}: a script other than the data script writes GB")
         if len(data) != 1:
             bad.append(f"{where}: needs exactly one <script> holding only window.GB = {{...}}; (found {len(data)})")
@@ -686,9 +701,14 @@ class Gate:
         return bad, page
 
     def check_file(self, path):
+        """Problems with a publish directory, its index.html or the page JSON; [] means clean.
+        Name conflicts (review 2) and a private page from another run are reported here too."""
         p = Path(path)
         if p.is_dir():
             return self.check_dir(p)
+        return [f"{p.name}: name is both public and private: {hide(c)}" for c in self.conflicts] + self._check_one(p)
+
+    def _check_one(self, p):
         try:
             text = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
@@ -710,6 +730,9 @@ class Gate:
             except ValueError as e:
                 return bad + [f"{p.name}: not valid JSON ({'duplicate key' if isinstance(e, DuplicateKey) else 'syntax'})"]
         bad += self.check_page(page, p.name)
+        if self.private_generated is not None and (
+                not isinstance(page, dict) or page.get("generatedAt") != self.private_generated):
+            bad.append(f"{p.name}: generatedAt differs from the --private page (not exported from it)")
         values = []
         _strings(page, values)
         tag = p.name + " (decoded values)"
@@ -819,9 +842,6 @@ def _main(argv=None):
         print(f"setup error: {e}", file=sys.stderr)
         return 2
     total = 0
-    for c in gate.conflicts:
-        total += 1
-        print(f"name is both public and private: {hide(c)}")
     for f in a.files:
         for b in gate.check_file(f):
             total += 1

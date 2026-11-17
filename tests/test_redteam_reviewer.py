@@ -91,6 +91,18 @@ class ReviewerSamplesTest(unittest.TestCase):
         return True
 
     def refused_gate(self, case):
+        if case["kind"] == "forged":                   # a buggy exporter's output, gate on the true private page
+            page = copy.deepcopy(EXAMPLE)
+            apply(page, case["ops"])
+            pub, _ = ex.export(copy.deepcopy(EXAMPLE), self.cfg, self.terms)
+            path, at, row = case["pubInsert"]
+            node = pub
+            for k in path:
+                node = node[k]
+            node.insert(at, row)
+            f = Path(self.tmp.name) / "forged.json"
+            f.write_text(json.dumps(pub, ensure_ascii=False), encoding="utf-8")
+            return bool(self.gate(page).check_file(f))
         pub, _ = ex.export(copy.deepcopy(EXAMPLE), self.cfg, self.terms)
         body = json.dumps(pub, ensure_ascii=False)
         if case.get("dataReplace"):
@@ -103,14 +115,18 @@ class ReviewerSamplesTest(unittest.TestCase):
             f.write_text(body, encoding="utf-8")
             return bool(g.check_file(f))
         if case["kind"] == "dir":
-            site = d / "site"
+            site = Path(tempfile.mkdtemp(dir=d)) / "site"
             site.mkdir()
             (site / "index.html").write_text(wrap(body, extra=case["index"]), encoding="utf-8")
             for name, text in case["files"].items():
                 (site / name).write_text(text, encoding="utf-8")
             return bool(g.check_file(site))
         f = d / "index.html"
-        f.write_text(wrap(body, case["head"], case["body"]), encoding="utf-8")
+        if case.get("raw"):
+            head = f'<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="{vp.CSP}">'
+            f.write_text(case["raw"].replace("{HEAD}", head).replace("{BODY}", body), encoding="utf-8")
+        else:
+            f.write_text(wrap(body, case["head"], case["body"]), encoding="utf-8")
         return bool(g.check_file(f))
 
     def test_wrapper_alone_passes(self):
@@ -120,7 +136,7 @@ class ReviewerSamplesTest(unittest.TestCase):
         self.assertEqual(self.gate(EXAMPLE).check_file(f), [])
 
     def test_every_reviewer_sample_is_refused(self):
-        self.assertGreaterEqual(sum(c.get("expect") != "pass" for c in CASES), 54)
+        self.assertGreaterEqual(sum(c.get("expect") != "pass" for c in CASES), 99)
         for case in CASES:
             with self.subTest(case["id"]):
                 if case.get("expect") == "pass":
@@ -156,7 +172,8 @@ class ReviewerSamplesTest(unittest.TestCase):
     def test_out_of_scope_is_documented_not_counted(self):
         oos = json.loads((RT / "reviewer" / "out_of_scope" / "cases.json").read_text(encoding="utf-8"))
         self.assertIn("redact_terms", oos["_note"])
-        self.assertEqual([c["id"] for c in oos["cases"]], ["hourly-name-in-title"])
+        self.assertEqual(oos["cases"][0]["id"], "hourly-name-in-title")
+        self.assertTrue(all(c.get("why") for c in oos["cases"][1:]))      # every exclusion says why
         self.assertFalse({c["id"] for c in oos["cases"]} & {c["id"] for c in CASES})
 
 

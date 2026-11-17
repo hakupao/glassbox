@@ -134,6 +134,20 @@ class GateCliTest(unittest.TestCase):
         self.assertIn("gate error (ZeroDivisionError)", out)
         self.assertNotIn("Traceback", out)
 
+    def test_review2_generated_at_and_conflicts_in_results(self):
+        terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
+        priv = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))
+        cfg = vp.load_toml(RT / "context" / "public.toml")
+        sample = RT / "samples" / "pass-minimal.json"
+        self.assertEqual(vp.Gate(terms, priv, cfg).check_file(sample), [])
+        other = dict(priv, generatedAt="2026-11-18T10:30:00+09:00")          # a different run
+        self.assertTrue(any("generatedAt" in b for b in vp.Gate(terms, other, cfg).check_file(sample)))
+        missing = {k: v for k, v in priv.items() if k != "generatedAt"}
+        self.assertTrue(vp.Gate(terms, missing, cfg).check_file(sample))
+        cfg2 = dict(cfg, allow=dict(cfg.get("allow", {}), **{"activity[].repo": ["orchid-batch"]}))
+        out = vp.Gate(terms, priv, cfg2).check_file(sample)                   # returned, not only printed
+        self.assertTrue(any("both public and private" in b for b in out))
+
     def test_private_page_is_rejected(self):
         rc, out = run(ROOT / "schema" / "examples" / "page.private.json", *self.common,
                       "--private", RT / "context" / "private.json")
