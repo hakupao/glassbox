@@ -100,8 +100,10 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(pub["jobs"][0]["name"], "nightly-backup")
         self.assertEqual(pub["tailnet"], [])                    # hidden in the fixture config
 
-    def test_missing_config_masks_everything(self):
-        cfg = ex.load_config(Path(self.tmp.name) / "absent.toml")
+    def test_missing_config_is_an_error_and_no_config_is_strictest(self):
+        with self.assertRaises(ex.ExportError):
+            ex.load_config(Path(self.tmp.name) / "absent.toml")
+        cfg = ex.load_config(None)                                     # --no-config
         pub, ctx = self.run_export(cfg=cfg)
         self.assertTrue(all(s["name"] == {"masked": True} for s in pub["services"]))
         self.assertEqual(pub["hidden"], [])
@@ -270,7 +272,7 @@ class ExportTest(unittest.TestCase):
         p["quota"].append(dict(p["quota"][0], account="a_1f2e3d4c"))         # no code configured: hash
         p.update(usageDays=[{"date": "2026-11-17"}], code={"repos": []}, warnings=["probe B is late"])
         p["contributions"]["githubOfficialTotal"] = 7000
-        cfg = ex.load_config(Path(self.tmp.name) / "absent.toml")            # tailnet not hidden
+        cfg = ex.load_config(None)                                     # strictest; tailnet not hidden
         pub, ctx = self.run_export(cfg=cfg)
         m = pub["machines"][0]
         self.assertEqual((m["role"], m["os"]), (None, None))
@@ -324,9 +326,27 @@ class ExportTest(unittest.TestCase):
             self.run_export(page=page)
 
     def test_bad_config_raises(self):
-        for text in ('privateTitles = "none"\n', 'hidden = ["everything"]\n', '[allow]\n"today.requests" = ["1"]\n'):
+        for text in ('privateTitles = "none"\n', 'hidden = ["everything"]\n', '[allow]\n"today.requests" = ["1"]\n',
+                     'hiden = ["tailnet"]\n', 'not toml ['):
             with self.subTest(text), self.assertRaises(ex.ExportError):
                 write_cfg(self.tmp.name, text)
+
+    def test_terms_schema(self):
+        for bad in ({"term": ["x"]}, {"terms": []}, {"terms": ["ok", ""]}, {"terms": ["ok", 3]},
+                    {"terms": ["ok"], "allow": "x"}, {"terms": ["ok"], "match": {"ok": "fuzzy"}}, ["ok"]):
+            p = Path(self.tmp.name) / "terms.json"
+            p.write_text(json.dumps(bad), encoding="utf-8")
+            with self.subTest(bad), self.assertRaises(ex.ExportError):
+                ex.load_terms(p)
+
+    def test_codes_must_not_be_private(self):
+        p = Path(self.tmp.name) / "c.toml"
+        p.write_text('codes = ["owl"]\n', encoding="utf-8")
+        with self.assertRaises(ex.ExportError):
+            ex.load_config(p, self.terms)                              # a code on the word list
+        p.write_text('codes = ["studio-dev"]\n', encoding="utf-8")
+        with self.assertRaises(ex.ExportError):
+            self.run_export(cfg=ex.load_config(p, self.terms))         # a code equal to a private name
 
     def test_cli_writes_page_and_context(self):
         src = Path(self.tmp.name) / "private.json"

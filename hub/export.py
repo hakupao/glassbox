@@ -27,7 +27,8 @@ path (--context, off by default).
         [--terms .local/redact_terms.local.json] [--out out/page.public.json]
         [--context .cache/export-context.json]
 
-Config format: docs/public.example.toml. A missing config file means empty allowlists.
+Config format: docs/public.example.toml. A missing config file is an error; --no-config (fabricated
+examples only) means the strictest settings.
 """
 import argparse
 import copy
@@ -76,9 +77,27 @@ class ExportError(Exception):
 
 # --- config ----------------------------------------------------------------------------------
 
-def load_config(path=DEFAULT_CONFIG):
-    p = Path(path).expanduser()
-    raw = tomllib.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+CONFIG_KEYS = {"privateTitles", "hidden", "keywords", "privateProjects", "codes", "githubOwners", "allow"}
+TERMS_KEYS = {"_note", "terms", "allow", "match"}
+
+
+def load_config(path=DEFAULT_CONFIG, terms=None):
+    """Read public.local.toml. A missing file is an error (review H2); path=None (--no-config,
+    fabricated examples only) gives the strictest settings: nothing allowlisted, no commit links,
+    private titles prefix-only. Unknown keys are refused, so a typo cannot switch a rule off."""
+    if path is None:
+        raw = {}
+    else:
+        p = Path(path).expanduser()
+        if not p.is_file():
+            raise ExportError(f"config {p.name} not found (use --no-config only for fabricated examples)")
+        try:
+            raw = tomllib.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise ExportError(f"config {p.name}: {e.__class__.__name__}") from None
+    unknown = sorted(set(raw) - CONFIG_KEYS)
+    if unknown:
+        raise ExportError(f"config: unknown key(s) {unknown}")
     cfg = {
         "privateTitles": raw.get("privateTitles", "prefix-only"),
         "hidden": list(raw.get("hidden", [])),
@@ -96,12 +115,29 @@ def load_config(path=DEFAULT_CONFIG):
     unknown = [k for k in cfg["allow"] if FIELDS.get(k, "").rstrip("?") != "text"]
     if unknown:
         raise ExportError(f"[allow]: not text fields {unknown}")
+    if terms is not None:
+        clash = {c for c in cfg["codes"] if c.casefold() in {t.casefold() for t in terms["terms"]}}
+        if clash:
+            raise ExportError(f"config codes: {len(clash)} code(s) are on the private word list")
     return cfg
 
 
 def load_terms(path=DEFAULT_TERMS):
-    """{"terms": [...], "allow": [...], "match": {term: "substring"|"word"}}. Missing file is an error."""
-    data = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    """{"terms": [...], "allow": [...], "match": {term: "substring"|"word"}}. Missing file, an unknown
+    key or a malformed list is an error (review H2): a misspelt key must not mean "no terms"."""
+    try:
+        data = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise ExportError(f"terms file {Path(path).name}: {e.__class__.__name__}") from None
+    if not isinstance(data, dict) or set(data) - TERMS_KEYS:
+        raise ExportError(f"terms file: unknown key(s) {sorted(set(data) - TERMS_KEYS) if isinstance(data, dict) else ''}")
+    t, al, mt = data.get("terms"), data.get("allow", []), data.get("match", {})
+    if not (isinstance(t, list) and t and all(isinstance(x, str) and x.strip() for x in t)):
+        raise ExportError("terms file: \"terms\" must be a non-empty list of non-empty strings")
+    if not (isinstance(al, list) and all(isinstance(x, str) for x in al)):
+        raise ExportError("terms file: \"allow\" must be a list of strings")
+    if not (isinstance(mt, dict) and all(isinstance(k, str) and v in ("substring", "word") for k, v in mt.items())):
+        raise ExportError("terms file: \"match\" maps a term to \"substring\" or \"word\"")
     allow = {a.casefold() for a in data.get("allow", [])}
     return {"terms": [t for t in data.get("terms", []) if t and t.casefold() not in allow],
             "match": {k.casefold(): v for k, v in data.get("match", {}).items()}}
@@ -378,6 +414,9 @@ def export(page, cfg, terms):
     private_keys = {k for k, v in verdict.items() if not v}
     allow_all = {a for a in allow_all if norm(a) not in private_keys}
     # Codes (A, K, ...) are public by design; a label that equals its code reveals nothing.
+    clash = {c for c in cfg["codes"] if c in names}
+    if clash:
+        raise ExportError(f"config codes: {len(clash)} code(s) equal a private name")
     names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all and not is_code(n, cfg)}
     scrub_names = sorted(names | set(terms["terms"]) | set(cfg["keywords"]), key=len, reverse=True)
     modes = terms["match"]
@@ -466,13 +505,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="hub.export")
     ap.add_argument("private")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
+    ap.add_argument("--no-config", action="store_true", help="strictest settings; fabricated examples only")
     ap.add_argument("--terms", default=str(DEFAULT_TERMS))
     ap.add_argument("--out", default=str(ROOT / "out" / "page.public.json"))
     ap.add_argument("--context")
     a = ap.parse_args(argv)
     try:
         page = json.loads(Path(a.private).read_text(encoding="utf-8"))
-        pub, ctx = export(page, load_config(a.config), load_terms(a.terms))
+        terms = load_terms(a.terms)
+        pub, ctx = export(page, load_config(None if a.no_config else a.config, terms), terms)
     except (OSError, ValueError, ExportError) as e:
         print(f"export failed: {e}", file=sys.stderr)
         return 2

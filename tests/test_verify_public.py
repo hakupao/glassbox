@@ -56,6 +56,19 @@ class GateCliTest(unittest.TestCase):
                 "no context flag": (ok, *self.common),
                 "bad match mode": (ok, "--terms", bad_mode, "--private", ctx),
             }
+            misspelt = Path(d) / "terms2.json"
+            misspelt.write_text(json.dumps({"term": ["x"]}), encoding="utf-8")
+            unknown_cfg = Path(d) / "c.toml"
+            unknown_cfg.write_text('hiden = ["tailnet"]\n', encoding="utf-8")
+            clash_cfg = Path(d) / "c2.toml"
+            clash_cfg.write_text('codes = ["owl"]\n', encoding="utf-8")
+            terms = RT / "context" / "terms.json"
+            cases.update({
+                "config missing": (ok, "--terms", terms, "--config", missing, "--private", ctx),
+                "terms key misspelt": (ok, "--terms", misspelt, "--no-config", "--private", ctx),
+                "config key misspelt": (ok, "--terms", terms, "--config", unknown_cfg, "--private", ctx),
+                "code on the word list": (ok, "--terms", terms, "--config", clash_cfg, "--private", ctx),
+            })
             for name, args in cases.items():
                 with self.subTest(name):
                     self.assertEqual(run(*args)[0], 2)

@@ -1,7 +1,9 @@
 # Public snapshot settings — example with made-up values.
 # The real file is .local/public.local.toml (gitignored); hub/export.py and
-# scripts/verify_public.py both read it. A missing file means: nothing allowlisted,
-# every name masked, private titles "prefix-only", nothing hidden.
+# scripts/verify_public.py both read it. A missing file is an error. Unknown keys are refused.
+# --no-config (fabricated examples only) means: nothing allowlisted, every name masked,
+# no commit links, private titles "prefix-only", nothing hidden.
+# codes must not appear on the private word list or equal a private name.
 
 # Commit titles of private repos (CONTRACT §3 rule 5):
 #   "prefix-only" — keep only a conventional-commit type such as "fix:" (default, owner's decision 2026-11-17)

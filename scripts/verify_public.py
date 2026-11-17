@@ -173,11 +173,10 @@ class Gate:
     def __init__(self, terms, private, config):
         """terms: parsed redact-terms JSON; private: the private page/1 the snapshot was exported
         from (None only for fabricated examples); config: parsed TOML."""
+        check_terms(terms)
+        check_config(config)
         allow_words = {a.casefold() for a in terms.get("allow", [])}
         self.modes = {k.casefold(): v for k, v in terms.get("match", {}).items()}
-        bad = {v for v in self.modes.values() if v not in ("substring", "word")}
-        if bad:
-            raise SetupError(f"terms file: unknown match mode(s) {sorted(bad)}")
         self.allow = {k: set(v) for k, v in config.get("allow", {}).items()}
         self.private_projects = set(config.get("privateProjects", []))
         self.hidden = set(config.get("hidden", []))
@@ -190,6 +189,9 @@ class Gate:
             self.allow.setdefault(f, set()).update(public)
         self.allow.setdefault("activity[].branch", set()).update(branches)
         self.codes = set(config.get("codes", []))
+        private_words = {t.casefold() for t in terms["terms"]} | {n.casefold() for n in derived}
+        if any(c.casefold() in private_words for c in self.codes):
+            raise SetupError("config codes: a code is on the private word list or a private name")
         self.keywords = [k for k in config.get("keywords", []) if k]
         owners = sorted(config.get("githubOwners", []))
         owner = "|".join(map(re.escape, owners))
@@ -461,10 +463,50 @@ def load_json(path, what):
         raise SetupError(f"{what} {Path(path).name}: {e.__class__.__name__}") from None
 
 
+def check_terms(t):
+    """Schema of redact_terms (review H2): a misspelt key must not silently mean "no terms"."""
+    if not isinstance(t, dict):
+        raise SetupError("terms file is not an object")
+    extra = set(t) - {"_note", "terms", "allow", "match"}
+    if extra:
+        raise SetupError(f"terms file: {len(extra)} unknown key(s)")
+    words = t.get("terms")
+    if not (isinstance(words, list) and words and all(isinstance(w, str) and w.strip() for w in words)):
+        raise SetupError("terms file: terms must be a non-empty list of non-empty strings")
+    if not (isinstance(t.get("allow", []), list) and all(isinstance(w, str) for w in t.get("allow", []))):
+        raise SetupError("terms file: allow must be a list of strings")
+    m = t.get("match", {})
+    if not (isinstance(m, dict) and all(isinstance(k, str) and v in ("substring", "word") for k, v in m.items())):
+        raise SetupError("terms file: match maps a term to substring or word")
+
+
+CONFIG_KEYS = {"privateTitles", "hidden", "keywords", "privateProjects", "codes", "githubOwners", "allow"}
+
+
+def check_config(c):
+    extra = set(c) - CONFIG_KEYS
+    if extra:
+        raise SetupError(f"config: unknown key(s) {sorted(extra)}")
+    for k in ("hidden", "keywords", "privateProjects", "codes", "githubOwners"):
+        if not (isinstance(c.get(k, []), list) and all(isinstance(x, str) for x in c.get(k, []))):
+            raise SetupError(f"config: {k} must be a list of strings")
+    if not isinstance(c.get("allow", {}), dict):
+        raise SetupError("config: [allow] must be a table")
+    bad = [k for k in c.get("allow", {}) if FIELDS.get(k, "").rstrip("?") != "text"]
+    if bad:
+        raise SetupError(f"config [allow]: not text fields {bad}")
+    hideable = FIELDS["hidden[]"].partition(":")[2].split("|")
+    if any(h not in hideable for h in c.get("hidden", [])):
+        raise SetupError("config: unknown hidden block")
+
+
 def load_toml(path):
-    p = Path(path).expanduser()
-    if not p.exists():
+    """Missing config is an error (review H2); --no-config passes None for fabricated examples."""
+    if path is None:
         return {}
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise SetupError(f"config {p.name} not found (--no-config only for fabricated examples)")
     try:
         return tomllib.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -476,6 +518,7 @@ def main(argv=None):
     ap.add_argument("files", nargs="+")
     ap.add_argument("--terms", default=str(ROOT / ".local" / "redact_terms.local.json"))
     ap.add_argument("--config", default=str(ROOT / ".local" / "public.local.toml"))
+    ap.add_argument("--no-config", action="store_true", help="strictest settings; fabricated examples only")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--private", help="the private page/1 the snapshot was exported from (visibility and "
                                      "private names are derived from it, independently of the exporter)")
@@ -486,7 +529,7 @@ def main(argv=None):
         private = None if a.no_private else load_json(a.private, "private page")
         if private is not None and (not isinstance(private, dict) or private.get("schema") != "glassbox.page/1"):
             raise SetupError("--private is not a glassbox.page/1 page")
-        gate = Gate(terms, private, load_toml(a.config))
+        gate = Gate(terms, private, load_toml(None if a.no_config else a.config))
     except SetupError as e:
         print(f"setup error: {e}", file=sys.stderr)
         return 2
