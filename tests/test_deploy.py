@@ -76,6 +76,18 @@ class DeployTest(unittest.TestCase):
         self.assertIn('[ -n "${GLASSBOX_SECRETS_DIR:-}" ]', ep)
         self.assertIn("exit 1", ep)
 
+    def test_entrypoint_exits_1_on_empty_secrets_dir(self):
+        import os, subprocess, tempfile
+        ep = str(ROOT / "deploy" / "entrypoint.sh")
+        with tempfile.TemporaryDirectory() as d:
+            env = {**os.environ, "GLASSBOX_SECRETS_DIR": d}
+            r = subprocess.run(["sh", ep, "check-secrets"], env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("no readable non-empty secret file", r.stderr)
+            Path(d, "github_token").write_text("x", encoding="utf-8")
+            r = subprocess.run(["sh", ep, "check-secrets"], env=env, capture_output=True, text=True)
+            self.assertEqual((r.returncode, r.stdout.strip()), (0, "GITHUB_TOKEN: set"))
+
     def test_preflight_checks_readability_and_traversal(self):
         self.assertIn("[ -r", WORKFLOW)
         self.assertIn("/s/secrets", WORKFLOW)

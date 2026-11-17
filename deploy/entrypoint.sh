@@ -37,6 +37,11 @@ if [ -d "$SECRETS_DIR" ]; then
   done
 fi
 
+if [ -n "${GLASSBOX_SECRETS_DIR:-}" ] && [ -z "${SECRET_NAMES:-}" ]; then
+  echo "no readable non-empty secret file in $SECRETS_DIR" >&2
+  exit 1
+fi
+
 CONFIG="${GLASSBOX_CONFIG:-/etc/glassbox/hub.toml}"
 
 if [ "${1:-}" = "check-secrets" ]; then
