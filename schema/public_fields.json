@@ -33,22 +33,22 @@
   "activity[].public": "bool", "activity[].title": "title", "activity[].branch": "text?",
   "activity[].hash": "hash?", "activity[].url": "url:public-repo?", "activity[].machine": "code?", "activity[].pushed": "bool",
 
-  "machines[].id": "code", "machines[].label": "text", "machines[].role": "enum:dev|deploy|work|gitea",
-  "machines[].os": "enum:macos|linux|windows", "machines[].online": "bool", "machines[].lastSeen": "iso?",
+  "machines[].id": "code", "machines[].label": "text", "machines[].role": "enum:dev|deploy|work|gitea?",
+  "machines[].os": "enum:macos|linux|windows?", "machines[].online": "bool", "machines[].lastSeen": "iso?",
   "machines[].probeLastReport": "iso?",
   "machines[].system.cpuPct": "number", "machines[].system.memUsed": "number", "machines[].system.memTotal": "number",
   "machines[].system.diskUsed": "number", "machines[].system.diskTotal": "number", "machines[].system.uptimeSec": "number",
   "machines[].history[].t": "iso", "machines[].history[].cpuPct": "number", "machines[].history[].memPct": "number",
 
-  "services[].name": "text", "services[].kind": "enum:container|monitor|both", "services[].machine": "code",
+  "services[].name": "text", "services[].kind": "enum:container|monitor|both", "services[].machine": "code?",
   "services[].status": "enum:up|down|paused|pending|maintenance|unknown", "services[].uptimePct24h": "number?",
   "services[].cpuPct": "number?", "services[].memBytes": "number?",
 
-  "runtimes[].machine": "code", "runtimes[].agent": "enum:claude-code|codex", "runtimes[].version": "semver",
+  "runtimes[].machine": "code", "runtimes[].agent": "enum:claude-code|codex", "runtimes[].version": "semver?",
   "runtimes[].processes": "number", "runtimes[].activeSessions": "number", "runtimes[].stale": "bool",
 
   "tailnet[].name": "text", "tailnet[].os": "enum:macos|linux|windows|ios|android", "tailnet[].online": "bool",
-  "tailnet[].lastSeen": "iso",
+  "tailnet[].lastSeen": "iso?",
 
   "jobs[].name": "text", "jobs[].machine": "code", "jobs[].lastRun": "iso?", "jobs[].lastSuccess": "iso?", "jobs[].ok": "bool"
  }

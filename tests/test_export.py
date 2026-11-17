@@ -200,6 +200,52 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(pub["hidden"], ["byProject", "jobs", "tailnet"])
         self.assertEqual(self.gate(pub, ctx), [])
 
+    # --- lane A inputs: nullable fields, provisional blocks, local commits ----------------------
+
+    def test_lane_a_nulls_and_provisional_fields(self):
+        p = self.page
+        p["machines"][0].update(role=None, os=None)
+        p["machines"][0]["history"][0]["diskPct"] = 40.0
+        p["runtimes"][0]["version"] = None
+        p["tailnet"][0]["lastSeen"] = None
+        p["services"][0]["machine"] = None
+        p["quota"].append(dict(p["quota"][0], account="a_1f2e3d4c"))         # no code configured: hash
+        p.update(usageDays=[{"date": "2026-11-17"}], code={"repos": []}, warnings=["probe B is late"])
+        p["contributions"]["githubOfficialTotal"] = 7000
+        cfg = ex.load_config(Path(self.tmp.name) / "absent.toml")            # tailnet not hidden
+        pub, ctx = self.run_export(cfg=cfg)
+        m = pub["machines"][0]
+        self.assertEqual((m["role"], m["os"]), (None, None))
+        self.assertNotIn("diskPct", m["history"][0])
+        self.assertIsNone(pub["runtimes"][0]["version"])
+        self.assertIsNone(pub["tailnet"][0]["lastSeen"])
+        self.assertIsNone(pub["services"][0]["machine"])
+        self.assertEqual([q["account"] for q in pub["quota"]], ["K", "L", "L"])
+        for k in ("usageDays", "code", "warnings"):
+            self.assertNotIn(k, pub)
+        self.assertNotIn("githubOfficialTotal", pub["contributions"])
+        self.assertNotIn("a_1f2e3d4c", json.dumps(pub))
+        gate = lambda page: vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), ctx, {}).check_page(page, "p")
+        self.assertEqual(gate(pub), [])
+        for put in (lambda q: q.__setitem__("usageDays", []), lambda q: q.__setitem__("warnings", ["x"]),
+                    lambda q: q.__setitem__("code", {}),
+                    lambda q: q["contributions"].__setitem__("githubOfficialTotal", 1),
+                    lambda q: q["machines"][0]["history"][0].__setitem__("diskPct", 1.0)):
+            q = copy.deepcopy(pub)
+            put(q)
+            self.assertTrue(any("field not in public_fields.json" in b for b in gate(q)))
+        q = copy.deepcopy(pub)
+        q["quota"][0]["account"] = "a_1f2e3d4c"
+        self.assertTrue(any("is not code" in b for b in gate(q)))
+
+    def test_local_commit_of_public_repo_loses_branch_keeps_hash(self):
+        pub, ctx = self.run_export()
+        a = pub["activity"][1]                                    # source local, public repo, branch "dev"
+        self.assertEqual((a["source"], a["public"], a["branch"], a["hash"]), ("local", True, None, "5c1d9e0"))
+        self.assertEqual(self.gate(pub, ctx), [])
+        a["branch"] = "main"
+        self.assertTrue(any("local commit keeps branch" in b for b in self.gate(pub, ctx)))
+
     # --- refusing --------------------------------------------------------------------------------
 
     def test_mistyped_values_raise(self):

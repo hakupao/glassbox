@@ -222,6 +222,48 @@
   "why": "config hides tailnet but the page does not list it"
  },
  {
+  "file": "block-local-public-branch.json",
+  "expect": "block",
+  "reason": "local commit keeps branch",
+  "why": "local commit of a public repo keeps its branch (may be a private fork)"
+ },
+ {
+  "file": "block-provisional-usageDays.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "provisional field usageDays from lane A is not public"
+ },
+ {
+  "file": "block-provisional-code.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "provisional field code from lane A is not public"
+ },
+ {
+  "file": "block-provisional-warnings.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "provisional field warnings from lane A is not public"
+ },
+ {
+  "file": "block-provisional-githubOfficialTotal.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "provisional field githubOfficialTotal from lane A is not public"
+ },
+ {
+  "file": "block-provisional-diskPct.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "provisional field diskPct from lane A is not public"
+ },
+ {
+  "file": "pass-nullable-fields.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "nulls lane A can emit on whitelisted nullable paths"
+ },
+ {
   "file": "block-title-path.json",
   "expect": "block",
   "reason": "path",

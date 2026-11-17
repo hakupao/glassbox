@@ -345,6 +345,8 @@ def export(page, cfg, terms):
         title = e.get("title") if isinstance(e.get("title"), str) else ""
         title = scrub_title(title, scrub_names, modes)
         if is_public(e, "repo"):
+            if e.get("source") == "local":       # may live only on a private fork or mirror
+                e["branch"] = None
             b = e.get("branch")
             if isinstance(b, str) and b and scrub_title(b, scrub_names, modes) == b:
                 branches.add(b)

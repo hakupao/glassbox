@@ -78,6 +78,19 @@ js("block-private-project", "privateProjects: a public repo the owner keeps priv
    lambda o: o["activity"].append(dict(copy.deepcopy(o["activity"][0]), repo="dotfiles-sandbox", url=None)))
 js("block-config-hidden-missing", "config hides tailnet but the page does not list it", "block", "config hides tailnet",
    lambda o: o.__setitem__("hidden", []))
+js("block-local-public-branch", "local commit of a public repo keeps its branch (may be a private fork)", "block", "local commit keeps branch",
+   lambda o: o["activity"].append(dict(copy.deepcopy(o["activity"][0]), source="local", url=None)))
+for key, put in (("usageDays", lambda o: o.__setitem__("usageDays", [])), ("code", lambda o: o.__setitem__("code", {})),
+                 ("warnings", lambda o: o.__setitem__("warnings", ["probe A is late"])),
+                 ("githubOfficialTotal", lambda o: o.__setitem__("contributions", {"total": 0, "days": [], "githubOfficialTotal": 9})),
+                 ("diskPct", lambda o: o.__setitem__("machines", [{"id": "A", "label": {"masked": True}, "online": True,
+                                                                   "history": [{"t": "2026-11-17T10:00:00+09:00", "cpuPct": 1, "memPct": 2, "diskPct": 3}]}]))):
+    js(f"block-provisional-{key}", f"provisional field {key} from lane A is not public", "block", "field not in public_fields.json", put)
+js("pass-nullable-fields", "nulls lane A can emit on whitelisted nullable paths", "pass", None, lambda o: o.update(
+   machines=[{"id": "A", "label": {"masked": True}, "role": None, "os": None, "online": False, "lastSeen": None}],
+   runtimes=[{"machine": "A", "agent": "codex", "version": None, "processes": 0, "activeSessions": 0, "stale": True}],
+   services=[{"name": {"masked": True}, "kind": "monitor", "machine": None, "status": "unknown", "uptimePct24h": None,
+              "cpuPct": None, "memBytes": None}]))
 js("block-title-path", "S12: absolute path in a title", "block", "path", title("fix: read /srv/data/app.db"))
 js("block-title-home-path", "S12: home path in a title (built at load time)", "block", "path", title("fix: read {{USERS}}someone/notes.md"))
 js("block-title-tilde-path", "S12: ~ path in a title", "block", "path", title("fix: write ~/notes/plan.txt"))

@@ -305,8 +305,11 @@ class Gate:
                         bad.append(f"{p}: private commit t is not on the hour")
                 except (TypeError, ValueError):
                     bad.append(f"{p}: private commit t is not a time")
-            elif a.get("repo") == MASK:
-                bad.append(f"{p}: public commit with a masked repo")
+            else:
+                if a.get("repo") == MASK:
+                    bad.append(f"{p}: public commit with a masked repo")
+                if a.get("source") == "local" and a.get("branch") is not None:
+                    bad.append(f"{p}: local commit keeps branch")
         today = page.get("today") if isinstance(page.get("today"), dict) else {}
         rows = today.get("byProject") if isinstance(today.get("byProject"), list) else []
         for i, r in enumerate(rows):
