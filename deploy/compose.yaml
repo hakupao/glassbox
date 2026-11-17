@@ -1,0 +1,115 @@
+# glassbox deployment: hub + Tailscale sidecar + read-only Docker socket proxy.
+#
+# The host publishes NO ports. The only way in is the tailnet: the sidecar's `tailscale serve`
+# forwards tailnet port 443 to the hub on 127.0.0.1 (shared network namespace). Tailscale
+# Funnel is not enabled (see serve.json).
+#
+# Run from this directory:   docker compose up -d --build
+# Secrets are plain files in ./secrets/ (git-ignored, mode 0600); see README.md.
+
+name: glassbox
+
+services:
+  glassbox:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: glassbox-hub:local
+    restart: unless-stopped
+    network_mode: "service:tailscale"        # no network of its own, hence no published ports
+    depends_on:
+      - tailscale
+      - docker-proxy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    environment:
+      GLASSBOX_COLLECT_INTERVAL: "${GLASSBOX_COLLECT_INTERVAL:-300}"
+    volumes:
+      - glassbox-data:/data                                  # sqlite database; include in the host backup
+      - ./hub.toml:/etc/glassbox/hub.toml:ro
+      - tailscale-sock:/var/run/tailscale                    # tailscaled socket for `tailscale status`
+    secrets:
+      - github_token
+      - gitea_main_token
+      - gitea_second_token
+      - beszel_password
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8787/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: "${TS_HOSTNAME:-glassbox}"                     # becomes <hostname>.<TAILNET_NAME>.ts.net
+    restart: unless-stopped
+    # Outbound only: there is no `ports:` section anywhere in this file.
+    # The auth key is read from a secret file, never written in this file.
+    entrypoint: ["/bin/sh", "-c", "TS_AUTHKEY=\"$$(cat /run/secrets/ts_authkey 2>/dev/null || true)\" exec /usr/local/bin/containerboot"]
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"                                   # no /dev/net/tun, no NET_ADMIN
+      TS_ACCEPT_DNS: "false"
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_EXTRA_ARGS: "${TS_EXTRA_ARGS:-}"                    # e.g. --advertise-tags=tag:glassbox
+    volumes:
+      - tailscale-state:/var/lib/tailscale                   # node identity survives restarts
+      - tailscale-sock:/var/run/tailscale
+      - ./serve.json:/config/serve.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"                  # reach Beszel / Uptime Kuma on the VM host
+    security_opt: ["no-new-privileges:true"]
+    secrets:
+      - ts_authkey
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    # Container listing only. Every endpoint group not enabled below answers 403.
+    environment:
+      CONTAINERS: "1"        # GET /containers/json, which is all the hub calls
+      POST: "0"              # no write methods at all
+      INFO: "0"
+      IMAGES: "0"
+      NETWORKS: "0"
+      VOLUMES: "0"
+      SERVICES: "0"
+      TASKS: "0"
+      SECRETS: "0"
+      CONFIGS: "0"
+      EXEC: "0"
+      AUTH: "0"
+      SYSTEM: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      DISTRIBUTION: "0"
+      EVENTS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SESSION: "0"
+      SWARM: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/run"]
+
+volumes:
+  glassbox-data:
+  tailscale-state:
+  tailscale-sock:
+
+secrets:
+  ts_authkey:
+    file: ./secrets/ts_authkey
+  github_token:
+    file: ./secrets/github_token
+  gitea_main_token:
+    file: ./secrets/gitea_main_token
+  gitea_second_token:
+    file: ./secrets/gitea_second_token
+  beszel_password:
+    file: ./secrets/beszel_password

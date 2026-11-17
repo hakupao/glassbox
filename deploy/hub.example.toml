@@ -1,0 +1,50 @@
+# Copy to hub.toml (git-ignored) and fill in. Tokens are NOT written here: token_env /
+# password_env name an environment variable, which the entrypoint fills from ./secrets/<name>
+# (file github_token -> GITHUB_TOKEN, gitea_main_token -> GITEA_MAIN_TOKEN, ...).
+
+db = "/data/hub.sqlite"
+host = "127.0.0.1"            # inside the sidecar's namespace; only `tailscale serve` reaches it
+port = 8787
+tz = "Asia/Tokyo"             # must be a whole-hour offset zone (CONTRACT section 0)
+
+# Commit author addresses that count as yours on Gitea (used when the login does not match).
+author_emails = ["<AUTHOR_EMAIL>"]
+
+[github]
+login = "<GITHUB_LOGIN>"
+token_env = "GITHUB_TOKEN"    # fine-grained, read-only token
+
+[[gitea]]
+name = "main"
+url = "<GITEA_URL>"
+user = "<GITEA_USER>"
+token_env = "GITEA_MAIN_TOKEN"
+
+[[gitea]]
+name = "second"
+url = "<GITEA2_URL>"
+user = "<GITEA2_USER>"
+token_env = "GITEA_SECOND_TOKEN"
+
+[beszel]
+url = "http://host.docker.internal:<BESZEL_PORT>"
+user = "<BESZEL_READONLY_USER>"
+password_env = "BESZEL_PASSWORD"
+[beszel.map]                  # Beszel system name -> machine code; unmapped systems are dropped
+"<BESZEL_SYSTEM_NAME_C>" = "C"
+"<BESZEL_SYSTEM_NAME_V>" = "V"
+"<BESZEL_SYSTEM_NAME_A>" = "A"
+"<BESZEL_SYSTEM_NAME_B>" = "B"
+"<BESZEL_SYSTEM_NAME_D>" = "D"
+
+[kuma]
+url = "http://host.docker.internal:<KUMA_PORT>"
+slug = "<KUMA_STATUS_PAGE_SLUG>"
+machine = "V"
+
+[docker]
+url = "http://docker-proxy:2375"
+machine = "V"
+
+[tailscale]
+socket = "/var/run/tailscale/tailscaled.sock"

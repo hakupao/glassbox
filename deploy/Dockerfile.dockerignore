@@ -1,0 +1,4 @@
+*
+!hub/
+!deploy/entrypoint.sh
+**/__pycache__
