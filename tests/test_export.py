@@ -43,10 +43,11 @@ class ExportTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_export(self, page=None, cfg=None):
-        return ex.export(page or self.page, cfg or self.cfg, self.terms)
+        self.last_input = page or self.page          # the gate derives visibility from the private page
+        return ex.export(self.last_input, cfg or self.cfg, self.terms)
 
-    def gate(self, pub, ctx, html=False):
-        g = vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), ctx,
+    def gate(self, pub, ctx=None, html=False):
+        g = vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.last_input,
                     vp.load_toml(Path(self.tmp.name) / "public.toml"))
         name = "page.html" if html else "page.json"
         body = json.dumps(pub, ensure_ascii=False)
@@ -108,7 +109,61 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(cfg["privateTitles"], "prefix-only")          # owner's decision 2026-11-17
         self.assertTrue(all(a["title"] in ("fix:", "refactor:", "******") for a in pub["activity"] if not a["public"]))
         terms = json.loads((RT / "terms.json").read_text(encoding="utf-8"))
-        self.assertEqual(vp.Gate(terms, ctx, {}).check_page(pub, "p"), [])      # gate with the same empty config
+        self.assertEqual(vp.Gate(terms, self.page, {}).check_page(pub, "p"), [])      # gate with the same empty config
+
+    # --- review H1: one private occurrence makes a name private everywhere ------------------
+
+    def test_visibility_conflict_resolves_to_private(self):
+        mutations = {
+            "byProject says public, activity gitea": lambda p: p["today"]["byProject"][1].update(public=True),
+            "other casing private": lambda p: p["activity"].append(dict(p["activity"][3], repo="SDTM-Pedia")),
+            "code.repos says gitea": lambda p: p.__setitem__("code", {"repos": [
+                {"repo": "shuttle-path", "public": True, "sources": ["github", "gitea"]}], "commits": []}),
+            "usageDays private": lambda p: p.__setitem__("usageDays", [{"date": "2026-11-17", "byProject": [
+                {"project": "sdtm-pedia", "public": False}]}]),
+        }
+        hidden = {"byProject says public, activity gitea": "falcon-ledger", "other casing private": "sdtm-pedia",
+                  "code.repos says gitea": "shuttle-path", "usageDays private": "sdtm-pedia"}
+        for name, mut in mutations.items():
+            with self.subTest(name):
+                page = copy.deepcopy(EXAMPLE)
+                mut(page)
+                pub, ctx = self.run_export(page=page)
+                self.assertNotIn(ex.norm(hidden[name]), ex.norm(json.dumps(pub, ensure_ascii=False)))
+                self.assertNotIn(hidden[name], ctx["publicRepos"])
+                self.assertEqual(self.gate(pub), [])
+
+    def test_names_only_in_detail_blocks_are_private(self):
+        self.page["code"] = {"repos": [{"repo": "heron-vault", "public": False, "sources": ["local"]}],
+                             "commits": [{"repo": "kite-notes", "public": False, "hash": "abcdef1", "title": "x"}]}
+        self.page["usageDays"] = [{"date": "2026-11-17", "byProject": [{"project": "wren-tools", "public": False}]}]
+        self.page["activity"][0]["title"] = "feat: port HeronVault, kite_notes and Wren.Tools"
+        pub, ctx = self.run_export()
+        self.assertTrue({"heron-vault", "kite-notes", "wren-tools", "abcdef1"} <= set(ctx["privateNames"]))
+        self.assertEqual(pub["activity"][0]["title"].count("******"), 3)
+        self.assertEqual(self.gate(pub), [])
+
+    def test_gate_rejects_forged_public_name(self):
+        pub, _ = self.run_export()
+        pub["today"]["byProject"].insert(0, {"project": "falcon-ledger", "public": True, "requests": 1, "costUsd": 0.1})
+        self.assertTrue(self.gate(pub))                  # the gate derives visibility itself
+
+    def test_gate_and_exporter_agree_on_visibility(self):
+        """Differential: the gate's public set is within the exporter's, its private names cover the exporter's."""
+        pages = [copy.deepcopy(EXAMPLE)]
+        p = copy.deepcopy(EXAMPLE)
+        p["today"]["byProject"][1]["public"] = True
+        pages.append(p)
+        p = copy.deepcopy(EXAMPLE)
+        p["code"] = {"repos": [{"repo": "sdtm-pedia", "public": True, "sources": ["gitea"]}], "commits": []}
+        pages.append(p)
+        for page in pages:
+            pub, ctx = self.run_export(page=page)
+            g_public, g_names, _ = vp.derive(page, self.cfg["privateProjects"])
+            self.assertLessEqual(set(ctx["publicRepos"]), g_public)
+            self.assertLessEqual(g_public, set(ctx["publicRepos"]))
+            norm_g = {vp.norm(n) for n in g_names}
+            self.assertTrue(all(vp.norm(n) in norm_g for n in ctx["privateNames"]))
 
     # --- rule 4: private commits ----------------------------------------------------------------
 
@@ -154,7 +209,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(self.gate(pub, ctx), [])
         self.assertEqual(titles[0], "feat: sync with ******")
         for t in bad:                                   # the gate rejects every original title
-            self.assertTrue(vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), ctx,
+            self.assertTrue(vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.page,
                                     vp.load_toml(Path(self.tmp.name) / "public.toml")).title_problems(t), t)
         for ok in ("fix: v1.2.3 bump at 10:30", "refactor: split a/b/c w/ tests and/or docs"):
             self.assertEqual(ex.scrub_title(ok, [], {}), ok)
@@ -228,7 +283,7 @@ class ExportTest(unittest.TestCase):
             self.assertNotIn(k, pub)
         self.assertNotIn("githubOfficialTotal", pub["contributions"])
         self.assertNotIn("a_1f2e3d4c", json.dumps(pub))
-        gate = lambda page: vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), ctx, {}).check_page(page, "p")
+        gate = lambda page: vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.page, {}).check_page(page, "p")
         self.assertEqual(gate(pub), [])
         for put in (lambda q: q.__setitem__("usageDays", []), lambda q: q.__setitem__("warnings", ["x"]),
                     lambda q: q.__setitem__("code", {}),
@@ -247,7 +302,6 @@ class ExportTest(unittest.TestCase):
         pub, ctx = self.run_export()
         self.assertFalse({"A", "B", "C", "D", "V"} & set(ctx["privateNames"]))
         self.assertTrue(all(m["label"] == {"masked": True} for m in pub["machines"]))
-        ctx["privateNames"] += ["A", "V"]             # a context from elsewhere: the gate ignores codes too
         self.assertEqual(self.gate(pub, ctx), [])
 
     def test_local_commit_of_public_repo_loses_branch_keeps_hash(self):

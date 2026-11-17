@@ -19,7 +19,7 @@ PLACEHOLDERS = {"{{USERS}}": "/" + "Users/", "{{HOMEDIR}}": "/" + "home/", "{{GH
 
 def context():
     terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
-    ctx = json.loads((RT / "context" / "gate-context.json").read_text(encoding="utf-8"))
+    ctx = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))
     cfg = vp.load_toml(RT / "context" / "public.toml")
     return terms, ctx, cfg
 
@@ -65,7 +65,7 @@ class RedTeamTest(unittest.TestCase):
 
     def test_reasons_never_echo_private_words(self):
         words = list(self.terms["terms"]) + self.cfg["keywords"] + [
-            n for n in self.ctx["privateNames"] if vp.norm(n) not in vp.vocabulary()] + list(PLACEHOLDERS.values())
+            n for n in vp.derive(self.ctx, set())[1] if vp.norm(n) not in vp.vocabulary() and len(n) > 1] + list(PLACEHOLDERS.values())
         with tempfile.TemporaryDirectory() as d:
             report = "\n".join(p for c in self.cases for p in self.gate.check_file(materialise(c, d)))
         # File names are ours; drop them so only the reason text is searched.

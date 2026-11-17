@@ -10,8 +10,11 @@ Checks every file given (the public page JSON and the final HTML):
 - cross-field (rules 4, 7): private commits have null branch / hash / url / machine, `t` on the
   hour and a masked repo; Gitea commits are never public; private byProject rows are the merged
   row; hidden blocks are [].
-- name list (rule 6): terms from .local/redact_terms.local.json and the runtime private names
-  (the exporter's gate context) must not occur anywhere. Normalised length >= 5: substring match
+- visibility (review H1): public repos and private names are derived here from the private page
+  (--private), not taken from the exporter. A name is public only if every occurrence is public
+  and not Gitea; a name that is both allowlisted / shown and private is rejected.
+- name list (rule 6): terms from .local/redact_terms.local.json and the derived private names
+  must not occur anywhere. Normalised length >= 5: substring match
   on normalised text (case, - _ . and spaces ignored); shorter: word boundary on the raw text;
   `"match": {term: "substring"|"word"}` in the terms file overrides. Text is also checked after
   undoing HTML entities, \\uXXXX escapes and %-encoding.
@@ -21,9 +24,9 @@ Checks every file given (the public page JSON and the final HTML):
 - resources: no external fonts / CDN / any absolute or protocol-relative URL, except commit URLs
   of public repos and XML namespace URIs.
 
-    python3 scripts/verify_public.py FILE... --context .cache/gate-context.json
+    python3 scripts/verify_public.py FILE... --private PRIVATE.json
         [--terms .local/redact_terms.local.json] [--config .local/public.local.toml]
-    (--no-context checks without runtime names, e.g. for the fabricated examples)
+    (--no-private only for fabricated examples)
 
 Exit status: 0 clean, 1 rejected (reasons listed, private words shown masked), 2 setup error.
 This file shares no code with hub/export.py on purpose: one bug must not pass both.
@@ -111,26 +114,81 @@ def vocabulary():
     return {norm(w) for w in words}
 
 
+def walk_items(node, path):
+    """Dicts at `path` ("a.b[].c" style, list-valued at the end)."""
+    nodes = [node]
+    for part in path.split("."):
+        many = part.endswith("[]")
+        nodes = [n.get(part[:-2] if many else part) for n in nodes if isinstance(n, dict)]
+        if many:
+            nodes = [x for n in nodes if isinstance(n, list) for x in n]
+    return [x for n in nodes if isinstance(n, list) for x in n if isinstance(x, dict)]
+
+
+SITES = [("activity", "repo"), ("today.byProject", "project"), ("code.commits", "repo"), ("code.repos", "repo"),
+         ("usageDays[].byProject", "project")]
+TEXT_PATHS = [p for p, t in FIELDS.items() if t.rstrip("?") == "text" and p != "activity[].branch"]
+
+
+def derive(private, private_projects):
+    """Visibility and private names, read from the PRIVATE page itself — not from the exporter.
+    A name is public only when every occurrence is public:true and not Gitea (review H1)."""
+    seen = {}
+    for path, key in SITES:
+        for e in walk_items(private, path):
+            n = e.get(key)
+            if isinstance(n, str) and norm(n):
+                ok = e.get("public") is True and e.get("source") != "gitea" and "gitea" not in (e.get("sources") or [])
+                seen.setdefault(norm(n), [set(), True])
+                seen[norm(n)][0].add(n)
+                seen[norm(n)][1] = seen[norm(n)][1] and ok
+    for n in private_projects:
+        seen.setdefault(norm(n), [set(), True])[0].add(n)
+        seen[norm(n)][1] = False
+    public = {s for spellings, ok in seen.values() if ok for s in spellings}
+    names = {s for spellings, ok in seen.values() if not ok for s in spellings}
+    for path in TEXT_PATHS:                      # every other Text value: private unless allowlisted
+        head, _, key = path.rpartition(".")
+        for e in walk_items(private, head.removesuffix("[]")) if head.endswith("[]") else [private.get(head) or {}]:
+            v = e.get(key) if isinstance(e, dict) else None
+            if isinstance(v, str) and norm(v) not in {norm(p) for p in public}:
+                names.add(v)
+    branches, hashes = set(), set()
+    for path in ("activity", "code.commits"):
+        for e in walk_items(private, path):
+            if isinstance(e.get("repo"), str) and e["repo"] in public:
+                if e.get("source") != "local" and isinstance(e.get("branch"), str):
+                    branches.add(e["branch"])
+            else:
+                if isinstance(e.get("hash"), str):
+                    hashes.add(e["hash"])
+                if isinstance(e.get("url"), str):
+                    host = re.sub(r"^\w+://([^/]+).*", r"\1", e["url"]).lower()
+                    if host not in ("github.com", "www.github.com"):
+                        hashes.add(host)
+    return public, names | hashes, branches
+
+
 class Gate:
-    def __init__(self, terms, context, config):
-        """terms: parsed redact-terms JSON; context: exporter gate context or None; config: parsed TOML."""
+    def __init__(self, terms, private, config):
+        """terms: parsed redact-terms JSON; private: the private page/1 the snapshot was exported
+        from (None only for fabricated examples); config: parsed TOML."""
         allow_words = {a.casefold() for a in terms.get("allow", [])}
         self.modes = {k.casefold(): v for k, v in terms.get("match", {}).items()}
         bad = {v for v in self.modes.values() if v not in ("substring", "word")}
         if bad:
             raise SetupError(f"terms file: unknown match mode(s) {sorted(bad)}")
         self.allow = {k: set(v) for k, v in config.get("allow", {}).items()}
-        ctx = context or {}
         self.private_projects = set(config.get("privateProjects", []))
         self.hidden = set(config.get("hidden", []))
         self.private_titles = config.get("privateTitles", "prefix-only")      # default: owner's decision 2026-11-17
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
-        self.public_repos = (set(ctx.get("publicRepos", [])) | self.allow.get("activity[].repo", set())) \
-            - self.private_projects
+        public, derived, branches = derive(private or {}, self.private_projects)
+        self.public_repos = public
         for f in ("activity[].repo", GROUP_FIELD):
-            self.allow.setdefault(f, set()).update(self.public_repos)
-        self.allow.setdefault("activity[].branch", set()).update(ctx.get("publicBranches", []))
+            self.allow.setdefault(f, set()).update(public)
+        self.allow.setdefault("activity[].branch", set()).update(branches)
         self.codes = set(config.get("codes", []))
         self.keywords = [k for k in config.get("keywords", []) if k]
         owners = sorted(config.get("githubOwners", []))
@@ -140,13 +198,18 @@ class Gate:
             if repos and owners else None                # no configured owner: no link is public
         vocab = vocabulary()
         allowed_values = set().union(*self.allow.values()) if self.allow else set()
-        runtime = [n for n in ctx.get("privateNames", [])
+        runtime = [n for n in derived
                    if norm(n) and norm(n) not in vocab and n not in allowed_values
                    and not (re.fullmatch(r"[A-Z]", n) or n in self.codes)]     # codes are public by design
         words = [t for t in terms.get("terms", []) if t and t.casefold() not in allow_words]
         self.names = sorted(set(words) | set(runtime) | set(self.keywords) | self.private_projects,
                             key=len, reverse=True)
         self.word_re, self.long = self._compile(self.names)
+        # A name both public and private is a contradiction the exporter must not have resolved
+        # towards public (review H1): allowlists or visibility flags disagree.
+        private_keys = {norm(n) for n in set(words) | set(derived) | set(self.keywords) | self.private_projects}
+        shown = {v for f in ("activity[].repo", GROUP_FIELD) for v in self.allow.get(f, ())}
+        self.conflicts = sorted(v for v in shown if norm(v) in private_keys)
 
     def _compile(self, names):
         word, long = [], set()
@@ -414,19 +477,23 @@ def main(argv=None):
     ap.add_argument("--terms", default=str(ROOT / ".local" / "redact_terms.local.json"))
     ap.add_argument("--config", default=str(ROOT / ".local" / "public.local.toml"))
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--context", help="gate context written by hub.export (private names, public repos)")
-    g.add_argument("--no-context", action="store_true", help="check without runtime private names")
+    g.add_argument("--private", help="the private page/1 the snapshot was exported from (visibility and "
+                                     "private names are derived from it, independently of the exporter)")
+    g.add_argument("--no-private", action="store_true", help="fabricated examples only")
     a = ap.parse_args(argv)
     try:
         terms = load_json(a.terms, "terms file")
-        ctx = None if a.no_context else load_json(a.context, "gate context")
-        if ctx is not None and not isinstance(ctx.get("privateNames"), list):
-            raise SetupError("gate context has no privateNames list")
-        gate = Gate(terms, ctx, load_toml(a.config))
+        private = None if a.no_private else load_json(a.private, "private page")
+        if private is not None and (not isinstance(private, dict) or private.get("schema") != "glassbox.page/1"):
+            raise SetupError("--private is not a glassbox.page/1 page")
+        gate = Gate(terms, private, load_toml(a.config))
     except SetupError as e:
         print(f"setup error: {e}", file=sys.stderr)
         return 2
     total = 0
+    for c in gate.conflicts:
+        total += 1
+        print(f"name is both public and private: {hide(c)}")
     for f in a.files:
         for b in gate.check_file(f):
             total += 1

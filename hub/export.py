@@ -16,12 +16,16 @@ private one: a path not in that table cannot reach the output. On the way:
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
 
-export() also returns a gate context (private names, public repos and branches) for
-scripts/verify_public.py. It holds real names: write it only under a gitignored path.
+Visibility (review H1): a repo / project name is public only if every occurrence in the page
+(activity, today.byProject, code.*, usageDays[].byProject) is public and not Gitea.
+
+export() also returns a context (private names, public repos and branches) for diagnostics; the
+gate derives its own from the private page. It holds real names: write it only under a gitignored
+path (--context, off by default).
 
     python -m hub.export PRIVATE.json [--config .local/public.local.toml]
         [--terms .local/redact_terms.local.json] [--out out/page.public.json]
-        [--context .cache/gate-context.json]
+        [--context .cache/export-context.json]
 
 Config format: docs/public.example.toml. A missing config file means empty allowlists.
 """
@@ -303,6 +307,32 @@ def _hour(t):
     return s[:-6] + "Z" if t.endswith("Z") and s.endswith("+00:00") else s
 
 
+VISIBILITY_SITES = (("activity", "repo"), ("today.byProject", "project"), ("code.commits", "repo"),
+                    ("code.repos", "repo"), ("usageDays[].byProject", "project"))
+
+
+def visibility_sites(page):
+    """(entry, key) for every place a repo / project name appears with a `public` flag."""
+    def items(node, parts):
+        if not parts:
+            yield from (x for x in (node if isinstance(node, list) else []) if isinstance(x, dict))
+            return
+        head, rest = parts[0], parts[1:]
+        many = head.endswith("[]")
+        nxt = node.get(head.rstrip("[]")) if isinstance(node, dict) else None
+        for x in (nxt if many and isinstance(nxt, list) else [nxt]):
+            yield from items(x, rest)
+    for path, key in VISIBILITY_SITES:
+        for e in items(page, path.split(".")):
+            yield e, key
+
+
+def url_host(url):
+    """Host of a private commit link, as a private name; GitHub itself is not private."""
+    host = re.sub(r"^\w+://([^/]+).*", r"\1", url).lower()
+    return "" if host in ("github.com", "www.github.com") else host
+
+
 def public_url_rx(repos, owners):
     if not repos or not owners:          # no configured owner: no commit links at all
         return None
@@ -319,14 +349,24 @@ def export(page, cfg, terms):
     today = src.get("today") or {}
     activity = src.get("activity") or []
     by_project = today.get("byProject") or []
-    priv_proj = cfg["privateProjects"]
+
+    # A repo / project name is public only if EVERY occurrence says public, is not from Gitea and
+    # is not blacklisted; one private occurrence anywhere makes it private everywhere (review H1).
+    # Names are compared normalised, so differently cased spellings share one verdict.
+    verdict = {}
+    for e, key in visibility_sites(src):
+        name = e.get(key)
+        if isinstance(name, str) and norm(name):
+            ok = (e.get("public") is True and e.get("source") != "gitea"
+                  and "gitea" not in (e.get("sources") or []))
+            verdict[norm(name)] = verdict.get(norm(name), True) and ok
+    for n in cfg["privateProjects"]:
+        verdict[norm(n)] = False
 
     def is_public(e, key):
-        return (e.get("public") is True and isinstance(e.get(key), str) and e[key] not in priv_proj
-                and e.get("source") != "gitea")
+        return isinstance(e.get(key), str) and verdict.get(norm(e[key])) is True
 
-    public_repos = {e["repo"] for e in activity if is_public(e, "repo")} | \
-                   {p["project"] for p in by_project if is_public(p, "project")}
+    public_repos = {e[k] for e, k in visibility_sites(src) if is_public(e, k)}
     allow_all = set().union(*cfg["allow"].values()) | public_repos
 
     # Private names: every text value that will not be shown, and private repos / projects.
@@ -334,8 +374,9 @@ def export(page, cfg, terms):
     _walk_text(src, "", texts)
     names = {v for g, v in texts if g not in NAME_FIELDS_SKIP and v not in cfg["allow"].get(g, ())
              and not (g in ("activity[].repo", "today.byProject[].project") and v in public_repos)}
-    names |= {e["repo"] for e in activity if isinstance(e.get("repo"), str) and not is_public(e, "repo")}
-    names |= {p["project"] for p in by_project if isinstance(p.get("project"), str) and not is_public(p, "project")}
+    names |= {e[k] for e, k in visibility_sites(src) if isinstance(e.get(k), str) and not is_public(e, k)}
+    private_keys = {k for k, v in verdict.items() if not v}
+    allow_all = {a for a in allow_all if norm(a) not in private_keys}
     # Codes (A, K, ...) are public by design; a label that equals its code reveals nothing.
     names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all and not is_code(n, cfg)}
     scrub_names = sorted(names | set(terms["terms"]) | set(cfg["keywords"]), key=len, reverse=True)
@@ -343,6 +384,12 @@ def export(page, cfg, terms):
 
     url_rx = public_url_rx(public_repos, cfg["githubOwners"])
     branches, extra = set(), set()
+    for e in (src.get("code") or {}).get("commits") or []:        # §2.2: not exported, but its names count
+        if isinstance(e, dict) and not is_public(e, "repo"):
+            if isinstance(e.get("hash"), str):
+                extra.add(e["hash"])
+            if isinstance(e.get("url"), str):
+                extra.add(url_host(e["url"]))
     for e in activity:
         title = e.get("title") if isinstance(e.get("title"), str) else ""
         title = scrub_title(title, scrub_names, modes)
@@ -363,7 +410,7 @@ def export(page, cfg, terms):
         else:
             for k in ("hash", "url"):
                 if isinstance(e.get(k), str):
-                    extra.add(e[k] if k == "hash" else re.sub(r"^\w+://([^/]+).*", r"\1", e[k]))
+                    extra.add(e[k] if k == "hash" else url_host(e[k]))
             e.update(public=False, branch=None, hash=None, url=None, machine=None, t=_hour(e["t"]))
             e["repo"] = _PRIVATE_REPO
             if cfg["privateTitles"] == "prefix-only":
@@ -406,7 +453,7 @@ def export(page, cfg, terms):
     _check(pub, "", cfg, url_rx, bad)
     if bad:
         raise ExportError("export would publish mistyped values:\n  " + "\n  ".join(bad))
-    ctx = {"privateNames": sorted(names | extra), "publicRepos": sorted(public_repos),
+    ctx = {"privateNames": sorted(names | (extra - {""})), "publicRepos": sorted(public_repos),
            "publicBranches": sorted(branches)}
     return pub, ctx
 
@@ -421,7 +468,7 @@ def main(argv=None):
     ap.add_argument("--config", default=str(DEFAULT_CONFIG))
     ap.add_argument("--terms", default=str(DEFAULT_TERMS))
     ap.add_argument("--out", default=str(ROOT / "out" / "page.public.json"))
-    ap.add_argument("--context", default=str(ROOT / ".cache" / "gate-context.json"))
+    ap.add_argument("--context")
     a = ap.parse_args(argv)
     try:
         page = json.loads(Path(a.private).read_text(encoding="utf-8"))
@@ -430,9 +477,10 @@ def main(argv=None):
         print(f"export failed: {e}", file=sys.stderr)
         return 2
     for path, obj in ((a.out, pub), (a.context, ctx)):
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    print(f"wrote {a.out} and the gate context {a.context} (private: keep it out of git)")
+        if path:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    print(f"wrote {a.out}" + (f" and the context {a.context} (private: keep it out of git)" if a.context else ""))
     return 0
 
 

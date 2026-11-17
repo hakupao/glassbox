@@ -1,0 +1,15 @@
+{
+ "_note": "Fabricated private page/1 the red-team samples were 'exported' from. The gate derives visibility and private names from it.",
+ "schema": "glassbox.page/1", "view": "private",
+ "today": {"byProject": [
+  {"project": "sdtm-pedia", "public": true, "requests": 70, "costUsd": 2.5},
+  {"project": "other", "public": false, "requests": 50, "costUsd": 1.7}]},
+ "activity": [
+  {"t": "2026-11-17T10:12:00+09:00", "source": "github", "repo": "sdtm-pedia", "public": true, "title": "docs: x", "branch": "main", "hash": "4be0d71", "machine": "A"},
+  {"t": "2026-11-16T21:02:00+09:00", "source": "github", "repo": "shuttle-path", "public": true, "title": "feat: x", "branch": "dev", "hash": "7f20a19", "machine": "A"},
+  {"t": "2026-11-16T20:00:00+09:00", "source": "github", "repo": "dotfiles-sandbox", "public": true, "title": "chore: x", "branch": "main", "hash": "1a2b3c4", "machine": "A"},
+  {"t": "2026-11-17T09:48:00+09:00", "source": "local", "repo": "orchid-batch", "public": false, "title": "fix: x", "branch": "main", "hash": "e1f2a3b", "machine": "A"},
+  {"t": "2026-11-16T22:31:00+09:00", "source": "gitea", "repo": "falcon-ledger", "public": false, "title": "fix: x", "branch": "dev", "hash": "0a1b2c3", "machine": "B"}],
+ "machines": [{"id": "A", "label": "studio-dev"}, {"id": "V", "label": "V"}],
+ "services": [{"name": "gitea", "machine": "V"}, {"name": "billing-api", "machine": "V"}, {"name": "report-worker", "machine": "V"}]
+}
