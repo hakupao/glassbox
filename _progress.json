@@ -46,7 +46,8 @@
       "status": "todo"
     },
     "S13": {
-      "status": "todo"
+      "status": "in_progress",
+      "note": "deploy/ + docs/runbooks/ written (lane C), security review APPROVE after 2 rounds; never run in docker yet; image tags/params marked verify-before-deploy"
     },
     "S14": {
       "status": "todo"
@@ -58,13 +59,16 @@
       "status": "todo"
     },
     "S10a": {
-      "status": "todo"
+      "status": "done",
+      "note": "hub/page.py + private view; per-day numbers match probe daily (32/34 identical, 2 boundary days explained); local-fallback commit counting (user decision 2026-11-17); Host allowlist; review APPROVE x2"
     },
     "S10b": {
-      "status": "todo"
+      "status": "in_progress",
+      "note": "lane D running"
     },
     "S10c": {
-      "status": "todo"
+      "status": "in_progress",
+      "note": "lane D running"
     }
   },
   "evidence": ".local/evidence/ (gitignored: contains real data)",
@@ -88,7 +92,9 @@
       "install Tailscale on the dev machine (not present) — the probe pushes over the tailnet",
       "docker-socket-proxy for container run state (Beszel gives cpu/mem only)",
       "runbook in docs/runbooks/ for an agent on each machine: Tailscale, Beszel agent, probe + schedule; per-machine secrets handed over separately",
-      "decide Beszel agent<->hub connection direction for the off-LAN work machine (over the tailnet)"
+      "decide Beszel agent<->hub connection direction for the off-LAN work machine (over the tailnet)",
+      "set [serve] hosts to the tailnet name; verify tailscale serve forwards Host",
+      "pin socket-proxy/tailscale/python image digests; verify wollomatic flags and TS health-check env vars"
     ]
   }
 }
