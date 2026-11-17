@@ -1,0 +1,40 @@
+# Public snapshot settings — example with made-up values.
+# The real file is .local/public.local.toml (gitignored); hub/export.py and
+# scripts/verify_public.py both read it. A missing file means: nothing allowlisted,
+# every name masked, titles "redacted", nothing hidden.
+
+# Commit titles of private repos (CONTRACT §3 rule 5):
+#   "redacted"    — keep the title after regex scrubbing and keyword blocking (default)
+#   "prefix-only" — keep only a conventional-commit type such as "fix:"
+privateTitles = "redacted"
+
+# Blocks that are not published at all; their value becomes [] (rule 7).
+# Any of: quota, activity, machines, services, runtimes, tailnet, jobs, byProject
+hidden = ["tailnet"]
+
+# Words removed from every commit title (case, "-", "_", "." and spaces ignored for
+# words of 5+ characters). The gate also rejects the snapshot if one survives.
+keywords = ["project-nightjar", "ACME-42"]
+
+# Public GitHub repos that should still be treated as private (project blacklist):
+# masked name, merged into "私有项目", no hash / branch / link.
+privateProjects = ["dotfiles-sandbox"]
+
+# Machine and account codes besides single capital letters (A–Z).
+codes = []
+
+# Commit links must point to https://github.com/<owner>/<public repo>/commit/<hash>.
+githubOwners = ["example-owner"]
+
+# Per-field allowlists for Text values (rule 2). A value not listed here is masked.
+# Names of public GitHub repos are added to activity[].repo and today.byProject[].project
+# automatically, and clean branch names of public commits to activity[].branch.
+[allow]
+"services[].name" = ["gitea", "status-page"]
+"jobs[].name" = ["nightly-backup"]
+"machines[].label" = []
+"tailnet[].name" = []
+
+# Per-term match modes for the private word list live in .local/redact_terms.local.json,
+# next to the terms themselves, as a separate key (the "terms" array stays plain strings):
+#   {"terms": ["..."], "allow": ["..."], "match": {"ab": "substring", "longword": "word"}}

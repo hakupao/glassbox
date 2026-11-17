@@ -1,0 +1,78 @@
+"""Publish gate (S12) command line and setup handling. Fabricated data only."""
+import contextlib
+import importlib.util
+import io
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+RT = ROOT / "tests" / "redteam"
+_spec = importlib.util.spec_from_file_location("verify_public", ROOT / "scripts" / "verify_public.py")
+vp = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(vp)
+
+
+def run(*args):
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            rc = vp.main([str(a) for a in args])
+        except SystemExit as e:          # argparse usage errors
+            rc = e.code
+    return rc, out.getvalue() + err.getvalue()
+
+
+class GateCliTest(unittest.TestCase):
+    common = ("--terms", RT / "context" / "terms.json", "--config", RT / "context" / "public.toml")
+
+    def test_exit_codes(self):
+        ok = RT / "samples" / "pass-minimal.json"
+        bad = RT / "samples" / "block-r4-hash.json"
+        ctx = RT / "context" / "gate-context.json"
+        self.assertEqual(run(ok, *self.common, "--context", ctx)[0], 0)
+        rc, out = run(ok, bad, *self.common, "--context", ctx)
+        self.assertEqual(rc, 1)
+        self.assertIn("private commit keeps hash", out)
+        self.assertIn("REJECTED", out)
+
+    def test_setup_errors_fail_closed(self):
+        ok = RT / "samples" / "pass-minimal.json"
+        with tempfile.TemporaryDirectory() as d:
+            missing = Path(d) / "missing.json"
+            broken = Path(d) / "broken.json"
+            broken.write_text("{", encoding="utf-8")
+            no_names = Path(d) / "ctx.json"
+            no_names.write_text(json.dumps({"publicRepos": []}), encoding="utf-8")
+            bad_mode = Path(d) / "terms.json"
+            bad_mode.write_text(json.dumps({"terms": ["x"], "match": {"x": "fuzzy"}}), encoding="utf-8")
+            ctx = RT / "context" / "gate-context.json"
+            cases = {
+                "terms missing": (ok, "--terms", missing, "--context", ctx),
+                "context missing": (ok, *self.common, "--context", missing),
+                "context broken": (ok, *self.common, "--context", broken),
+                "context without names": (ok, *self.common, "--context", no_names),
+                "no context flag": (ok, *self.common),
+                "bad match mode": (ok, "--terms", bad_mode, "--context", ctx),
+            }
+            for name, args in cases.items():
+                with self.subTest(name):
+                    self.assertEqual(run(*args)[0], 2)
+
+    def test_private_page_is_rejected(self):
+        rc, out = run(ROOT / "schema" / "examples" / "page.private.json", *self.common,
+                      "--context", RT / "context" / "gate-context.json")
+        self.assertEqual(rc, 1)
+        self.assertIn("view must be 'public'", out)
+        self.assertIn("today.h*****: field not in public_fields.json", out)   # today.hourly, key masked
+
+    def test_unreadable_artifact_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "page.json"
+            p.write_bytes(b"\xff\xfe")
+            self.assertEqual(run(p, *self.common, "--no-context")[0], 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

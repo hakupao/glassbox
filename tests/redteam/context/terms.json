@@ -1,0 +1,6 @@
+{
+ "_note": "Fabricated private word list for the red-team samples. Same format as .local/redact_terms.local.json.",
+ "terms": ["falcon-ledger", "orchid-batch", "owl", "qx", "nightjar", "青鸟计划"],
+ "allow": [],
+ "match": {"qx": "substring", "nightjar": "word"}
+}

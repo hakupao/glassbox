@@ -1,0 +1,8 @@
+# Fabricated public settings for the red-team samples (format: docs/public.example.toml).
+privateTitles = "redacted"
+hidden = ["tailnet"]
+keywords = ["project-nightjar"]
+githubOwners = ["example-owner"]
+
+[allow]
+"services[].name" = ["gitea", "status-page"]

@@ -1,0 +1,404 @@
+[
+ {
+  "file": "pass-minimal.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "valid public page: merged private row, model other, private commit done right, 'owl' only inside 'bowling'"
+ },
+ {
+  "file": "block-unknown-top-key.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "rule 1: key not in the table"
+ },
+ {
+  "file": "block-unknown-nested-key.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "rule 1: author on a commit"
+ },
+ {
+  "file": "block-hourly.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "rule 7: today.hourly never public"
+ },
+ {
+  "file": "block-masked-extra-key.json",
+  "expect": "block",
+  "reason": "placeholder must be exactly",
+  "why": "placeholder carrying a length hint"
+ },
+ {
+  "file": "block-group-outside-byproject.json",
+  "expect": "block",
+  "reason": "placeholder must be exactly",
+  "why": "merged-row placeholder only allowed in today.byProject"
+ },
+ {
+  "file": "block-text-not-allowlisted.json",
+  "expect": "block",
+  "reason": "is not text",
+  "why": "rule 2: service name not on the allowlist"
+ },
+ {
+  "file": "block-text-private-name.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 2+6: a known private service name in clear"
+ },
+ {
+  "file": "block-number-as-string.json",
+  "expect": "block",
+  "reason": "is not number",
+  "why": "rule 3: number"
+ },
+ {
+  "file": "block-bool-as-number.json",
+  "expect": "block",
+  "reason": "is not number",
+  "why": "rule 3: bool is not a number"
+ },
+ {
+  "file": "block-iso.json",
+  "expect": "block",
+  "reason": "is not iso",
+  "why": "rule 3: iso"
+ },
+ {
+  "file": "block-enum.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "rule 3: closed enum"
+ },
+ {
+  "file": "block-const.json",
+  "expect": "block",
+  "reason": "is not const",
+  "why": "rule 3: view must be public"
+ },
+ {
+  "file": "block-hash.json",
+  "expect": "block",
+  "reason": "is not hash",
+  "why": "rule 3: hash"
+ },
+ {
+  "file": "block-code.json",
+  "expect": "block",
+  "reason": "is not code",
+  "why": "rule 3: machine code"
+ },
+ {
+  "file": "block-model.json",
+  "expect": "block",
+  "reason": "is not model",
+  "why": "rule 3: model outside the price table"
+ },
+ {
+  "file": "block-url-private-repo.json",
+  "expect": "block",
+  "reason": "is not url:public-repo",
+  "why": "rule 3: commit link to a repo that is not public"
+ },
+ {
+  "file": "block-url-other-owner.json",
+  "expect": "block",
+  "reason": "is not url:public-repo",
+  "why": "rule 3: link under an owner that is not configured"
+ },
+ {
+  "file": "block-list-where-leaf.json",
+  "expect": "block",
+  "reason": "where",
+  "why": "rule 3: list in a leaf"
+ },
+ {
+  "file": "block-r4-branch.json",
+  "expect": "block",
+  "reason": "private commit keeps branch",
+  "why": "rule 4: private commit keeps its branch"
+ },
+ {
+  "file": "block-r4-hash.json",
+  "expect": "block",
+  "reason": "private commit keeps hash",
+  "why": "rule 4: private commit keeps its hash"
+ },
+ {
+  "file": "block-r4-url.json",
+  "expect": "block",
+  "reason": "private commit keeps url",
+  "why": "rule 4: private commit keeps a (public-looking) url"
+ },
+ {
+  "file": "block-r4-machine.json",
+  "expect": "block",
+  "reason": "private commit keeps machine",
+  "why": "rule 4: private commit keeps its machine"
+ },
+ {
+  "file": "block-r4-time.json",
+  "expect": "block",
+  "reason": "not on the hour",
+  "why": "rule 4: private commit time not cut to the hour"
+ },
+ {
+  "file": "block-r4-repo-shown.json",
+  "expect": "block",
+  "reason": "private commit repo must be masked",
+  "why": "rule 4: private commit shows an allowlisted repo name"
+ },
+ {
+  "file": "block-gitea-public.json",
+  "expect": "block",
+  "reason": "gitea commits are never public",
+  "why": "Gitea commits are never public"
+ },
+ {
+  "file": "block-byproject-unmerged.json",
+  "expect": "block",
+  "reason": "merged private row",
+  "why": "private usage row not merged"
+ },
+ {
+  "file": "block-hidden-not-empty.json",
+  "expect": "block",
+  "reason": "hidden block tailnet",
+  "why": "rule 7: hidden block still has rows"
+ },
+ {
+  "file": "block-hidden-byproject.json",
+  "expect": "block",
+  "reason": "hidden block byProject",
+  "why": "rule 7: hidden byProject still has rows"
+ },
+ {
+  "file": "block-title-email.json",
+  "expect": "block",
+  "reason": "email",
+  "why": "S12: e-mail in a title"
+ },
+ {
+  "file": "block-title-ipv4.json",
+  "expect": "block",
+  "reason": "ipv4",
+  "why": "S12: IP in a title"
+ },
+ {
+  "file": "block-title-ipv6.json",
+  "expect": "block",
+  "reason": "ipv6",
+  "why": "S12: IPv6 in a title"
+ },
+ {
+  "file": "block-title-path.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "S12: absolute path in a title"
+ },
+ {
+  "file": "block-title-home-path.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "S12: home path in a title (built at load time)"
+ },
+ {
+  "file": "block-title-tilde-path.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "S12: ~ path in a title"
+ },
+ {
+  "file": "block-title-secret-aws.json",
+  "expect": "block",
+  "reason": "secret",
+  "why": "S12: secret in a title"
+ },
+ {
+  "file": "block-title-secret-kv.json",
+  "expect": "block",
+  "reason": "secret",
+  "why": "S12: key=value secret in a title"
+ },
+ {
+  "file": "block-title-secret-gh.json",
+  "expect": "block",
+  "reason": "secret",
+  "why": "S12: GitHub token in a title (built at load time)"
+ },
+ {
+  "file": "block-title-ticket.json",
+  "expect": "block",
+  "reason": "ticket",
+  "why": "rule 5: ticket id"
+ },
+ {
+  "file": "block-title-url.json",
+  "expect": "block",
+  "reason": "url",
+  "why": "rule 5: URL in a title"
+ },
+ {
+  "file": "block-title-name-camel.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: private name, other spelling"
+ },
+ {
+  "file": "block-title-name-snake.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: private name, snake case"
+ },
+ {
+  "file": "block-title-keyword.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 5: blocked keyword, other spelling"
+ },
+ {
+  "file": "block-short-word.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "S12: short (<5) private name on a word boundary"
+ },
+ {
+  "file": "block-short-word-in-text.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "S12: short private name as a masked service leaking in clear"
+ },
+ {
+  "file": "block-short-forced-substring.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "per-term match mode: short term forced to substring"
+ },
+ {
+  "file": "block-runtime-hash.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "runtime private name: a private commit hash"
+ },
+ {
+  "file": "block-runtime-name-in-key.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "a private name smuggled in as a key"
+ },
+ {
+  "file": "pass-word-mode-override.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "term 'nightjar' set to word mode: 'nightjars' passes"
+ },
+ {
+  "file": "pass-page.html",
+  "expect": "pass",
+  "reason": null,
+  "why": "valid page: inline SVG (xmlns, numeric path data), public commit link, <main>, the word other"
+ },
+ {
+  "file": "block-html-google-font.html",
+  "expect": "block",
+  "reason": "external URL",
+  "why": "S12: external font"
+ },
+ {
+  "file": "block-html-cdn-script.html",
+  "expect": "block",
+  "reason": "external URL",
+  "why": "S12: CDN script"
+ },
+ {
+  "file": "block-html-css-import.html",
+  "expect": "block",
+  "reason": "external URL",
+  "why": "S12: CSS @import"
+ },
+ {
+  "file": "block-html-protocol-relative.html",
+  "expect": "block",
+  "reason": "protocol-relative",
+  "why": "S12: protocol-relative font url()"
+ },
+ {
+  "file": "block-html-protocol-relative-img.html",
+  "expect": "block",
+  "reason": "protocol-relative",
+  "why": "S12: protocol-relative image"
+ },
+ {
+  "file": "block-html-image.html",
+  "expect": "block",
+  "reason": "external URL",
+  "why": "S12: external image"
+ },
+ {
+  "file": "block-html-no-data.html",
+  "expect": "block",
+  "reason": "no embedded window.GB",
+  "why": "HTML without embedded window.GB"
+ },
+ {
+  "file": "block-html-comment-name.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: private name in an HTML comment, other spelling"
+ },
+ {
+  "file": "block-html-js-comment-name.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: private name in a JS comment"
+ },
+ {
+  "file": "block-html-u-escape.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: \\u-escaped private name in JS"
+ },
+ {
+  "file": "block-html-entity.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: entity-encoded private name"
+ },
+ {
+  "file": "block-html-percent.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: %-encoded private name"
+ },
+ {
+  "file": "block-html-cjk-escaped.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: CJK private name hidden as \\u escapes"
+ },
+ {
+  "file": "block-html-email.html",
+  "expect": "block",
+  "reason": "email",
+  "why": "pattern: e-mail anywhere"
+ },
+ {
+  "file": "block-html-ip.html",
+  "expect": "block",
+  "reason": "ipv4",
+  "why": "pattern: tailnet IP anywhere"
+ },
+ {
+  "file": "block-html-gb-payload.html",
+  "expect": "block",
+  "reason": "private commit keeps hash",
+  "why": "rule 4 inside the embedded payload"
+ },
+ {
+  "file": "block-html-fetch.html",
+  "expect": "block",
+  "reason": "external URL",
+  "why": "S12: runtime fetch of an external resource"
+ }
+]
