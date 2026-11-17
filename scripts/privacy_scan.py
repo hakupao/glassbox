@@ -36,7 +36,8 @@ PATTERNS = {
 }
 # Placeholders that look like matches but are deliberately generic.
 SAFE = {
-    "email": re.compile(r"@(?:example\.(?:com|org)|users\.noreply\.github\.com|anthropic\.com)$", re.I),
+    # Fabricated hosts, the noreply/bot addresses, and git SSH userinfo ("git@host:owner/repo").
+    "email": re.compile(r"(?:@(?:example\.(?:com|org)|users\.noreply\.github\.com|anthropic\.com)$|^git@)", re.I),
 }
 TEXT_LIMIT = 5 * 1024 * 1024
 

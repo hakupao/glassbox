@@ -158,7 +158,7 @@ class ProbeTest(unittest.TestCase):
 class UnitTest(unittest.TestCase):
     def test_normalize_remote(self):
         n = projects.normalize_remote
-        self.assertEqual(n("https://user:tok@GitHub.com:443/owner/repo.git"), "github.com/owner/repo")
+        self.assertEqual(n("https://user:tok@Example.COM:443/owner/repo.git"), "example.com/owner/repo")
         self.assertEqual(n("git@github.com:owner/repo.git"), "github.com/owner/repo")
         self.assertEqual(n("ssh://git@gitea.example.org:2222/team/app.git"), "gitea.example.org/team/app")
         self.assertEqual(n("git@work-gh:owner/repo", {"work-gh": "github.com"}), "github.com/owner/repo")
