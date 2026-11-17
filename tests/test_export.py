@@ -162,6 +162,16 @@ class ExportTest(unittest.TestCase):
         forged["activity"][5]["title"] = "feat: kestrel"
         self.assertTrue(self.gate(forged))
 
+    def test_branch_part_does_not_weaken_a_name(self):
+        """A private repo and a private branch part with the same spelling: substring match stays."""
+        self.page["activity"][3].update(repo="kestrel", branch="feat/kestrel")
+        self.page["activity"][0]["title"] = "docs: mykestrels notes"
+        pub, _ = self.run_export()
+        self.assertEqual(pub["activity"][0]["title"], "docs:")
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["title"] = "docs: mykestrels notes"
+        self.assertTrue(self.gate(forged))
+
     def test_gate_rejects_forged_public_name(self):
         pub, _ = self.run_export()
         pub["today"]["byProject"].insert(0, {"project": "falcon-ledger", "public": True, "requests": 1, "costUsd": 0.1})

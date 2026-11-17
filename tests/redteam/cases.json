@@ -444,6 +444,24 @@
   "why": "M2d: window['GB'] in another script"
  },
  {
+  "file": "block-html-onload-gb.html",
+  "expect": "block",
+  "reason": "writes GB",
+  "why": "M2d: an event handler writes GB"
+ },
+ {
+  "file": "block-html-gb-alias.html",
+  "expect": "block",
+  "reason": "writes GB",
+  "why": "M2d: aliasing GB (const GB = ...) counts as a write"
+ },
+ {
+  "file": "pass-html-bytes-and-comments.html",
+  "expect": "pass",
+  "reason": null,
+  "why": "byte units, // comments naming window.GB, a .local property: no rule noise"
+ },
+ {
   "file": "block-html-meta-refresh.html",
   "expect": "block",
   "reason": "http-equiv",

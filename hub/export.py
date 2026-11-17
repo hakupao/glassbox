@@ -497,7 +497,12 @@ def export(page, cfg, terms):
     hosts.discard("")
     frags = {f for f in frags if norm(f) not in VOCAB and f not in allow_all and not is_code(f, cfg)}
     modes = dict(terms["match"])
-    modes.update({h.casefold(): "word" for h in hashes | frags})   # whole tokens, not substrings
+    # Commit ids and branch parts: whole tokens. The stricter substring match of a real name,
+    # term or keyword with the same spelling, and explicit match entries, are kept.
+    stronger = {x.casefold() for x in names | set(terms["terms"]) | set(cfg["keywords"])}
+    for h in hashes | frags:
+        if h.casefold() not in stronger:
+            modes.setdefault(h.casefold(), "word")
     matcher = Matcher(names | hashes | hosts | frags | set(terms["terms"]) | set(cfg["keywords"]), modes)
 
     url_rx = public_url_rx(public_repos, cfg["githubOwners"])

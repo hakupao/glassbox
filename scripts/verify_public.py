@@ -67,7 +67,7 @@ PATTERNS = {
                        r"|(?<![\w:])(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?(?![\w:])"),
     "path": re.compile(r"(?:/Users/|/home/|/Volumes/|/root/|/private/|/mnt/|/srv/|/var/folders/"
                        r"|(?<![\w~])~/|(?<![A-Za-z])[A-Za-z]:\\{1,2}[\w.$ -]|\\\\[A-Za-z0-9.-]+\\)"),
-    "lan host": re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ts\.net|local|lan|internal|home\.arpa)\b"),
+    "lan host": re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ts\.net|home\.arpa)\b"),
     "secret": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
                          r"|\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}"
                          r"|sk-[A-Za-z0-9_-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{8,}|npm_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,}"
@@ -80,6 +80,7 @@ TITLE_EXTRA = {                  # keys differ from PATTERNS: both sets apply to
     "url": re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://"),
     "rooted path": re.compile(r"(?<![\w.])(?:~|\.{1,2})?/[\w.-]+/[\w.-]+"),
     "domain": re.compile(r"(?i)\b(?:[\w-]+\.)+[a-z]{2,}/"),
+    "lan name": re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:local|lan|internal)\b"),   # titles only: .local is JS too
 }
 ABS_URL = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>()\\]*")
 REL_URL = re.compile(r"(?i)(?:\b(?:src|href|srcset|action|data|poster|xlink:href)\s*=\s*[\"']?\s*"
@@ -99,8 +100,10 @@ HEAD_RX = re.compile(r"\A\ufeff?\s*<!doctype html>\s*<html(?:\s+lang=\"[A-Za-z-]
                      r"<meta http-equiv=\"Content-Security-Policy\" content=\"" + re.escape(CSP) + r"\"\s*/?>", re.I)
 GB_SCRIPT = re.compile(r"\s*window\.GB\s*=\s*(.*?)\s*;?\s*", re.S)
 GB_WRITE = re.compile(r"\bGB\w*\b(?:\s*(?:\.\s*[\w$]+|\[[^\]]*\]))*\s*(?:[-+*/%&|^]?=(?!=)|\+\+|--)|\bGB\w*\s*\["
-                      r"|[\"'`]GB\w*[\"'`]")
-PROTO_REL = re.compile(r"[\"'`(=]\s*[/\\]\s*[/\\]\s*[\w-]+(?:\.[\w-]+)+"             # '//host', '/\t/host', '\\host'
+                      r"|\[\s*[\"'`]GB\w*[\"'`]\s*\]"                                  # window['GB']
+                      r"|\b(?:defineProperty|defineProperties|Reflect\.\w+|assign)\s*\([^)]*[\"'`]GB\w*[\"'`]")
+PROTO_REL = re.compile(r"[\"'`][ \t]*[/\\][ \t]*[/\\][ \t]*[\w-]+(?:\.[\w-]+)+"        # '//host', '/\t/host', '\\host'
+                       r"|[(=][/\\][ \t]*[/\\][ \t]*[\w-]+(?:\.[\w-]+)+"                   # (//host, =//host; not // comments
                        r"|\b[A-Za-z][\w+.-]*:\s*(?:\\|/\s+/|/\\)\s*[/\\]?\s*[\w-]+(?:\.[\w-]+)+")  # 'https:\\host'
 
 DENY_TAGS = {"link", "base", "iframe", "frame", "frameset", "object", "embed", "applet", "portal", "form"}
@@ -324,7 +327,7 @@ def derive(private, private_projects):
                     host = re.sub(r"^\w+://([^/]+).*", r"\1", e["url"]).lower()
                     if host not in ("github.com", "www.github.com"):
                         hashes.add(host)
-    return public, names | hashes | frags, branches, hashes | frags
+    return public, names | hashes | frags, branches, (hashes | frags) - names
 
 
 class Gate:
@@ -363,9 +366,14 @@ class Gate:
                    and not (re.fullmatch(r"[A-Z]", n) or n in self.codes)]     # codes are public by design
         words = [t for t in terms.get("terms", []) if t and t.casefold() not in allow_words]
         self.names = sorted(set(words) | set(runtime) | set(self.keywords) | self.private_projects,
-                            key=len, reverse=True)
-        for n in whole_words:                    # commit ids, branch parts: whole words only
-            self.modes.setdefault(n.casefold(), "word")
+                            key=lambda x: (-len(x), x))            # stable ordinals between runs
+        # Commit ids and branch parts match as whole words, unless the same string is also a real
+        # name, term or keyword: then the stricter substring match stays.
+        stronger = {x.casefold() for x in set(words) | (set(derived) - set(whole_words)) | set(self.keywords)
+                    | self.private_projects}
+        for n in whole_words:
+            if n.casefold() not in stronger:
+                self.modes.setdefault(n.casefold(), "word")
         self.matchers = self._compile(self.names)
         # A name both public and private is a contradiction the exporter must not have resolved
         # towards public (review H1): allowlists or visibility flags disagree.
@@ -624,6 +632,8 @@ class Gate:
                     bad.append(f"{where}: <{tag} style> loads a resource")
                 if k.startswith("on") and PROTO_REL.search(v):
                     bad.append(f"{where}: <{tag} {k}> refers to an external host")
+                if k.startswith("on") and GB_WRITE.search(v):
+                    bad.append(f"{where}: <{tag} {k}> writes GB")
         for attrs, body in p.styles:
             if CSS_URL.search(body):
                 bad.append(f"{where}: <style> uses url() or @import that is not data:")

@@ -134,6 +134,22 @@ class ReviewerSamplesTest(unittest.TestCase):
                 self.assertTrue(ok, f"not refused: {case['source']} {case['id']}")
 
 
+    def test_exports_that_do_not_raise_pass_the_gate(self):
+        """Round trip: whatever the exporter emits for a reviewer input, the gate accepts."""
+        for case in CASES:
+            if case["kind"] != "export" or any(isinstance(value(v), float) for _, _, v in case["ops"]):
+                continue
+            with self.subTest(case["id"]):
+                page = copy.deepcopy(EXAMPLE)
+                apply(page, case["ops"])
+                try:
+                    pub, _ = ex.export(page, self.cfg, self.terms)
+                except ex.ExportError:
+                    continue
+                f = Path(self.tmp.name) / "rt.json"
+                f.write_text(json.dumps(pub, ensure_ascii=False), encoding="utf-8")
+                self.assertEqual(self.gate(page).check_file(f), [])
+
     def test_pending_cases_are_still_open(self):
         for case in CASES:
             if case["id"] in PENDING:

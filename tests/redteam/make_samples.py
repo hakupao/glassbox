@@ -135,6 +135,10 @@ ht("block-html-link", "M2c: no <link> at all", "block", "<link>", head='<link re
 ht("block-html-second-data", "M2d: a second data script", "block", "exactly one <script>", body="<script>window.GB = {};</script>")
 ht("block-html-gb-write", "M2d: another script writes GB", "block", "writes GB", body="<script>GB.tailnet = [];</script>")
 ht("block-html-gb-bracket", "M2d: window['GB'] in another script", "block", "writes GB", body="<script>window['GB'].x = 1;</script>")
+ht("block-html-onload-gb", "M2d: an event handler writes GB", "block", "writes GB", body='<body onload="window.GB = {}">')
+ht("block-html-gb-alias", "M2d: aliasing GB (const GB = ...) counts as a write", "block", "writes GB", body="<script>const GB = window.GB;</script>")
+ht("pass-html-bytes-and-comments", "byte units, // comments naming window.GB, a .local property: no rule noise", "pass", None,
+   body="<script>const U = ['B', 'KB', 'MB', 'GB']; // reads window.GB only\nfoo( // see window.GB docs\n); const x = cfg.local;</script>")
 ht("block-html-meta-refresh", "M2b: a second http-equiv", "block", "http-equiv", head='<meta http-equiv="refresh" content="0">')
 ht("block-html-attr-url", "M2: URL attribute that is not #, empty or data:", "block", "must be empty", body='<a href="page2.html">x</a>')
 ht("block-html-css-url", "M2: CSS url() to a file", "block", "url()", head="<style>b{background:url(x.png)}</style>")
