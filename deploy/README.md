@@ -85,7 +85,7 @@ No other secret is needed or allowed (a test fails if the workflow reads any oth
 
 ## 3. First deploy
 
-1. Sections 1, 2 and 4 are done.
+1. Sections 1, 2 and 4 (ACL part) are done.
 2. Push to `main`, or run the workflow by hand (Actions, glassbox, Run workflow, branch `main`, tag empty).
 3. Watch the run. A failed **预检** step lists the missing files; fix them and re-run. Nothing was deployed in that case.
 4. The first start begins with an **empty database**: the hub refuses a database whose `schema_version` differs from the code (`hub/db.py`), so never put a development database into the volume. If the hub log says `hub database schema ... != ...`, stop the stack, archive the volume (do not delete it blindly) and start with a new one.
