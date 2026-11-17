@@ -11,7 +11,7 @@
 
 ## 0. 通用约定
 
-- **时间**：ISO 8601，带时区偏移。探针上报一律用 UTC。**切日、切小时只由 hub 按自己配置的时区完成**，探针不切。
+- **时间**：ISO 8601，带时区偏移。探针上报一律用 UTC。**切日、切小时只由 hub 按自己配置的时区完成**，探针不切。hub 的时区必须是整点偏移（例如 +09:00），因为用量按 UTC 整点分桶。
 - **金额**：美元浮点，字段名以 `Usd` 结尾，是 API 等价估算。
   - **只有**探针的 row 和 page 的 `byModel[]` 允许 `costUsd: null`（该模型完全没有定价）。
   - 其余所有汇总金额只累加已定价的部分，永远不是 `null`；同时附带 `unpricedRequests`，记录有多少请求没算进去。
@@ -77,17 +77,22 @@
 ### 1.1 语义
 
 - **usage 是区间快照，不是增量**：`range` 内本机的全部数据都要给出，hub 按 `(machine, range)` 整体替换。探针每次都从本地缓存重新聚合整个区间，日志的增量缓存只用来加速解析。
-- **防止被残缺数据覆盖**：转录文件会被清理（Claude Code 默认约 30 天）。所以对于 2 天以前的小时，只要新值的请求数比 hub 已有值少 5% 以上，hub 就**保留旧值**并记一条告警。
-- **会话**：会话只存在于一台机器上，hub 跨机器直接相加即可。一个会话跨小时、跨模型也只计一次，按第一条请求的时间归属。
+- **防止被残缺数据覆盖**：转录文件会被清理（Claude Code 默认约 30 天）。
+  - hub 按 `(machine, hourStart)` **逐小时**比较：对 2 天以前的小时，新值的请求数比已有值少 5% 以上时，**保留旧值**，并写一条告警。告警会显示在私有版上。
+  - 合法的下调（例如修了去重 bug）走显式重设基线：在请求体里加 `usage.rebaseline: true`。只有 `probeVersion` 比该机器上次上报的版本新，或者运行 hub 的手动命令时，才接受重设。
+- **会话**：会话只存在于一台机器上，hub 跨机器直接相加即可。
+  - 一个会话跨小时、跨模型，也只计一次。
+  - 归属时间取"第一条请求"：先按全局 message.id 去重，再取本会话里第一条**不是重放**的请求。resume 和 subagent 会带着原时间戳重放历史请求，那些不算。
+  - 跨零点的会话归到第一条请求所在的那一天。
 - **去重的前提**：每台机器只解析本机产生的转录。`~/.claude` 和 `~/.codex` 如果被同步盘或 dotfiles 同步过，探针要检测出来并告警，同步过来的副本跳过不解析。
 - **项目键**：
-  1. 取 cwd 所在仓库的根目录（`git rev-parse --show-toplevel`）。cwd 不在任何 git 仓库里时，记为保留键 `p_other`，按私有处理。
+  1. 取 cwd 所在仓库的根目录（`git rev-parse --show-toplevel`）。cwd 不在任何 git 仓库里时，记为保留键 `p_other`，按私有处理；`projects` 里要有 `"p_other": {"name": "other", "remote": null}`。
   2. 有 `origin` 远端时，先把远端地址归一化成 `host/owner/repo`：去掉协议、凭据、端口和 `.git`，主机名转小写，ssh 别名按 `.local` 里的映射表还原成真实主机。项目键 = `p_` + sha256(归一化后的远端地址) 的前 12 位。同一个仓库在不同机器上会得到同一个键。
   3. 没有远端时，项目键 = `p_` + sha256(机器 id + 仓库根目录名) 的前 12 位，跨机器不合并。
 - **git 提交**：
   - 按 `(machine, project)` 整体替换，rebase 掉的旧哈希会自然消失。
   - 只计 `.local` 里配置的作者邮箱写的提交；邮箱本身不上报。
-- **额度**：`account` 是账号标识（邮箱或组织 ID）加盐后 sha256 的前 8 位。hub 按 `(account, agent, window)` 取最新的样本。
+- **额度**：`account` 是账号标识（邮箱或组织 ID）加盐后 sha256 的前 8 位。hub 按 `(account, agent, window)` 取最新的样本。页面上的 `quota[].account` 用 `.local` 里配置的代号（例如 `"K"`），一个 agent 有多个账号时访客也能区分。
 - **快照过期**：机器离线超过 15 分钟后，它的 `runtimes` 视为过期，页面上标成灰色；`jobs` 保留最后一次的值。
 - 各个部分都可以省略。省略表示"这次没有新数据"，不等于清空。
 
@@ -117,7 +122,7 @@
   "trend": [{"date", "costUsd": {"claude-code": 41.2, "codex": 7.5}}],  // 近 30 天，旧→新，最后一项是今天
 
   "quota": [{
-    "account": Text, "agent", "window": "5h" | "7d",
+    "account": "K",  /* 代号 */ "agent", "window": "5h" | "7d",
     "usedPct", "resetsAt", "sampledAt",
     "history": [{"t", "usedPct"}]              // 当前窗口内的样本
   }],
@@ -146,15 +151,23 @@
 ### 2.1 hub 的计算规则
 
 - **代码活动按 hash 跨来源去重**，同一个提交只保留一条，来源优先级 github > gitea > local。local 来源只保留 `remote=false` 的项目的提交，以及没有推送到远端的提交。
-- `contributions.days[].count` = 当天去重后的提交数。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
+- `contributions.days[].count` = 当天去重后的提交数。它不是 GitHub 官方的贡献数，所以 S10 要把 c-v6 的标题"GitHub 贡献"改成"提交"一类的说法。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
 - `trend` 的最后一项必须是今天，它的值与 `today` 一致。
 
 ## 3. 公开版不变量（导出器构建、闸门检查，任何一条不满足就拒绝发布）
 
-1. **白名单重建**：导出器只按 `schema/public_fields.json` 里列出的字段路径，从私有版里逐个复制值，构建出公开版。**新增的字段默认不进公开版**，必须显式加进白名单。闸门遇到白名单以外的 key 就拒绝。
-2. **Text 字段**：每个 Text 字段要么是 `{"masked": true…}`，要么它的值在 `.local/public.local.toml` 的允许名单里（公开仓库名由 GitHub 可见性自动加入）。
-3. **其余字符串只能是**：封闭枚举（agent、source、window、role、os、status、kind）；ISO 时间；hash（`^[0-9a-f]{7,40}$`）；在价格表里出现过的模型名，或 `"other"`；`url` 必须指向公开仓库；`title` 走规则 5。
+1. **白名单重建**：`schema/public_fields.json` 是一张"字段路径 → 值类型"的表。导出器只复制表里列出的路径，构建出公开版。**新增的字段默认不进公开版**，必须显式加进这张表。闸门遇到表外的 key 就拒绝。
+2. **Text 字段**（类型 `text`）：要么是 `{"masked": true…}`，要么它的值在 `.local/public.local.toml` 里**这个字段**的允许名单中。允许名单按字段分开；公开仓库名由 GitHub 可见性自动加入 `repo` 和 `project` 两个字段的名单。
+3. **逐值类型校验**：闸门对每条路径上的每个值，按表里声明的类型校验，不符合就拒绝。类型取值：
+   - 基本类型：`number`、`bool`、`null`；
+   - 时间与版本：`iso`（ISO 时间）、`date`（`YYYY-MM-DD`）、`hash`（`^[0-9a-f]{7,40}$`）、`semver`；
+   - 取值受限：`enum:a|b|…`（封闭枚举）、`const:…`（固定值）；`code`（机器或账号代号，`^[A-Z]$`，或 `.local` 里配置的代号）；`model`（价格表里出现过的模型名，或 `"other"`）；
+   - 需要特殊处理：`url:public-repo`（必须指向公开仓库）、`title`（走规则 5）、`text`（规则 2）。
+   - 类型后面加 `?` 表示也可以是 `null`。
 4. **私有条目**（`public: false`）：`branch`、`hash`、`url`、`machine` 一律为 `null`，`t` 截断到整点。
 5. **提交标题**：先过正则打码（密钥、邮箱、IP、路径、工单号 `[A-Z][A-Z0-9]+-\d+`）和关键词屏蔽。`.local` 里的 `privateTitles` 开关有两档：`"redacted"`（默认，保留打码后的标题）或 `"prefix-only"`（只保留 `fix:` 这类前缀）。
-6. **名单比对**：`.local/redact_terms.local.json` 里的词和所有私有名字，归一化后（不分大小写，去掉 `-`、`_`、`.` 和空格）都不得出现在产物的任何位置，包括 HTML、JS 和注释。
+6. **名单比对**：`.local/redact_terms.local.json` 里的词和所有私有名字，都不得出现在产物的任何位置，包括 HTML、JS 和注释。
+   - 归一化后（不分大小写，去掉 `-`、`_`、`.` 和空格）长度至少 5 的词：在同样归一化后的全文里做子串匹配，这样 `FalconLedger`、`falcon_ledger` 都能拦下。
+   - 更短的词（如 `app`、`api`）：在原文上按词边界匹配，避免大量误报。
+   - `.local` 里可以给单个词指定匹配方式。
 7. `hidden` 里列出的块，值为 `[]`。`today.hourly` 不进公开版。

@@ -301,9 +301,7 @@
  ],
  "quota": [
   {
-   "account": {
-    "masked": true
-   },
+   "account": "K",
    "agent": "claude-code",
    "window": "7d",
    "usedPct": 41,
@@ -373,9 +371,7 @@
    ]
   },
   {
-   "account": {
-    "masked": true
-   },
+   "account": "L",
    "agent": "codex",
    "window": "5h",
    "usedPct": 55,
@@ -417,9 +413,7 @@
    ]
   },
   {
-   "account": {
-    "masked": true
-   },
+   "account": "L",
    "agent": "codex",
    "window": "7d",
    "usedPct": 70,

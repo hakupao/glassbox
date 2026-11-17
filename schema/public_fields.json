@@ -1,33 +1,55 @@
 {
- "_note": "Fields allowed into the public snapshot (CONTRACT §3 rule 1). Paths use [] for every list element. 'text' paths are Text-typed: masked unless their value is on the public allowlist. Anything not listed here is dropped by the exporter and rejected by the gate.",
- "paths": [
-  "schema", "view", "generatedAt", "tz", "pricingVersion", "hidden[]",
-  "today.requests", "today.sessions", "today.unpricedRequests", "today.cacheHitRate", "today.costUsd",
-  "today.tokens.input", "today.tokens.output", "today.tokens.cacheRead", "today.tokens.cacheWrite", "today.tokens.reasoning",
-  "today.byAgent[].agent", "today.byAgent[].requests", "today.byAgent[].costUsd",
-  "today.byAgent[].tokens.input", "today.byAgent[].tokens.output", "today.byAgent[].tokens.cacheRead",
-  "today.byAgent[].tokens.cacheWrite", "today.byAgent[].tokens.reasoning",
-  "today.byModel[].model", "today.byModel[].agent", "today.byModel[].requests", "today.byModel[].costUsd",
-  "today.byProject[].project", "today.byProject[].public", "today.byProject[].requests", "today.byProject[].costUsd",
-  "trend[].date", "trend[].costUsd.claude-code", "trend[].costUsd.codex",
-  "quota[].account", "quota[].agent", "quota[].window", "quota[].usedPct", "quota[].resetsAt", "quota[].sampledAt",
-  "quota[].history[].t", "quota[].history[].usedPct",
-  "contributions.total", "contributions.days[].date", "contributions.days[].count",
-  "activity[].t", "activity[].source", "activity[].repo", "activity[].public", "activity[].title",
-  "activity[].branch", "activity[].hash", "activity[].url", "activity[].machine",
-  "machines[].id", "machines[].label", "machines[].role", "machines[].os", "machines[].online", "machines[].lastSeen",
-  "machines[].probeLastReport", "machines[].system.cpuPct", "machines[].system.memUsed", "machines[].system.memTotal",
-  "machines[].system.diskUsed", "machines[].system.diskTotal", "machines[].system.uptimeSec",
-  "machines[].history[].t", "machines[].history[].cpuPct", "machines[].history[].memPct",
-  "services[].name", "services[].kind", "services[].machine", "services[].status",
-  "services[].uptimePct24h", "services[].cpuPct", "services[].memBytes",
-  "runtimes[].machine", "runtimes[].agent", "runtimes[].version", "runtimes[].processes",
-  "runtimes[].activeSessions", "runtimes[].stale",
-  "tailnet[].name", "tailnet[].os", "tailnet[].online", "tailnet[].lastSeen",
-  "jobs[].name", "jobs[].machine", "jobs[].lastRun", "jobs[].lastSuccess", "jobs[].ok"
- ],
- "text": [
-  "today.byProject[].project", "quota[].account", "activity[].repo",
-  "machines[].label", "services[].name", "tailnet[].name", "jobs[].name"
- ]
+ "_note": "Fields allowed into the public snapshot and the type each value must have (CONTRACT §3 rules 1-3). [] stands for every list element. Types: number, bool, null, iso, date, hash, semver, enum:a|b, const:x, code, model, url:public-repo, title, text. A trailing ? also allows null. Anything not listed is dropped by the exporter and rejected by the gate.",
+ "paths": {
+  "schema": "const:glassbox.page/1",
+  "view": "const:public",
+  "generatedAt": "iso",
+  "tz": "enum:Asia/Tokyo|UTC",
+  "pricingVersion": "date",
+  "hidden[]": "enum:quota|activity|machines|services|runtimes|tailnet|jobs|byProject",
+
+  "today.requests": "number", "today.sessions": "number", "today.unpricedRequests": "number",
+  "today.cacheHitRate": "number", "today.costUsd": "number",
+  "today.tokens.input": "number", "today.tokens.output": "number", "today.tokens.cacheRead": "number",
+  "today.tokens.cacheWrite": "number", "today.tokens.reasoning": "number",
+  "today.byAgent[].agent": "enum:claude-code|codex", "today.byAgent[].requests": "number", "today.byAgent[].costUsd": "number",
+  "today.byAgent[].tokens.input": "number", "today.byAgent[].tokens.output": "number",
+  "today.byAgent[].tokens.cacheRead": "number", "today.byAgent[].tokens.cacheWrite": "number",
+  "today.byAgent[].tokens.reasoning": "number",
+  "today.byModel[].model": "model", "today.byModel[].agent": "enum:claude-code|codex",
+  "today.byModel[].requests": "number", "today.byModel[].costUsd": "number?",
+  "today.byProject[].project": "text", "today.byProject[].public": "bool",
+  "today.byProject[].requests": "number", "today.byProject[].costUsd": "number",
+
+  "trend[].date": "date", "trend[].costUsd.claude-code": "number", "trend[].costUsd.codex": "number",
+
+  "quota[].account": "code", "quota[].agent": "enum:claude-code|codex", "quota[].window": "enum:5h|7d",
+  "quota[].usedPct": "number", "quota[].resetsAt": "iso", "quota[].sampledAt": "iso",
+  "quota[].history[].t": "iso", "quota[].history[].usedPct": "number",
+
+  "contributions.total": "number", "contributions.days[].date": "date", "contributions.days[].count": "number",
+
+  "activity[].t": "iso", "activity[].source": "enum:github|gitea|local", "activity[].repo": "text",
+  "activity[].public": "bool", "activity[].title": "title", "activity[].branch": "text?",
+  "activity[].hash": "hash?", "activity[].url": "url:public-repo?", "activity[].machine": "code?",
+
+  "machines[].id": "code", "machines[].label": "text", "machines[].role": "enum:dev|deploy|work|gitea",
+  "machines[].os": "enum:macos|linux|windows", "machines[].online": "bool", "machines[].lastSeen": "iso?",
+  "machines[].probeLastReport": "iso?",
+  "machines[].system.cpuPct": "number", "machines[].system.memUsed": "number", "machines[].system.memTotal": "number",
+  "machines[].system.diskUsed": "number", "machines[].system.diskTotal": "number", "machines[].system.uptimeSec": "number",
+  "machines[].history[].t": "iso", "machines[].history[].cpuPct": "number", "machines[].history[].memPct": "number",
+
+  "services[].name": "text", "services[].kind": "enum:container|monitor", "services[].machine": "code",
+  "services[].status": "enum:up|down|paused|unknown", "services[].uptimePct24h": "number?",
+  "services[].cpuPct": "number?", "services[].memBytes": "number?",
+
+  "runtimes[].machine": "code", "runtimes[].agent": "enum:claude-code|codex", "runtimes[].version": "semver",
+  "runtimes[].processes": "number", "runtimes[].activeSessions": "number", "runtimes[].stale": "bool",
+
+  "tailnet[].name": "text", "tailnet[].os": "enum:macos|linux|windows|ios|android", "tailnet[].online": "bool",
+  "tailnet[].lastSeen": "iso",
+
+  "jobs[].name": "text", "jobs[].machine": "code", "jobs[].lastRun": "iso?", "jobs[].lastSuccess": "iso?", "jobs[].ok": "bool"
+ }
 }

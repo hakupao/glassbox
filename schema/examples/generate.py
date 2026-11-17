@@ -43,6 +43,7 @@ PROJECTS = {
     "p_1a2b3c4d5e6f": {"name": "sdtm-pedia", "remote": "github.com/hakupao/sdtm-pedia"},
     "p_3c4d5e6f7081": {"name": "falcon-ledger", "remote": "gitea.example.org/team/falcon-ledger"},
     "p_4d5e6f708192": {"name": "orchid-batch", "remote": None},
+    "p_other": {"name": "other", "remote": None},
 }
 
 # --- probe example ----------------------------------------------------------------
@@ -125,15 +126,15 @@ page = {
     },
     "trend": trend,
     "quota": [
-        {"account": "a_1f2e3d4c", "agent": "claude-code", "window": "7d", "usedPct": 41,
+        {"account": "K", "agent": "claude-code", "window": "7d", "usedPct": 41,
          "resetsAt": "2026-11-20T09:00:00+09:00", "sampledAt": iso(NOW),
          "history": [{"t": iso(NOW - timedelta(hours=12 * (14 - i))), "usedPct": p}
                      for i, p in enumerate([0, 3, 6, 9, 11, 14, 17, 20, 22, 25, 28, 31, 34, 37, 41])]},
-        {"account": "a_9c8b7a6d", "agent": "codex", "window": "5h", "usedPct": 55,
+        {"account": "L", "agent": "codex", "window": "5h", "usedPct": 55,
          "resetsAt": "2026-11-17T13:10:00+09:00", "sampledAt": iso(NOW),
          "history": [{"t": iso(NOW - timedelta(minutes=20 * (7 - i))), "usedPct": p}
                      for i, p in enumerate([0, 6, 13, 21, 30, 38, 46, 55])]},
-        {"account": "a_9c8b7a6d", "agent": "codex", "window": "7d", "usedPct": 70,
+        {"account": "L", "agent": "codex", "window": "7d", "usedPct": 70,
          "resetsAt": "2026-11-20T00:00:00+09:00", "sampledAt": iso(NOW), "history": []},
     ],
     "contributions": {"total": sum(x["count"] for x in days), "days": days},
@@ -175,11 +176,21 @@ page = {
 
 # --- public view: whitelist rebuild (prototype of the S11 exporter) -------------------
 # In the real exporter these come from .local/public.local.toml and GitHub visibility.
-ALLOW_TEXT = PUBLIC_REPOS | {"gitea", "status-page"}
+# Text allowlists are per field (CONTRACT §3 rule 2).
+ALLOW = {
+    "today.byProject[].project": PUBLIC_REPOS,
+    "activity[].repo": PUBLIC_REPOS,
+    "activity[].branch": {"main", "dev"},           # branches of public repos, added automatically
+    "services[].name": {"gitea", "status-page"},
+}
+CODES = {"A", "B", "C", "D", "K", "L"}             # machine and account codes
 HIDDEN = ["tailnet"]
 KEYWORDS = ["ACME-42"]
 MODELS = {"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "gpt-6-astra"}
+PUBLIC_URL = re.compile(r"^https://github\.com/hakupao/(" + "|".join(map(re.escape, PUBLIC_REPOS)) + r")/")
 TICKET = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
+ISO = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:Z|[+-]\d\d:\d\d)$")
+DATE = re.compile(r"^\d{4}-\d\d-\d\d$")
 MASK = {"masked": True}
 
 
@@ -187,28 +198,94 @@ def pattern_for(path):
     return re.compile("^" + re.escape(path).replace(r"\[\]", r"\[\d+\]") + "$")
 
 
-PATHS = [pattern_for(p) for p in FIELDS["paths"]]
-TEXTS = [pattern_for(p) for p in FIELDS["text"]]
+SPEC = [(pattern_for(p), p, t) for p, t in FIELDS["paths"].items()]
+
+
+def spec_for(path):
+    for rx, generic, typ in SPEC:
+        if rx.match(path):
+            return generic, typ
+    return None, None
+
+
+def is_list_path(path):
+    return any(rx.match(path + "[0]") for rx, _, _ in SPEC) or any(
+        g.startswith(re.sub(r"\[\d+\]", "[]", path) + "[]") for _, g, _ in SPEC)
 
 
 def rebuild(node, path=""):
-    """Copy only whitelisted leaves; mask Text leaves that are not allowlisted."""
+    """Copy only whitelisted leaves; mask Text leaves that are not on that field's allowlist."""
     if isinstance(node, dict):
+        if node.get("masked") is True and spec_for(path)[1] in ("text", "text?"):
+            return node
         out = {}
         for k, v in node.items():
-            p = f"{path}.{k}" if path else k
-            r = rebuild(v, p)
+            r = rebuild(v, f"{path}.{k}" if path else k)
             if r is not _DROP:
                 out[k] = r
         return out if out or not path else _DROP
     if isinstance(node, list):
-        out = [r for i, v in enumerate(node) if (r := rebuild(v, f"{path}[{i}]")) is not _DROP]
-        return out if out or any(x.match(path + "[0]") for x in PATHS) or not node else _DROP
-    if not any(x.match(path) for x in PATHS):
+        if not is_list_path(path):
+            return _DROP
+        return [r for i, v in enumerate(node) if (r := rebuild(v, f"{path}[{i}]")) is not _DROP]
+    generic, typ = spec_for(path)
+    if typ is None:
         return _DROP
-    if any(x.match(path) for x in TEXTS) and node not in ALLOW_TEXT:
+    if typ.rstrip("?") == "text" and node is not None and node not in ALLOW.get(generic, ()):
         return dict(MASK)
     return node
+
+
+def check_type(value, typ, generic):
+    """Gate rule 3: every public value must match its declared type."""
+    if typ.endswith("?"):
+        if value is None:
+            return True
+        typ = typ[:-1]
+    kind, _, arg = typ.partition(":")
+    if kind == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if kind == "bool":
+        return isinstance(value, bool)
+    if kind == "null":
+        return value is None
+    if not isinstance(value, (str, dict)):
+        return False
+    if kind == "text":
+        return value == MASK or value == {"masked": True, "group": "private"} or value in ALLOW.get(generic, ())
+    if not isinstance(value, str):
+        return False
+    return {
+        "iso": lambda: bool(ISO.match(value)),
+        "date": lambda: bool(DATE.match(value)),
+        "hash": lambda: bool(re.fullmatch(r"[0-9a-f]{7,40}", value)),
+        "semver": lambda: bool(re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", value)),
+        "enum": lambda: value in arg.split("|"),
+        "const": lambda: value == arg,
+        "code": lambda: value in CODES,
+        "model": lambda: value in MODELS or value == "other",
+        "url": lambda: bool(PUBLIC_URL.match(value)),
+        "title": lambda: not TICKET.search(value),
+    }[kind]()
+
+
+def gate(node, path=""):
+    """Gate rules 1 and 3: reject unknown keys and mistyped values. Returns a list of problems."""
+    bad = []
+    if isinstance(node, dict) and not (node.get("masked") is True and spec_for(path)[1] in ("text", "text?")):
+        for k, v in node.items():
+            bad += gate(v, f"{path}.{k}" if path else k)
+        return bad
+    if isinstance(node, list):
+        for i, v in enumerate(node):
+            bad += gate(v, f"{path}[{i}]")
+        return bad
+    generic, typ = spec_for(path)
+    if typ is None:
+        return [f"unknown field {path}"]
+    if not check_type(node, typ, generic):
+        return [f"{path}: {node!r} is not {typ}"]
+    return bad
 
 
 _DROP = object()
@@ -217,9 +294,9 @@ src = json.loads(json.dumps(page))
 src["view"] = "public"
 src["today"].pop("hourly")                                         # rule 7
 priv = [p for p in src["today"]["byProject"] if not p["public"]]
-src["today"]["byProject"] = [p for p in src["today"]["byProject"] if p["public"]]
-pub_group = {"project": {"masked": True, "group": "private"}, "public": False,
-             "requests": sum(p["requests"] for p in priv), "costUsd": round(sum(p["costUsd"] for p in priv), 2)}
+src["today"]["byProject"] = [p for p in src["today"]["byProject"] if p["public"]] + [{
+    "project": {"masked": True, "group": "private"}, "public": False,
+    "requests": sum(p["requests"] for p in priv), "costUsd": round(sum(p["costUsd"] for p in priv), 2)}]
 for m in src["today"]["byModel"]:
     if m["model"] not in MODELS:
         m["model"] = "other"
@@ -234,7 +311,8 @@ for h in HIDDEN:
 src["hidden"] = HIDDEN
 pub = rebuild(src)
 assert isinstance(pub, dict)
-pub["today"]["byProject"].append(pub_group)
+problems = gate(pub)
+assert not problems, "gate rejects public example:\n  " + "\n  ".join(problems)
 
 for name, obj in (("probe.json", probe), ("page.private.json", page), ("page.public.json", pub)):
     (HERE / name).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
