@@ -8,7 +8,8 @@
       "note": "git init; scripts/privacy_scan.py (terms from .local); independent review PASS; leak of a private repo name fixed and history squashed; pushed to PRIVATE GitHub repo (make public at S15)"
     },
     "S02": {
-      "status": "todo"
+      "status": "done",
+      "note": "schema/CONTRACT.md + typed public_fields.json; critic APPROVE after 3 rounds; gate prototype red-team 8/8"
     },
     "S03": {
       "status": "todo"
@@ -53,5 +54,16 @@
       "status": "todo"
     }
   },
-  "evidence": ".local/evidence/ (gitignored: contains real data)"
+  "evidence": ".local/evidence/ (gitignored: contains real data)",
+  "followups": {
+    "S10": [
+      "front end must tolerate missing keys (e.g. machines[].system null is dropped)",
+      "rename 'GitHub 贡献' heading: contributions are deduped commits"
+    ],
+    "S12": [
+      "gate(): cross-field rule 4 (private entries: branch/hash/url/machine null, t on the hour) + red-team cases",
+      "title type: add e-mail/IP/path/secret regexes, not only ticket ids",
+      "red-team a short (<5 chars) private name for word-boundary matching"
+    ]
+  }
 }
