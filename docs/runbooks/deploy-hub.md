@@ -16,7 +16,7 @@ Clone the repository where you edit it and follow [install-probe.md](install-pro
 
 `deploy/README.md` section 1: directory, `hub.toml` (with `[serve] hosts`), `serve.json`, `ts_authkey`, `secrets/*`, owner `root:10001`, mode `0640` (the hub's uid 10001 must be able to read them; `ts_authkey` is `root:root` `0600`).
 
-**Verify** (no values shown): `sudo ls -ln /opt/glassbox /opt/glassbox/secrets` shows the owners and modes from the table; `sudo -u '#10001' test -r /opt/glassbox/secrets/github_token && echo readable-by-10001`; `sudo grep -c AllowFunnel /opt/glassbox/serve.json` prints `0`.
+**Verify** (no values shown): `sudo ls -ln /opt/glassbox /opt/glassbox/secrets` shows the owners and modes from the table; `sudo -u '#10001' -g '#10001' test -r /opt/glassbox/secrets/github_token && echo readable-by-10001`; `sudo grep -c AllowFunnel /opt/glassbox/serve.json` prints `0`.
 
 ## 3. Gitea repository variables and secret (the user)
 

@@ -8,7 +8,7 @@
 # pushes the image, then runs `docker compose -f deploy/compose.yaml up -d` on the VM with
 #   GLASSBOX_IMAGE   image path without tag (Gitea repo variable IMAGE)
 #   IMAGE_TAG        40-hex commit SHA
-#   DOCKER_GID       group id of the Docker socket (the workflow reads it with stat)
+#   DOCKER_GID       group id of the Docker socket (the workflow reads it through the host daemon)
 # Local build instead of a registry image: see compose.build.yaml.
 #
 # Everything private lives on the VM in ${GLASSBOX_DIR:-/opt/glassbox}, bind-mounted read-only and
@@ -41,11 +41,18 @@ services:
       GLASSBOX_COLLECT_INTERVAL: "${GLASSBOX_COLLECT_INTERVAL:-300}"
     volumes:
       # sqlite in WAL mode needs real file locks and fsync: a named volume on the VM's own disk,
-      # not the virtiofs share used for deploy-data. Include this volume in the backup.
+      # not a shared host folder. Include this volume in the backup.
       - glassbox-data:/data
+      # Only what the hub needs: its config and the token files. ts_authkey is not visible here.
       - type: bind
-        source: "${GLASSBOX_DIR:-/opt/glassbox}"
-        target: /run/glassbox
+        source: "${GLASSBOX_DIR:-/opt/glassbox}/hub.toml"
+        target: /run/glassbox/hub.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${GLASSBOX_DIR:-/opt/glassbox}/secrets"
+        target: /run/glassbox/secrets
         read_only: true
         bind:
           create_host_path: false
@@ -77,6 +84,7 @@ services:
       # Tag only. Never add route or exit-node advertising here (the deploy test and the
       # workflow both fail on it).
       TS_EXTRA_ARGS: "${TS_EXTRA_ARGS:---advertise-tags=tag:glassbox}"
+      TS_AUTH_ONCE: "true"                                   # use the auth key only when the node is not yet logged in
       TS_ENABLE_HEALTH_CHECK: "true"
       TS_LOCAL_ADDR_PORT: "127.0.0.1:9002"                   # /healthz, reachable only inside the namespace
     volumes:

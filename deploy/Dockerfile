@@ -5,7 +5,9 @@ FROM python:3.12.8-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 
-RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin glassbox \
+# uid AND gid 10001: the host files under /opt/glassbox are root:10001 and must be readable by this group.
+RUN groupadd --system --gid 10001 glassbox \
+ && useradd --system --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin glassbox \
  && mkdir /data && chown glassbox:glassbox /data
 
 WORKDIR /app
@@ -18,6 +20,6 @@ COPY web/ /app/web/
 COPY deploy/entrypoint.sh /usr/local/bin/glassbox-entrypoint
 RUN chmod 0755 /usr/local/bin/glassbox-entrypoint
 
-USER glassbox
+USER 10001:10001
 VOLUME /data
 ENTRYPOINT ["glassbox-entrypoint"]

@@ -47,13 +47,47 @@ class DeployTest(unittest.TestCase):
     def test_every_bind_mount_is_read_only_and_never_created(self):
         lines = COMPOSE.splitlines()
         starts = [i for i, ln in enumerate(lines) if ln.strip() == "- type: bind"]
-        self.assertEqual(len(starts), 3)                    # /opt/glassbox, serve.json, ts_authkey
+        self.assertEqual(len(starts), 4)                    # hub.toml, secrets/, serve.json, ts_authkey
         for i in starts:
             blk = "\n".join(lines[i:i + 7])
             self.assertIn("read_only: true", blk, blk)
             self.assertIn("create_host_path: false", blk, blk)
         # the Docker socket is the one short-syntax bind and must be :ro
         self.assertIn("/var/run/docker.sock:/var/run/docker.sock:ro", COMPOSE)
+
+    def test_hub_mounts_only_its_config_and_secrets(self):
+        hub = "\n".join(code_lines(COMPOSE.split("\n  tailscale:")[0]))
+        self.assertNotRegex(hub, r'target: /run/glassbox\s*\n')
+        self.assertIn("target: /run/glassbox/hub.toml", hub)
+        self.assertIn("target: /run/glassbox/secrets", hub)
+        self.assertNotIn("ts_authkey", hub)
+
+    def test_container_user_has_pinned_uid_and_gid(self):
+        df = (ROOT / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("groupadd --system --gid 10001 glassbox", df)
+        self.assertIn("--uid 10001 --gid 10001", df)
+        self.assertIn("USER 10001:10001", df)
+
+    def test_sidecar_uses_auth_key_once(self):
+        self.assertIn('TS_AUTH_ONCE: "true"', COMPOSE)
+
+    def test_entrypoint_fails_closed_on_missing_secrets_dir(self):
+        ep = (ROOT / "deploy" / "entrypoint.sh").read_text(encoding="utf-8")
+        self.assertIn('[ -n "${GLASSBOX_SECRETS_DIR:-}" ]', ep)
+        self.assertIn("exit 1", ep)
+
+    def test_preflight_checks_readability_and_traversal(self):
+        self.assertIn("[ -r", WORKFLOW)
+        self.assertIn("/s/secrets", WORKFLOW)
+        self.assertIn("--user 10001:10001", WORKFLOW)
+
+    def test_workflow_checks_serve_and_funnel_status(self):
+        self.assertIn("tailscale serve status", WORKFLOW)
+        self.assertIn("tailscale funnel status", WORKFLOW)
+        self.assertIn("127.0.0.1:8787", WORKFLOW)
+
+    def test_docker_gid_comes_from_the_host_daemon(self):
+        self.assertIn('docker run --rm -v /var/run/docker.sock:/s:ro "$PREFLIGHT_IMAGE" stat -c %g /s', WORKFLOW)
 
     def test_private_files_come_from_the_vm_directory(self):
         self.assertIn('${GLASSBOX_DIR:-/opt/glassbox}', COMPOSE)

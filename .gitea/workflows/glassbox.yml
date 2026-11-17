@@ -1,5 +1,5 @@
 # glassbox hub：push 到 main 后构建镜像，推送到 Gitea 镜像仓库，部署到部署机上的虚拟机 V（Docker Compose）。
-# 形状与 homepage 工作流相同。镜像仓库地址和镜像路径来自仓库变量（Settings -> Actions -> Variables）：
+# 形状沿用本环境已有的部署工作流模式。镜像仓库地址和镜像路径来自仓库变量（Settings -> Actions -> Variables）：
 #   REGISTRY  镜像仓库主机（带端口则一并写上）
 #   IMAGE     完整镜像路径，不带标签（例如 <REGISTRY>/<OWNER>/glassbox）
 # 仓库密钥只有 REGISTRY_TOKEN（推送镜像用）。运行时的 token（GitHub、Gitea、Beszel、Tailscale）不经过 CI，
@@ -30,7 +30,7 @@ concurrency:
 env:
   REGISTRY: ${{ vars.REGISTRY }}
   IMAGE: ${{ vars.IMAGE }}
-  # 预检用的小镜像：部署前核对 tag 是否存在并固定 digest
+  # 预检和取 docker 组 id 用的小镜像：部署前核对 tag 是否存在并固定 digest
   PREFLIGHT_IMAGE: alpine:3.20.3
   SECRETS_DIR: /opt/glassbox
 
@@ -69,8 +69,12 @@ jobs:
         run: |
           docker run -i --rm --user 10001:10001 -v "$SECRETS_DIR":/s:ro "$PREFLIGHT_IMAGE" sh -s <<'EOS'
           miss=""
+          # 以 uid/gid 10001 运行：目录必须可遍历，文件必须可读且非空
+          for d in /s /s/secrets; do
+            { [ -d "$d" ] && [ -x "$d" ] && [ -r "$d" ]; } || miss="$miss $d/(目录不可遍历)"
+          done
           for f in hub.toml serve.json secrets/github_token secrets/gitea_main_token secrets/gitea_second_token secrets/beszel_password; do
-            [ -s "/s/$f" ] || miss="$miss $f"
+            { [ -r "/s/$f" ] && [ -s "/s/$f" ]; } || miss="$miss $f"
           done
           if [ -n "$miss" ]; then
             echo "预检失败：/opt/glassbox 缺少文件，或文件对 uid 10001 不可读：$miss"
@@ -106,7 +110,9 @@ jobs:
       - name: 部署
         run: |
           docker pull "$IMAGE:${{ steps.tag.outputs.tag }}"
-          DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+          # 在宿主 docker 守护进程上取 socket 的组 id（job 容器里的 stat 看到的是容器内的挂载）
+          DOCKER_GID=$(docker run --rm -v /var/run/docker.sock:/s:ro "$PREFLIGHT_IMAGE" stat -c %g /s)
+          printf '%s' "$DOCKER_GID" | grep -Eqx '[0-9]+' || { echo "取不到 docker socket 的组 id"; exit 1; }
           GLASSBOX_IMAGE="$IMAGE" IMAGE_TAG="${{ steps.tag.outputs.tag }}" DOCKER_GID="$DOCKER_GID" \
             docker compose -f deploy/compose.yaml up -d --remove-orphans
           docker inspect glassbox --format '运行镜像：{{.Config.Image}}'
@@ -137,8 +143,18 @@ jobs:
           assert res['wrong-host'] == 421, '错误的 Host 头没有返回 421'
           EOS
 
-      - name: 暴露面检查（无发布端口、不通告路由）
+      - name: 暴露面检查（无发布端口、不通告路由、serve 只代理 hub、funnel 关闭）
         run: |
+          # tailscale CLI 的输出格式没有在本机验证过：先完整打印，再按最稳的方式判断
+          s=$(docker exec glassbox-tailscale tailscale serve status 2>&1) || { echo "tailscale serve status 失败：$s"; exit 1; }
+          echo "--- tailscale serve status ---"; echo "$s"
+          echo "$s" | grep -q '127.0.0.1:8787' || { echo "serve 没有代理到 127.0.0.1:8787"; exit 1; }
+          f=$(docker exec glassbox-tailscale tailscale funnel status 2>&1) || { echo "tailscale funnel status 失败：$f"; exit 1; }
+          echo "--- tailscale funnel status ---"; echo "$f"
+          if echo "$f" | grep -Ei 'funnel on' >/dev/null; then
+            echo "funnel 已开启，不允许"; exit 1
+          fi
+          if echo "$s" | grep -Ei 'funnel on' >/dev/null; then echo "serve 状态里出现 Funnel on，不允许"; exit 1; fi
           for c in glassbox glassbox-tailscale glassbox-docker-proxy; do
             b=$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$c")
             case "$b" in

@@ -16,8 +16,8 @@ author_emails = ["<AUTHOR_EMAIL>"]
 
 # Host headers the page routes (/, /index.html, /page.json) accept; anything else gets HTTP 421.
 # Default is only 127.0.0.1, localhost and ::1. `tailscale serve` proxies with the node's tailnet
-# name as Host, so list it here. Whether serve forwards the Host header unchanged is not
-# verified: test on deployment (README section 5).
+# name as Host (serve keeps the Host header; checked in the Tailscale source, v1.78.1), so list it here. The deploy checklist
+# (README section 5) still tests it at runtime.
 [serve]
 hosts = ["<NODE>.<TAILNET_NAME>.ts.net"]
 

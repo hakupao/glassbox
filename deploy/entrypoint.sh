@@ -13,6 +13,12 @@
 set -eu
 
 SECRETS_DIR="${GLASSBOX_SECRETS_DIR:-/run/secrets}"
+# An explicitly configured secrets directory must exist and be traversable: fail closed instead of
+# starting without tokens. (The default /run/secrets may be absent, e.g. a bare `docker run`.)
+if [ -n "${GLASSBOX_SECRETS_DIR:-}" ] && { [ ! -d "$SECRETS_DIR" ] || [ ! -x "$SECRETS_DIR" ] || [ ! -r "$SECRETS_DIR" ]; }; then
+  echo "secrets directory missing or not readable/traversable by uid $(id -u): $SECRETS_DIR" >&2
+  exit 1
+fi
 if [ -d "$SECRETS_DIR" ]; then
   for f in "$SECRETS_DIR"/*; do
     [ -f "$f" ] || continue

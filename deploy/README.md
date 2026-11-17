@@ -64,12 +64,12 @@ read -rs -p 'value: ' V; echo; printf '%s' "$V" | sudo tee /opt/glassbox/secrets
 
 ```sh
 sudo ls -ln /opt/glassbox /opt/glassbox/secrets          # owners/modes as in the table
-sudo -u '#10001' test -r /opt/glassbox/secrets/github_token && echo readable-by-10001
+sudo -u '#10001' -g '#10001' test -r /opt/glassbox/secrets/github_token && echo readable-by-10001
 sudo grep -c AllowFunnel /opt/glassbox/serve.json         # expect: 0
 sudo grep -n '^\[serve\]' /opt/glassbox/hub.toml          # expect: one line
 ```
 
-Also, once, on the VM: add `glassbox_glassbox-data` to the backup (sqlite in WAL mode: stop `glassbox` briefly before copying, or use a tool that snapshots the volume). The data is in a named volume, not on the virtiofs `deploy-data` share, because WAL needs real file locks and fsync.
+Also, once, on the VM: add `glassbox_glassbox-data` to the backup (sqlite in WAL mode: stop `glassbox` briefly before copying, or use a tool that snapshots the volume). The data is in a named volume, not on the shared host folder, because WAL needs real file locks and fsync.
 
 ## 2. Gitea repository settings
 
@@ -81,7 +81,7 @@ Repository Settings, Actions:
 | Variable | `IMAGE` | full image path without tag, `<REGISTRY>/<OWNER>/glassbox` |
 | Secret | `REGISTRY_TOKEN` | a Gitea token with package write scope for the registry |
 
-No other secret is needed or allowed (a test fails if the workflow reads any other). The Tailscale ACL and tag (section 4) must also be in place before the node is brought up.
+No other secret is needed or allowed (a test fails if the workflow reads any other). The Tailscale ACL and tag (section 4, ACL part) must also be in place before the node is brought up.
 
 ## 3. First deploy
 
@@ -133,7 +133,7 @@ Each item has an expected result. Do not call the deploy done until all hold.
    ```sh
    curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: evil.example' https://<NODE>.<TAILNET_NAME>.ts.net/page.json   # expect: 421
    ```
-   Whether `tailscale serve` forwards the original Host header unchanged is **not verified**: test on deployment. If item 1 returns 421 instead of 200, `[serve] hosts` in `/opt/glassbox/hub.toml` is missing or differs from the Host the hub receives (typo, other `TS_HOSTNAME`, other tailnet name): fix it, then `docker restart glassbox`. To open the page by the node's tailnet IP, add that IP to `hosts` too.
+   `tailscale serve` preserves the original Host header (read in the Tailscale source, v1.78.1; keep this runtime check anyway). If item 1 returns 421 instead of 200, `[serve] hosts` in `/opt/glassbox/hub.toml` is missing or differs from the Host the hub receives (typo, other `TS_HOSTNAME`, other tailnet name): fix it, then `docker restart glassbox`. To open the page by the node's tailnet IP, add that IP to `hosts` too.
 3. **Nothing is published on the VM.**
    ```sh
    docker ps --format '{{.Names}} {{.Ports}}' | grep -E '^glassbox'     # expect: Ports column empty for all three
@@ -146,7 +146,7 @@ Each item has an expected result. Do not call the deploy done until all hold.
    ```
 5. **Not on the internet; no Funnel.** `docker exec glassbox-tailscale tailscale funnel status` says funnel is off; `/opt/glassbox/serve.json` has no `AllowFunnel` (checked by the preflight too); `https://<NODE>.<TAILNET_NAME>.ts.net/healthz` times out from a device without Tailscale (a phone on mobile data).
 6. **The sidecar advertises no routes and no exit node.** `docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' glassbox-tailscale | grep TS_EXTRA_ARGS` shows only `--advertise-tags=tag:glassbox` (the workflow fails if it contains routes or an exit node). Also confirm in the Tailscale admin console that the machine has no subnet routes or exit-node setting pending approval.
-7. **Port 8787 closed to the tailnet.** From a second tailnet device: `curl -m 5 http://<NODE>.<TAILNET_NAME>.ts.net:8787/healthz` must fail. If it answers, the ACL in section 4 is not in force.
+7. **Port 8787 closed to the tailnet.** From a second tailnet device: `curl -m 5 http://<NODE>.<TAILNET_NAME>.ts.net:8787/healthz` must fail. If it answers, the ACL (section 4, ACL part) is not in force.
 8. **Secrets loaded** (names only, no values):
    ```sh
    docker exec glassbox glassbox-entrypoint check-secrets
