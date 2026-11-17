@@ -12,6 +12,10 @@ Config (TOML, optional; defaults shown):
     codex_roots = ["~/.codex/sessions"]
     claude_quota_samples = []           # statusline tap output files (scripts/statusline-tap.sh)
     account_salt = "glassbox"           # use the same random value on every machine
+    git_roots = []                      # directories holding repositories (one level deep)
+    author_emails = []                  # only commits by these authors are reported
+    git_days = 60
+    jobs = []                           # [{name, path, ok = "success regex"}]
     [ssh_aliases]                       # ssh host alias -> real host, for remote normalization
 """
 import argparse
@@ -24,7 +28,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import logs, pricing, quota, report, state
+from . import local, logs, pricing, quota, report, state
 
 DEFAULTS = {"machine": "A", "tz": "Asia/Tokyo", "state": "~/.glassbox/probe.sqlite",
             "claude_roots": ["~/.claude/projects"], "codex_roots": ["~/.codex/sessions"], "ssh_aliases": {},
@@ -57,6 +61,10 @@ def cmd_scan(conn, cfg, args):
 def cmd_report(conn, cfg, args):
     body = report.usage(conn, cfg["machine"], days=args.days, aliases=cfg["ssh_aliases"])
     body["quota"] = quota.collect(cfg)
+    body["git"], used = local.git_activity(conn, cfg)
+    body["projects"].update(used)
+    body["runtimes"] = local.runtimes(cfg)
+    body["jobs"] = local.jobs(cfg)
     print(json.dumps(report.envelope(cfg["machine"], cfg["tz"], body), ensure_ascii=False, indent=1))
 
 

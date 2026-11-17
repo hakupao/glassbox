@@ -68,7 +68,8 @@
   "runtimes": [{"agent": "codex", "version": "x.y.z", "processes": 2, "activeSessions": 1}],
   "git": [{                           // 快照：每个项目近 60 天内、作者是本人的提交
     "project": "p_…", "remote": true,  // remote=false 表示仓库没有远端
-    "commits": [{"t": "…", "hash": "4be0d71…（完整 40 位）", "branch": "main", "title": "docs: …"}]
+    "commits": [{"t": "…", "hash": "4be0d71…（完整 40 位）", "branch": "main", "title": "docs: …",
+                 "pushed": true}]           // false = 还没推到任何远端；hub 只对这类和无远端项目保留 local 来源
   }],
   "jobs": [{"name": "backup", "lastRun": "…", "lastSuccess": "…", "ok": true}]
 }

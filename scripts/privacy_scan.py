@@ -10,6 +10,7 @@ paths. Strings listed in "allow" never count as hits.
 Usage:
     python3 scripts/privacy_scan.py              # files git would track
     python3 scripts/privacy_scan.py PATH...      # specific files or directories
+    add -v to list the files that could not be text-scanned (images)
 
 Exit status: 0 when clean, 1 when anything matched, 2 on setup errors.
 Hits are printed with the matched text partly masked, so the report itself
@@ -100,7 +101,9 @@ def scan(path, term_re, allow):
 
 def main():
     term_re, allow = load_terms()
-    files = candidate_files(sys.argv[1:])
+    args = [a for a in sys.argv[1:] if a not in ("-v", "--verbose")]
+    verbose = len(args) != len(sys.argv) - 1
+    files = candidate_files(args)
     total, binaries = 0, []
     for f in files:
         hits, note = scan(f, term_re, allow)
@@ -111,7 +114,7 @@ def main():
             total += 1
             print(f"{rel}:{n}: [{kind}] {mask(s)}")
     print(f"\nscanned {len(files)} files, {total} hit(s); {len(binaries)} not text-scanned")
-    for b in binaries:
+    for b in binaries if verbose else []:
         print(f"  not scanned: {b}")
     return 1 if total else 0
 
