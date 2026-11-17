@@ -63,17 +63,24 @@ Expect a line like `scanned N files, read M (... GB), ... rows upserted, ... uni
 
 The hub prints one token per machine when the user (or the deploy agent) registers it: `deploy/README.md` section 3. The user gives it to you directly, outside the repository and outside any logged channel.
 
+The token must not appear on a command line (it would land in shell history and process listings). Type or paste it at a silent prompt.
+
 macOS:
 ```sh
-mkdir -p ~/.glassbox && umask 077 && printf '%s' '<HUB_TOKEN>' > ~/.glassbox/hub.token && chmod 600 ~/.glassbox/hub.token
+umask 077; mkdir -p ~/.glassbox
+printf 'Hub token: '; stty -echo; read -r T; stty echo; echo
+printf '%s' "$T" > ~/.glassbox/hub.token; unset T
+chmod 600 ~/.glassbox/hub.token
 ```
 Windows (PowerShell):
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.glassbox" | Out-Null
-Set-Content -NoNewline -Path "$HOME\.glassbox\hub.token" -Value '<HUB_TOKEN>'
+$s = Read-Host 'Hub token' -AsSecureString
+$t = [System.Net.NetworkCredential]::new('', $s).Password
+Set-Content -NoNewline -Path "$HOME\.glassbox\hub.token" -Value $t
+Remove-Variable t, s
 icacls "$HOME\.glassbox\hub.token" /inheritance:r /grant:r "$($env:USERNAME):(R,W)"
 ```
-After typing the token, clear it from shell history (macOS: `history -c` or delete the line; PowerShell: `Clear-History`; also remove the PSReadLine history line).
 
 **Verify**
 ```sh
@@ -140,8 +147,8 @@ Expect `LastTaskResult` 0. To see the output, run the push command by hand once 
 
 On the hub side the machine's `last_report` moves forward every 15 minutes. From the deploy VM:
 ```sh
-docker compose exec glassbox python -c "import sqlite3,time;c=sqlite3.connect('/data/hub.sqlite');print([(m,round(time.time()-t)) for m,t in c.execute('select id,last_report from machines')])"
+docker compose exec glassbox python -c "import sqlite3,time;c=sqlite3.connect('/data/hub.sqlite');print([(m,None if t is None else round(time.time()-t)) for m,t in c.execute('select id,last_report from machines')])"
 ```
-Expect each registered machine with an age below about 1000 seconds.
+Expect each registered machine with an age below about 1000 seconds. `None` means that machine has never reported (go back to step 3 for it).
 
 If a machine's history legitimately shrinks (for example logs were cleaned), the hub refuses the report; the user decides, then runs `python -m hub --config ... machine rebaseline <ID>` on the hub and pushes with `--rebaseline`.

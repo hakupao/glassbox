@@ -1,6 +1,7 @@
 # glassbox hub image. Contains only this repository's hub code: no data, no keys, no config.
 # Build context is the repository root (see compose.yaml).
-FROM python:3.12-slim
+# Pinned tag; add the @sha256 digest of the tag when deploying (docker buildx imagetools inspect).
+FROM python:3.12.8-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 

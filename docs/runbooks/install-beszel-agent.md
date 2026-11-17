@@ -30,7 +30,7 @@ Follow the "Add system" dialog of the user's Beszel version, which shows the exa
 Keep the agent's port reachable only from the Beszel hub (host firewall or LAN scope); do not forward it on a router.
 
 **Verify**
-- Agent side: the service is running (`launchctl list | grep -i beszel` on macOS; `Get-Service *beszel*` on Windows) and listens on its port (`lsof -iTCP -sTCP:LISTEN | grep -i beszel` / `Get-NetTCPConnection -State Listen | Where OwningProcess ...`).
+- Agent side: the service is running (`launchctl list | grep -i beszel` on macOS; `Get-Service *beszel*` on Windows) and listens on its port (macOS: `lsof -iTCP -sTCP:LISTEN -P | grep -i beszel`; Windows: `Get-Process *beszel* | ForEach-Object { Get-NetTCPConnection -State Listen -OwningProcess $_.Id }`).
 - Hub side: the system turns "up" in the Beszel UI within a minute and shows CPU, memory and disk.
 
 ## 3. Map it for glassbox
@@ -39,6 +39,6 @@ On the deploy host's `deploy/hub.toml`, make sure `[beszel.map]` contains `"<BES
 
 **Verify**
 ```sh
-docker compose exec glassbox python -m hub --config /etc/glassbox/hub.toml collect monitors
+docker compose exec glassbox glassbox-entrypoint collect monitors
 ```
 Expect `beszel` in the output to report a systems count including this machine, with no `error`.

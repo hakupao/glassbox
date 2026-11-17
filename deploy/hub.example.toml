@@ -2,6 +2,10 @@
 # password_env name an environment variable, which the entrypoint fills from ./secrets/<name>
 # (file github_token -> GITHUB_TOKEN, gitea_main_token -> GITEA_MAIN_TOKEN, ...).
 
+# Addresses below are used from INSIDE the sidecar's network namespace, which runs Tailscale in
+# userspace mode with TS_ACCEPT_DNS=false: tailnet names and mDNS names (*.local) do NOT resolve.
+# Use an IP address or a DNS name that the container's own resolver can resolve.
+
 db = "/data/hub.sqlite"
 host = "127.0.0.1"            # inside the sidecar's namespace; only `tailscale serve` reaches it
 port = 8787

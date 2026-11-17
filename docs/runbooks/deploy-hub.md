@@ -12,9 +12,9 @@ Clone the repository on the VM and follow [install-probe.md](install-probe.md) s
 
 ## 2. Secrets (the user hands these over)
 
-The user supplies, separately from the repository: a Tailscale auth key, a GitHub fine-grained read-only token, one read-only token per Gitea instance, a read-only Beszel account password. Create the files exactly as in `deploy/README.md` section 1 and `chmod 600`.
+The user supplies, separately from the repository: a Tailscale auth key, a GitHub fine-grained read-only token, one read-only token per Gitea instance, a read-only Beszel account password. Create the files exactly as in `deploy/README.md` section 1, including `chown 10001:10001` and `chmod 400` (the container user must be able to read them; type values with echo off, not on the command line).
 
-**Verify**: `ls -l deploy/secrets` shows mode `-rw-------` for each file; `git status --short` shows none of them.
+**Verify**: `ls -ln deploy/secrets` shows owner `10001` and mode `-r--------` for each file except `ts_authkey` (root); `git status --short` shows none of them.
 
 ## 3. Start from a fresh database
 
@@ -24,23 +24,23 @@ The user supplies, separately from the repository: a Tailscale auth key, a GitHu
 
 ## 4. Verify exposure
 
-Run all four checks in `deploy/README.md` section 4 (tailnet reachable; no published ports; not on the LAN; not on the internet; ingest refused without a token).
+Do the ACL step (`deploy/README.md` section 4, ask the user first), then run all checks in section 5 (tailnet reachable; no published ports; not on the LAN; not on the internet; port 8787 closed to the tailnet; docker proxy allows only the listing; ingest refused without a token). Also run `docker compose exec glassbox glassbox-entrypoint check-secrets`: expect one `NAME: set` line per secret.
 
 ## 5. Collectors and the Gitea organisation check
 
 ```sh
-docker compose exec glassbox python -m hub --config /etc/glassbox/hub.toml collect all
+docker compose exec glassbox glassbox-entrypoint collect all
 ```
 **Verify**: no `error` entries in the `monitors:` line; `github:` and `gitea:` print counts.
 
 Organisation repositories (S13 follow-up 3): for each Gitea instance, pick one organisation repository you contribute to and compare:
-1. `curl -H "Authorization: token <TOKEN>" "<GITEA_URL>/api/v1/user/repos?limit=50"` lists it, or
+1. `printf 'Authorization: token %s\n' "$(sudo cat deploy/secrets/gitea_main_token)" | curl -sS -H @- "<GITEA_URL>/api/v1/user/repos?limit=50"` (token via stdin header, not on the command line) lists it, or
 2. it is missing.
 If it is missing on either instance, report that to the lead: the collector in `hub/sources.py` needs a `/orgs/{org}/repos` listing added. Do not patch it on the deploy machine.
 
 ## 6. Register machines and hand out tokens
 
-`deploy/README.md` section 3. Give each token to the matching machine's agent through a channel the user chooses (direct paste to that terminal; not a file in the repository, not a message that is logged).
+`deploy/README.md` section 3. The user runs `machine add` themselves with the output redirected to a file, so the token does not appear in an agent's transcript. Give each token to the matching machine's agent through a channel the user chooses (direct paste to that terminal; not a file in the repository, not a message that is logged).
 
 ## 7. Backups
 
