@@ -60,6 +60,15 @@ class ExportTest(unittest.TestCase):
 
     # --- end to end ---------------------------------------------------------------------------
 
+    def test_machine_today_by_agent_stays_private(self):
+        page = copy.deepcopy(EXAMPLE)
+        for m in page["machines"]:
+            m["todayByAgent"] = [{"agent": "claude-code", "requests": 7, "unpricedRequests": 0, "costUsd": 1.5, "sessions": 2}]
+        pub, _ = self.run_export(page)
+        self.assertTrue(pub["machines"])
+        self.assertTrue(all("todayByAgent" not in m for m in pub["machines"]))
+        self.assertNotIn("todayByAgent", json.dumps(pub))
+
     def test_example_export_passes_gate_as_json_and_html(self):
         pub, ctx = self.run_export()
         self.assertEqual(self.gate(pub, ctx), [])
