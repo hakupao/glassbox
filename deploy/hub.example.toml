@@ -1,5 +1,5 @@
 # Copy to hub.toml (git-ignored) and fill in. Tokens are NOT written here: token_env /
-# password_env name an environment variable, which the entrypoint fills from ./secrets/<name>
+# password_env name an environment variable, which the entrypoint fills from /opt/glassbox/secrets/<name> on the VM
 # (file github_token -> GITHUB_TOKEN, gitea_main_token -> GITEA_MAIN_TOKEN, ...).
 
 # Addresses below are used from INSIDE the sidecar's network namespace, which runs Tailscale in

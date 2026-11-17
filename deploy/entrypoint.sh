@@ -1,19 +1,20 @@
 #!/bin/sh
 # Container entrypoint.
-# 1. Turns every file in /run/secrets into an upper-case environment variable
+# 1. Turns every file in $GLASSBOX_SECRETS_DIR (default /run/secrets) into an upper-case environment variable
 #    (github_token -> GITHUB_TOKEN), because the hub reads tokens from the environment
 #    (hub.toml names the variable: token_env / password_env). A secret file that cannot be
 #    read, or is empty, stops the container; only the file name is printed, never a value.
 # 2. With arguments, runs `python -m hub --config <config> <args>` and exits, so that
-#    `docker compose exec glassbox glassbox-entrypoint collect all` sees the same environment
+#    `docker exec glassbox glassbox-entrypoint collect all` sees the same environment
 #    as the server. `check-secrets` prints which secret variables are set (no values).
 # 3. Without arguments: runs `hub collect all` once at start and then every
 #    GLASSBOX_COLLECT_INTERVAL seconds in the background (`serve` only receives probe
 #    reports), and replaces itself with `hub serve`.
 set -eu
 
-if [ -d /run/secrets ]; then
-  for f in /run/secrets/*; do
+SECRETS_DIR="${GLASSBOX_SECRETS_DIR:-/run/secrets}"
+if [ -d "$SECRETS_DIR" ]; then
+  for f in "$SECRETS_DIR"/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
     name=$(printf '%s' "$base" | tr 'a-z-' 'A-Z_')

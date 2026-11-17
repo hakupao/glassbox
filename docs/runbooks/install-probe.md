@@ -147,7 +147,7 @@ Expect `LastTaskResult` 0. To see the output, run the push command by hand once 
 
 On the hub side the machine's `last_report` moves forward every 15 minutes. From the deploy VM:
 ```sh
-docker compose exec glassbox python -c "import sqlite3,time;c=sqlite3.connect('/data/hub.sqlite');print([(m,None if t is None else round(time.time()-t)) for m,t in c.execute('select id,last_report from machines')])"
+docker exec glassbox python -c "import sqlite3,time;c=sqlite3.connect('/data/hub.sqlite');print([(m,None if t is None else round(time.time()-t)) for m,t in c.execute('select id,last_report from machines')])"
 ```
 Expect each registered machine with an age below about 1000 seconds. `None` means that machine has never reported (go back to step 3 for it).
 

@@ -2,85 +2,112 @@
 
 Three containers, no published host port:
 
-| Service | Role |
+| Service (container) | Role |
 |---|---|
-| `tailscale` | Sidecar. Outbound only. `tailscale serve` forwards tailnet `:443` to the hub. Node identity is kept in a volume. |
-| `glassbox` | The hub (`python -m hub serve`) plus a background `collect all` loop. Shares the sidecar's network namespace (`network_mode: service:tailscale`), so it has no network of its own to expose. |
-| `docker-proxy` | Docker socket proxy with an exact allowlist (`wollomatic/socket-proxy`): only `GET /containers/json` (optionally `/vNN.NN/` prefixed) is forwarded; inspect, logs, exec, archive, export and all write methods answer 403, and only the sidecar's address may connect. |
+| `tailscale` (`glassbox-tailscale`) | Sidecar. Outbound only. `tailscale serve` forwards tailnet `:443` to the hub. Node identity is kept in the volume `glassbox_tailscale-state`. |
+| `glassbox` (`glassbox`) | The hub (`python -m hub serve`) plus a background `collect all` loop. Shares the sidecar's network namespace (`network_mode: service:tailscale`), so it has no network of its own to expose. Data in the volume `glassbox_glassbox-data`. |
+| `docker-proxy` (`glassbox-docker-proxy`) | Docker socket proxy with an exact allowlist (`wollomatic/socket-proxy`): only `GET /containers/json` (optionally `/vNN.NN/` prefixed) is forwarded; inspect, logs, exec, archive, export and all write methods answer 403, and only the sidecar's address may connect. |
 
-**Status: written and statically checked only.** The author's machine has no Docker, so `docker compose config` and `docker compose up` have never been run. The image contains `hub/`, all of `probe/` (price table) and `web/` (the front end, bundled into one inlined page at request time); without them `/` answers 500. Image parameters written from memory (socket-proxy flags and port, Tailscale health-check variables, image tags) are marked in `compose.yaml`: check them against the official documentation before deploying, and pin image digests. `read_only`, `cap_drop` and the `:ro` socket mount are also untested; the fallback for each is written next to it in `compose.yaml` or in section 5.
+## How a deploy works
 
-Placeholders in this directory: `<TAILNET_NAME>`, `<GITEA_URL>` and so on. Real values go only in the git-ignored files `hub.toml`, `.env` and `secrets/`.
+Push to `main` (changes under `deploy/`, `hub/`, `probe/`, `web/`, `schema/` or the workflow file) runs `.gitea/workflows/glassbox.yml` on the runner in the deploy VM, which uses the VM's own Docker daemon:
 
-Anything that changes the deploy machine is an external change: **ask the user before running these steps there.**
+1. check the repository variables, pick the tag (the commit SHA);
+2. **preflight**: `/opt/glassbox` must contain every required file, readable by uid 10001; otherwise the workflow stops with a message and deploys nothing (this is what prevents a crash loop on the first push);
+3. log in to the Gitea registry with `secrets.REGISTRY_TOKEN`, build, push;
+4. pull, `docker compose -f deploy/compose.yaml up -d`;
+5. health checks through `docker exec glassbox` (nothing is published on the host), the Host-allowlist check, and the no-published-ports / no-routes check.
 
-## 1. Prepare (on the deploy machine, in a clone of this repository)
+Only `REGISTRY_TOKEN` passes through CI. Every runtime token (GitHub, Gitea, Beszel, Tailscale auth key) is a file the user puts on the VM by hand.
+
+**Status: written and statically checked only.** The author's machine has no Docker: `docker compose config`, the workflow and the containers have never been run. The image contains `hub/`, all of `probe/` (price table) and `web/` (bundled into one inlined page at request time); without them `/` answers 500. Parameters written from memory (socket-proxy flags and port, Tailscale health-check variables, image tags, the preflight image tag) are marked in `compose.yaml` and the workflow: check them against the official documentation before the first deploy, and pin image digests. `read_only`, `cap_drop` and the `:ro` mounts are untested; the fallback for each is next to it in `compose.yaml` or in section 5 (item 9).
+
+Placeholders: `<TAILNET_NAME>`, `<NODE>`, `<REGISTRY>`, `<OWNER>` and so on. Real values go only in the Gitea repository variables and in `/opt/glassbox` on the VM.
+
+Everything below that changes the VM or Gitea is an external change: **ask the user first, and the user runs the commands that handle secrets.**
+
+## 1. One-time VM preparation (the user runs these)
+
+Layout of `/opt/glassbox` (bind-mounted read-only into the containers; compose never creates it):
+
+| Path | Content | Owner / mode | Read by |
+|---|---|---|---|
+| `/opt/glassbox` | directory | `root:10001` `0750` | hub (uid 10001) |
+| `hub.toml` | copy of `deploy/hub.example.toml`, placeholders filled in; includes `[serve] hosts = ["<NODE>.<TAILNET_NAME>.ts.net"]` | `root:10001` `0640` | hub |
+| `serve.json` | copy of `deploy/serve.json` (no `AllowFunnel`) | `root:root` `0644` | sidecar |
+| `ts_authkey` | Tailscale auth key: one-off, pre-approved, tagged `tag:glassbox` | `root:root` `0600` | sidecar (root) |
+| `secrets/` | directory | `root:10001` `0750` | hub |
+| `secrets/github_token` | GitHub fine-grained read-only token (Contents/Metadata read, plus the profile contribution calendar) | `root:10001` `0640` | hub |
+| `secrets/gitea_main_token`, `secrets/gitea_second_token` | one read-only Gitea token per instance (`read:repository`, `read:user`) | `root:10001` `0640` | hub |
+| `secrets/beszel_password` | password of a read-only Beszel account (not an admin) | `root:10001` `0640` | hub |
+
+The hub runs as uid 10001 with all capabilities dropped and bind mounts keep the host owner and mode, so a `0600` file owned by your login user is **unreadable in the container**; the container then exits with `cannot read secret file: <name>` (it never runs degraded). `root:10001` with `0640` is the minimum that works. `ts_authkey` is kept outside `secrets/` on purpose: the entrypoint turns every file in `secrets/` into an environment variable of the hub, and the hub must not have the auth key. After the node has joined, `ts_authkey` may be an empty file (the bind mount needs the file to exist). With fewer Gitea instances, delete the unused `[[gitea]]` block in `hub.toml`, remove the file name from the preflight list in the workflow, and run `check-secrets` (section 5) to see what the hub loads.
 
 ```sh
-cd deploy
-cp hub.example.toml hub.toml        # fill in the <PLACEHOLDERS>
-cp .env.example .env
-mkdir -m 700 secrets
+sudo install -d -o root -g 10001 -m 0750 /opt/glassbox /opt/glassbox/secrets
+sudo install -o root -g 10001 -m 0640 deploy/hub.example.toml /opt/glassbox/hub.toml   # then edit it
+sudo install -o root -g root  -m 0644 deploy/serve.json /opt/glassbox/serve.json
+sudo install -o root -g root  -m 0600 /dev/null /opt/glassbox/ts_authkey
+sudo install -o root -g 10001 -m 0640 /dev/null /opt/glassbox/secrets/github_token
+# repeat the last line for gitea_main_token, gitea_second_token, beszel_password
 ```
 
-Create one file per secret, content only. The hub runs as uid 10001 with all capabilities dropped, and a bind mount keeps the host owner and mode, so a `0600` file owned by your login user is **unreadable inside the container** (the container then exits with `cannot read secret file: <name>`). Make the files readable by uid 10001:
+Fill each secret file by typing the value with echo off, never as a command-line argument and never through an agent:
 
-| File in `secrets/` | What | Notes |
+```sh
+read -rs -p 'value: ' V; echo; printf '%s' "$V" | sudo tee /opt/glassbox/secrets/github_token >/dev/null; unset V
+```
+
+(Use the same pattern for `ts_authkey`.) Edit `hub.toml` with `sudoedit`. Addresses in it (Gitea, Beszel, Kuma) must be IPs or names the container's own resolver can resolve; tailnet and `.local` names do not resolve there (see the comment in the file).
+
+**Verify** (prints no values):
+
+```sh
+sudo ls -ln /opt/glassbox /opt/glassbox/secrets          # owners/modes as in the table
+sudo -u '#10001' test -r /opt/glassbox/secrets/github_token && echo readable-by-10001
+sudo grep -c AllowFunnel /opt/glassbox/serve.json         # expect: 0
+sudo grep -n '^\[serve\]' /opt/glassbox/hub.toml          # expect: one line
+```
+
+Also, once, on the VM: add `glassbox_glassbox-data` to the backup (sqlite in WAL mode: stop `glassbox` briefly before copying, or use a tool that snapshots the volume). The data is in a named volume, not on the virtiofs `deploy-data` share, because WAL needs real file locks and fsync.
+
+## 2. Gitea repository settings
+
+Repository Settings, Actions:
+
+| Kind | Name | Value |
 |---|---|---|
-| `ts_authkey` | Tailscale auth key | Create in the Tailscale admin console. One-off, pre-approved and **tagged `tag:glassbox`** (section 4). Read by the sidecar (root); after the node has joined, the file may contain an empty line. |
-| `github_token` | GitHub fine-grained token | Read-only. Contents/Metadata read on the repositories to count, plus the profile contribution calendar. |
-| `gitea_main_token`, `gitea_second_token` | One read-only Gitea token per instance | Scope `read:repository` and `read:user`. |
-| `beszel_password` | Password of a read-only Beszel account | Not an admin account. |
+| Variable | `REGISTRY` | registry host (with port if any) |
+| Variable | `IMAGE` | full image path without tag, `<REGISTRY>/<OWNER>/glassbox` |
+| Secret | `REGISTRY_TOKEN` | a Gitea token with package write scope for the registry |
 
-If you use fewer Gitea instances, delete the unused `[[gitea]]` block in `hub.toml` and the matching secret in `compose.yaml`.
+No other secret is needed or allowed (a test fails if the workflow reads any other). The Tailscale ACL and tag (section 4) must also be in place before the node is brought up.
 
-```sh
-sudo chown 10001:10001 secrets/*
-sudo chmod 400 secrets/*
-sudo chown root:root secrets/ts_authkey     # only the sidecar (root) reads this one
-```
+## 3. First deploy
 
-Without sudo: keep `secrets/` at mode 0700 and the files at 0444; the directory then protects them on the host. Type secret values with the terminal echo off (`(umask 077; stty -echo; read -r V; stty echo; printf '%s' "$V" > secrets/NAME)`), never as a command-line argument.
-
-The user hands these values over separately (password manager or direct paste into the terminal). They never go in the repository, in chat logs, or in a command line that ends up in shell history.
-
-After the first start, check that every secret was loaded (prints variable names only, never values):
+1. Sections 1, 2 and 4 are done.
+2. Push to `main`, or run the workflow by hand (Actions, glassbox, Run workflow, branch `main`, tag empty).
+3. Watch the run. A failed **预检** step lists the missing files; fix them and re-run. Nothing was deployed in that case.
+4. The first start begins with an **empty database**: the hub refuses a database whose `schema_version` differs from the code (`hub/db.py`), so never put a development database into the volume. If the hub log says `hub database schema ... != ...`, stop the stack, archive the volume (do not delete it blindly) and start with a new one.
 
 ```sh
-docker compose exec glassbox glassbox-entrypoint check-secrets
-# expect: GITHUB_TOKEN: set, GITEA_MAIN_TOKEN: set, GITEA_SECOND_TOKEN: set, BESZEL_PASSWORD: set
+docker ps --filter label=com.docker.compose.project=glassbox --format '{{.Names}} {{.Status}} {{.Ports}}'
+docker logs glassbox | tail     # expect: "glassbox hub listening on http://127.0.0.1:8787/"
 ```
 
-An unreadable or empty secret file makes the container exit at start (see `docker compose logs glassbox`); it never runs degraded.
+## 4. Register machines, and restrict the tailnet ACL
 
-`docker compose exec glassbox glassbox-entrypoint <args>` runs `python -m hub --config /etc/glassbox/hub.toml <args>` with the secrets in its environment. A plain `docker compose exec glassbox python -m hub ...` would not have them.
-
-Set `[serve] hosts` in `hub.toml` to the node's tailnet name (`<NODE>.<TAILNET_NAME>.ts.net`, where `<NODE>` is `TS_HOSTNAME`). Without it the hub answers every page request with **421** (see Troubleshooting in section 5). `hosts` must be a list (`hosts = ["..."]`); a bare string stops the hub with a config error. To open the page by the node's tailnet IP (`http://100.x.y.z/`) instead of its name, add that IP to `hosts` as well, otherwise the IP gets 421 too.
-
-## 2. Start from an empty database
-
-The hub refuses a database whose `schema_version` differs from the code (`hub/db.py`), so never copy a development database here. The volume `glassbox-data` starts empty, which is correct.
+**Machines and tokens (the user runs these).** The token is printed once on stdout; redirect it so it never reaches a terminal an agent can read, and create the file private from the start:
 
 ```sh
-docker compose up -d --build
-docker compose ps                    # all three: running; glassbox: healthy after ~30 s
-docker compose logs glassbox | tail  # expect: "glassbox hub listening on http://127.0.0.1:8787/"
+mkdir -p -m 700 ~/glassbox-tokens
+(umask 077; docker exec glassbox glassbox-entrypoint machine add A --role dev --os macos > ~/glassbox-tokens/token-A.txt)
+(umask 077; docker exec glassbox glassbox-entrypoint machine add B --role work --os windows > ~/glassbox-tokens/token-B.txt)
 ```
 
-If the log says `hub database schema ... != ...`, the volume holds an old database: stop, archive the volume (do not delete it blindly), and start with a new one.
+Hand each token to its machine through a channel the user picks (see `docs/runbooks/install-probe.md`), then delete the files. Roles: `dev`, `work`, `deploy`, `gitea`. A lost token is replaced by running `machine add` again for that id.
 
-## 3. Register the machines and hand out tokens
-
-```sh
-(umask 077; docker compose exec -T glassbox glassbox-entrypoint machine add A --role dev --os macos > secrets/token-A.txt)
-(umask 077; docker compose exec -T glassbox glassbox-entrypoint machine add B --role work --os windows > secrets/token-B.txt)
-```
-
-Each command prints one token on stdout, once; the redirect keeps it off the terminal. Only its hash is stored. **The user should run these commands themselves**: a token printed in an agent's terminal lands in that agent's session transcript. The files are created with mode 0600 from the start (the `umask` in the subshell) and live in the git-ignored `secrets/` directory (`token-*.txt` is also ignored). Delete `secrets/token-*.txt` after handing the tokens over. Hand each token to the matching machine separately (see `docs/runbooks/install-probe.md`). Roles: `dev`, `work`, `deploy`, `gitea`. A lost token is replaced by running `machine add` again for the same id.
-
-## 4. Restrict the tailnet ACL
-
-The sidecar runs Tailscale in userspace mode. Without an ACL, any tailnet member could also connect to the hub's plain-HTTP port 8787 directly, bypassing `tailscale serve`. Tag the node and allow only port 443 to it. In the Tailscale admin console, policy file (merge into the existing policy; do not replace it):
+**ACL.** The sidecar runs Tailscale in userspace mode. Without an ACL any tailnet member could also reach the hub's plain-HTTP port 8787 directly, bypassing `tailscale serve`. Tag the node (the sidecar advertises `tag:glassbox` by default; the auth key must be allowed to create it) and allow only port 443. In the Tailscale admin console, merge into the existing policy (do not replace it):
 
 ```json
 {
@@ -91,74 +118,66 @@ The sidecar runs Tailscale in userspace mode. Without an ACL, any tailnet member
 }
 ```
 
-**Security note: the hub's pages `/` and `/page.json` have no authentication.** The only protection is that the hub listens inside the tailnet and the ACL lets only your own devices reach `tag:glassbox:443`. Anything that can reach that port sees the full private view (project names, repositories, machines). Keep `<ALLOWED_USERS_OR_GROUP>` to your own devices and never enable Tailscale Funnel or share the node. (`/ingest` is separately protected by per-machine tokens.)
+**Security note: the hub's pages `/` and `/page.json` have no authentication.** The only protection is that the hub listens inside the tailnet and the ACL lets only your own devices reach `tag:glassbox:443`. Anything that can reach that port sees the full private view (project names, repositories, machines). Keep `<ALLOWED_USERS_OR_GROUP>` to your own devices, never enable Tailscale Funnel, never share the node. (`/ingest` is separately protected by per-machine tokens.) Tagged nodes do not expire their key; that is expected here.
 
-Changing the tailnet policy is an external change: **ask the user first.** Tagged nodes do not expire their key; that is expected here. The auth key (`secrets/ts_authkey`) must be created with the tag `tag:glassbox`, and `.env` must carry `TS_EXTRA_ARGS=--advertise-tags=tag:glassbox` (the example does).
+## 5. Verification checklist
 
-Also pick up `docker compose restart glassbox` whenever the `tailscale` container is restarted by hand, if `depends_on ... restart: true` did not already do it: the hub is attached to the sidecar's network namespace, which is replaced when the sidecar is recreated.
+Each item has an expected result. Do not call the deploy done until all hold.
 
-## 5. Verify: reachable inside the tailnet, not from the LAN or the internet
-
-Inside the tailnet (from any device that has Tailscale and is allowed by the ACL):
-
-```sh
-curl -fsS https://glassbox.<TAILNET_NAME>.ts.net/healthz
-# expect: {"ok": true}
-```
-
-Not reachable from outside (and the exposure rules hold):
-
-1. Nothing is published on the host. On the deploy machine:
+1. **Reachable in the tailnet, both page routes.** From a device on the tailnet and allowed by the ACL:
    ```sh
-   docker compose ps --format '{{.Name}} {{.Ports}}'
-   # expect: no "0.0.0.0:" or ":::" entries (Ports empty for all three)
-   docker compose config | grep -c '^\s*ports:'     # expect: 0
+   for p in / /page.json /healthz; do curl -s -o /dev/null -w "$p %{http_code}\n" https://<NODE>.<TAILNET_NAME>.ts.net$p; done
+   # expect: 200 for all three
    ```
-2. Not on the LAN. From another LAN device that is **not** on the tailnet (or with Tailscale switched off), try the deploy machine's LAN address on the common ports and the hub port:
+2. **Wrong Host is refused (421).**
    ```sh
-   curl -m 5 http://<DEPLOY_LAN_IP>:8787/healthz     # expect: connection refused or timeout
-   curl -m 5 -k https://<DEPLOY_LAN_IP>/healthz      # expect: not the glassbox response
+   curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: evil.example' https://<NODE>.<TAILNET_NAME>.ts.net/page.json   # expect: 421
    ```
-3. Not on the internet. The node must not be in Funnel: `docker compose exec tailscale tailscale funnel status` should say funnel is off, and `https://glassbox.<TAILNET_NAME>.ts.net/healthz` must time out from a device without Tailscale (for example a phone on mobile data).
-4. Plain-HTTP hub port closed to the tailnet. From a second tailnet device: `curl -m 5 http://glassbox.<TAILNET_NAME>.ts.net:8787/healthz` must fail (timeout or refused). If it answers, the ACL in section 4 is not in force.
-5. Host allowlist. A foreign Host header is refused on the page routes:
+   Whether `tailscale serve` forwards the original Host header unchanged is **not verified**: test on deployment. If item 1 returns 421 instead of 200, `[serve] hosts` in `/opt/glassbox/hub.toml` is missing or differs from the Host the hub receives (typo, other `TS_HOSTNAME`, other tailnet name): fix it, then `docker restart glassbox`. To open the page by the node's tailnet IP, add that IP to `hosts` too.
+3. **Nothing is published on the VM.**
    ```sh
-   curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: evil.example' https://glassbox.<TAILNET_NAME>.ts.net/page.json   # expect: 421
-   curl -s -o /dev/null -w '%{http_code}\n' https://glassbox.<TAILNET_NAME>.ts.net/page.json                          # expect: 200
+   docker ps --format '{{.Names}} {{.Ports}}' | grep -E '^glassbox'     # expect: Ports column empty for all three
    ```
-   Whether `tailscale serve` forwards the original Host header unchanged is **not verified**: test on deployment. If the second call also returns 421, the browser sees 421 too: look at which Host the hub receives and put exactly that in `[serve] hosts`.
-6. Docker proxy allows only the listing. From the hub container's namespace (no values printed):
+   The workflow checks `PortBindings` of the three containers on every deploy.
+4. **Not on the LAN.** From a LAN device that is not on the tailnet (or with Tailscale off), against the VM's LAN address:
    ```sh
-   docker compose exec glassbox python -c "import urllib.request as u,urllib.error as e
+   curl -m 5 http://<VM_LAN_IP>:8787/healthz       # expect: connection refused or timeout
+   curl -m 5 -k https://<VM_LAN_IP>/healthz        # expect: not the glassbox response
+   ```
+5. **Not on the internet; no Funnel.** `docker exec glassbox-tailscale tailscale funnel status` says funnel is off; `/opt/glassbox/serve.json` has no `AllowFunnel` (checked by the preflight too); `https://<NODE>.<TAILNET_NAME>.ts.net/healthz` times out from a device without Tailscale (a phone on mobile data).
+6. **The sidecar advertises no routes and no exit node.** `docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' glassbox-tailscale | grep TS_EXTRA_ARGS` shows only `--advertise-tags=tag:glassbox` (the workflow fails if it contains routes or an exit node). Also confirm in the Tailscale admin console that the machine has no subnet routes or exit-node setting pending approval.
+7. **Port 8787 closed to the tailnet.** From a second tailnet device: `curl -m 5 http://<NODE>.<TAILNET_NAME>.ts.net:8787/healthz` must fail. If it answers, the ACL in section 4 is not in force.
+8. **Secrets loaded** (names only, no values):
+   ```sh
+   docker exec glassbox glassbox-entrypoint check-secrets
+   # expect: one "NAME: set" line per file in secrets/ (GITHUB_TOKEN, GITEA_MAIN_TOKEN, GITEA_SECOND_TOKEN, BESZEL_PASSWORD)
+   ```
+9. **Docker proxy lists only.**
+   ```sh
+   docker exec glassbox python -c "import urllib.request as u,urllib.error as e
 for p in ('/containers/json?all=1','/containers/x/json','/containers/x/logs','/info'):
     try: print(p, u.urlopen('http://docker-proxy:2375'+p, timeout=5).status)
     except e.HTTPError as x: print(p, x.code)"
-   # expect: first path 200, the other three 403 (a 404 for /containers/x/json means the proxy let it through: fix the allowlist)
+   # expect: 200, then 403, 403, 403 (a 404 for /containers/x/json means the proxy let it through: fix the allowlist)
    ```
-   If `docker-proxy` does not start with `read_only`/`cap_drop`, remove `read_only` first, then `cap_drop`, and note which one was needed.
-7. Without a token, ingest is refused: `curl -s -X POST https://glassbox.<TAILNET_NAME>.ts.net/ingest -d '{}'` returns `{"error": "bad token"}` (HTTP 401).
+   If `docker-proxy` does not start with `read_only` and `cap_drop`, drop `read_only` first, then `cap_drop`, and note which one was needed.
+10. **Ingest needs a token.** `curl -s -X POST https://<NODE>.<TAILNET_NAME>.ts.net/ingest -d '{}'` returns HTTP 401 `{"error": "bad token"}`.
+11. **A collector run works.** `docker exec glassbox glassbox-entrypoint collect all` prints lines for github, gitea and `monitors:` without `error`. (A plain `docker exec glassbox python -m hub ...` would not have the secrets: always go through `glassbox-entrypoint`.) Confirm both Gitea instances list their organisation repositories (the collector asks `/user/repos`); see `docs/runbooks/deploy-hub.md`.
 
-Troubleshooting: the browser shows **421 Misdirected Request** on `/` or `/page.json` = `[serve] hosts` is missing or does not match the Host the hub receives (typo, other `TS_HOSTNAME`, or a different tailnet name). Fix `hub.toml`, then `docker compose restart glassbox`. `/healthz` and `/ingest` are not subject to the check.
+## Rollback
 
-## 6. Run a collector once by hand
+Actions, glassbox, Run workflow, branch `main`, **tag** = the 40-hex commit SHA of an image that was pushed before. The build is skipped and that image is pulled and started (the tag input goes through an environment variable and must match `[0-9a-f]{40}`). Database migrations do not roll back with the image: after a `SCHEMA_VERSION` change an older image refuses the newer database, so restore the volume from backup in that case.
 
-```sh
-docker compose exec glassbox glassbox-entrypoint collect all
-# expect lines for github, gitea and "monitors:" with beszel/kuma/docker/tailscale counts, not "error"
-```
+## Local build instead of the registry
 
-Per-source meaning: `skipped` = not configured, `error` = see the source section of `hub/monitors.py`. A failing source does not stop the others.
-
-Before trusting Gitea numbers, confirm the organisation repositories of both instances are listed (the collector asks `/user/repos`); see the follow-up in `docs/runbooks/deploy-hub.md`.
-
-## Backups
-
-Include the volume `glassbox-data` (sqlite, WAL mode) in the host's backup. For a consistent copy of a WAL database, stop the glassbox service briefly (`docker compose stop glassbox`) before copying, then start it again.
-
-## Updating
+From the repository root, with a directory laid out like `/opt/glassbox`:
 
 ```sh
-git pull && docker compose up -d --build
+GLASSBOX_IMAGE=glassbox-hub IMAGE_TAG=local DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
+GLASSBOX_DIR=<DIR_LIKE_OPT_GLASSBOX> \
+docker compose -f deploy/compose.yaml -f deploy/compose.build.yaml up -d --build
 ```
 
-A change of `SCHEMA_VERSION` in `hub/db.py` needs a new database (the hub says so and exits).
+## Restarting
+
+If the `tailscale` container is restarted or recreated by hand, restart the hub as well (`docker restart glassbox`): it is attached to the sidecar's network namespace, which is replaced. `depends_on ... restart: true` normally does this already (needs Compose 2.17 or newer).

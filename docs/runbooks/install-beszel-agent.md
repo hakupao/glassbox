@@ -35,10 +35,10 @@ Keep the agent's port reachable only from the Beszel hub (host firewall or LAN s
 
 ## 3. Map it for glassbox
 
-On the deploy host's `deploy/hub.toml`, make sure `[beszel.map]` contains `"<BESZEL_SYSTEM_NAME>" = "<MACHINE_CODE>"` (the systems for A, B, D, C, V). Then restart the hub or wait for the next collect.
+On the VM's `/opt/glassbox/hub.toml` (edited by the user with sudoedit), make sure `[beszel.map]` contains `"<BESZEL_SYSTEM_NAME>" = "<MACHINE_CODE>"` (the systems for A, B, D, C, V). Then restart the hub or wait for the next collect.
 
 **Verify**
 ```sh
-docker compose exec glassbox glassbox-entrypoint collect monitors
+docker exec glassbox glassbox-entrypoint collect monitors
 ```
 Expect `beszel` in the output to report a systems count including this machine, with no `error`.

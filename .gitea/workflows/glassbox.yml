@@ -1,0 +1,156 @@
+# glassbox hub：push 到 main 后构建镜像，推送到 Gitea 镜像仓库，部署到部署机上的虚拟机 V（Docker Compose）。
+# 形状与 homepage 工作流相同。镜像仓库地址和镜像路径来自仓库变量（Settings -> Actions -> Variables）：
+#   REGISTRY  镜像仓库主机（带端口则一并写上）
+#   IMAGE     完整镜像路径，不带标签（例如 <REGISTRY>/<OWNER>/glassbox）
+# 仓库密钥只有 REGISTRY_TOKEN（推送镜像用）。运行时的 token（GitHub、Gitea、Beszel、Tailscale）不经过 CI，
+# 由用户手工放在虚拟机 /opt/glassbox（见 deploy/README.md）。
+# 回滚：在 Actions 页面手动运行本工作流，tag 填已有镜像的 40 位 commit SHA，跳过构建，直接部署该版本。
+name: glassbox
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/**"
+      - "hub/**"
+      - "probe/**"
+      - "web/**"
+      - "schema/**"
+      - ".gitea/workflows/glassbox.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "回滚用：要部署的镜像标签（40 位 commit SHA）。留空则构建并部署当前提交"
+        required: false
+        default: ""
+
+concurrency:
+  group: glassbox-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ vars.REGISTRY }}
+  IMAGE: ${{ vars.IMAGE }}
+  # 预检用的小镜像：部署前核对 tag 是否存在并固定 digest
+  PREFLIGHT_IMAGE: alpine:3.20.3
+  SECRETS_DIR: /opt/glassbox
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # 只部署 main：手动运行时选了其他分支就不执行
+    if: gitea.ref == 'refs/heads/main'
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查仓库变量
+        run: |
+          for v in REGISTRY IMAGE; do
+            eval "val=\${$v}"
+            [ -n "$val" ] || { echo "缺少仓库变量 $v（Settings -> Actions -> Variables）"; exit 1; }
+            printf '%s' "$val" | grep -Eqx '[A-Za-z0-9._:/-]+' || { echo "仓库变量 $v 含有非法字符"; exit 1; }
+          done
+
+      - name: 确定要部署的标签
+        id: tag
+        # 手动输入经环境变量传入，不直接拼进脚本（防止命令注入），并且必须是 40 位 commit SHA
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          TAG="$INPUT_TAG"
+          [ -n "$TAG" ] || TAG="${{ gitea.sha }}"
+          printf '%s' "$TAG" | grep -Eqx '[0-9a-f]{40}' || { echo "标签必须是 40 位小写 commit SHA"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "部署标签：$TAG"
+
+      - name: 预检 /opt/glassbox（缺文件就停，不部署）
+        # 以容器用户 uid 10001 检查（和 hub 实际读取的身份一致），ts_authkey 以 root 检查。
+        # 首次 push 时这里缺文件，会明确报错并停止，避免容器反复崩溃重启。
+        run: |
+          docker run -i --rm --user 10001:10001 -v "$SECRETS_DIR":/s:ro "$PREFLIGHT_IMAGE" sh -s <<'EOS'
+          miss=""
+          for f in hub.toml serve.json secrets/github_token secrets/gitea_main_token secrets/gitea_second_token secrets/beszel_password; do
+            [ -s "/s/$f" ] || miss="$miss $f"
+          done
+          if [ -n "$miss" ]; then
+            echo "预检失败：/opt/glassbox 缺少文件，或文件对 uid 10001 不可读：$miss"
+            echo "请按 deploy/README.md 第 1 节准备（文件内容由用户手工填写，所有者 root:10001，权限 0640），然后重新运行。"
+            exit 1
+          fi
+          grep -q AllowFunnel /s/serve.json && { echo "预检失败：serve.json 含 AllowFunnel（禁止公网暴露）"; exit 1; }
+          grep -q '^\[serve\]' /s/hub.toml || { echo "预检失败：hub.toml 缺少 [serve] hosts，页面会返回 421"; exit 1; }
+          echo "预检通过：配置文件齐全，uid 10001 可读"
+          EOS
+          # Tailscale 状态卷不存在时（首次部署）必须有 ts_authkey；已有状态则可省略
+          if ! docker volume inspect glassbox_tailscale-state >/dev/null 2>&1; then
+            docker run --rm -v "$SECRETS_DIR":/s:ro "$PREFLIGHT_IMAGE" test -s /s/ts_authkey \
+              || { echo "预检失败：首次部署需要 /opt/glassbox/ts_authkey（Tailscale auth key，root 0600，用户手工放置）"; exit 1; }
+          fi
+          # compose 绑定挂载要求 ts_authkey 文件存在（可为空）
+          docker run --rm -v "$SECRETS_DIR":/s:ro "$PREFLIGHT_IMAGE" test -e /s/ts_authkey \
+            || { echo "预检失败：/opt/glassbox/ts_authkey 不存在（节点加入后可为空文件，但文件必须存在）"; exit 1; }
+
+      - name: 登录镜像仓库
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          [ -n "$REGISTRY_TOKEN" ] || { echo "缺少仓库密钥 REGISTRY_TOKEN"; exit 1; }
+          echo "$REGISTRY_TOKEN" | docker login "$REGISTRY" -u "${{ gitea.actor }}" --password-stdin
+
+      - name: 构建并推送
+        if: inputs.tag == ''
+        run: |
+          docker build -f deploy/Dockerfile -t "$IMAGE:${{ steps.tag.outputs.tag }}" .
+          docker push "$IMAGE:${{ steps.tag.outputs.tag }}"
+
+      - name: 部署
+        run: |
+          docker pull "$IMAGE:${{ steps.tag.outputs.tag }}"
+          DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+          GLASSBOX_IMAGE="$IMAGE" IMAGE_TAG="${{ steps.tag.outputs.tag }}" DOCKER_GID="$DOCKER_GID" \
+            docker compose -f deploy/compose.yaml up -d --remove-orphans
+          docker inspect glassbox --format '运行镜像：{{.Config.Image}}'
+
+      - name: 健康检查
+        # hub 不发布任何主机端口：在容器里访问 127.0.0.1:8787
+        run: |
+          code=""
+          for i in $(seq 1 40); do
+            code=$(docker exec glassbox python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:8787/healthz', timeout=3).status)" 2>/dev/null || true)
+            [ "$code" = 200 ] && break
+            sleep 3
+          done
+          [ "$code" = 200 ] || { echo "健康检查失败（/healthz 最后返回 '$code'）"; docker logs --tail 50 glassbox; docker logs --tail 20 glassbox-tailscale; exit 1; }
+          echo "健康检查通过（/healthz 返回 200）"
+          docker exec -i glassbox python - <<'EOS'
+          import urllib.request as u, urllib.error as e
+          def get(path, host=None):
+              r = u.Request('http://127.0.0.1:8787' + path, headers={'Host': host} if host else {})
+              try:
+                  return u.urlopen(r, timeout=20).status
+              except e.HTTPError as x:
+                  return x.code
+          res = {p: get(p) for p in ('/', '/page.json')}
+          res['wrong-host'] = get('/page.json', 'evil.example')
+          print(res)
+          assert res['/'] == 200 and res['/page.json'] == 200, '页面路由没有返回 200'
+          assert res['wrong-host'] == 421, '错误的 Host 头没有返回 421'
+          EOS
+
+      - name: 暴露面检查（无发布端口、不通告路由）
+        run: |
+          for c in glassbox glassbox-tailscale glassbox-docker-proxy; do
+            b=$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$c")
+            case "$b" in
+              '{}'|'null') ;;
+              *) echo "$c 发布了主机端口：$b"; exit 1 ;;
+            esac
+          done
+          if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' glassbox-tailscale | grep '^TS_EXTRA_ARGS=' | grep -Eq 'advertise-routes|advertise-exit-node|exit-node'; then
+            echo "tailscale 通告了路由或出口节点，不允许"; exit 1
+          fi
+          echo "暴露面检查通过：三个容器都没有发布端口，TS_EXTRA_ARGS 不含路由或出口节点"
+
+      - name: 退出镜像仓库
+        if: always()
+        run: docker logout "$REGISTRY" || true

@@ -1,0 +1,10 @@
+# Local build instead of a registry image. Run from the repository root:
+#
+#   GLASSBOX_IMAGE=glassbox-hub IMAGE_TAG=local DOCKER_GID=<socket gid> \
+#   GLASSBOX_DIR=<a directory laid out like /opt/glassbox, see README.md> \
+#   docker compose -f deploy/compose.yaml -f deploy/compose.build.yaml up -d --build
+services:
+  glassbox:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile

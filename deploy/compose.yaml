@@ -1,20 +1,27 @@
-# glassbox deployment: hub + Tailscale sidecar + read-only Docker socket proxy.
+# glassbox deployment: hub + Tailscale sidecar + Docker socket proxy (container listing only).
 #
 # The host publishes NO ports. The only way in is the tailnet: the sidecar's `tailscale serve`
 # forwards tailnet port 443 to the hub on 127.0.0.1 (shared network namespace). Tailscale
 # Funnel is not enabled (see serve.json).
 #
-# Run from this directory:   docker compose up -d --build
-# Secrets are plain files in ./secrets/ (git-ignored, mode 0600); see README.md.
+# Deploy flow (README.md): the Gitea Actions workflow .gitea/workflows/glassbox.yml builds and
+# pushes the image, then runs `docker compose -f deploy/compose.yaml up -d` on the VM with
+#   GLASSBOX_IMAGE   image path without tag (Gitea repo variable IMAGE)
+#   IMAGE_TAG        40-hex commit SHA
+#   DOCKER_GID       group id of the Docker socket (the workflow reads it with stat)
+# Local build instead of a registry image: see compose.build.yaml.
+#
+# Everything private lives on the VM in ${GLASSBOX_DIR:-/opt/glassbox}, bind-mounted read-only and
+# never created by compose (create_host_path: false, so a missing directory is an error, not an
+# empty directory silently taking its place):
+#   hub.toml, serve.json, ts_authkey (root only), secrets/<name> (one file per token)
 
 name: glassbox
 
 services:
   glassbox:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    image: glassbox-hub:local
+    image: "${GLASSBOX_IMAGE:?set GLASSBOX_IMAGE}:${IMAGE_TAG:?set IMAGE_TAG}"
+    container_name: glassbox
     restart: unless-stopped
     network_mode: "service:tailscale"        # no network of its own, hence no published ports
     init: true
@@ -29,16 +36,20 @@ services:
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/tmp"]
     environment:
+      GLASSBOX_CONFIG: /run/glassbox/hub.toml
+      GLASSBOX_SECRETS_DIR: /run/glassbox/secrets
       GLASSBOX_COLLECT_INTERVAL: "${GLASSBOX_COLLECT_INTERVAL:-300}"
     volumes:
-      - glassbox-data:/data                                  # sqlite database; include in the host backup
-      - ./hub.toml:/etc/glassbox/hub.toml:ro
+      # sqlite in WAL mode needs real file locks and fsync: a named volume on the VM's own disk,
+      # not the virtiofs share used for deploy-data. Include this volume in the backup.
+      - glassbox-data:/data
+      - type: bind
+        source: "${GLASSBOX_DIR:-/opt/glassbox}"
+        target: /run/glassbox
+        read_only: true
+        bind:
+          create_host_path: false
       - tailscale-sock:/var/run/tailscale:ro                 # tailscaled socket for `tailscale status` (verify connect works on :ro before go-live)
-    secrets:
-      - github_token
-      - gitea_main_token
-      - gitea_second_token
-      - beszel_password
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8787/healthz', timeout=3)"]
       interval: 30s
@@ -50,24 +61,39 @@ services:
     # BEFORE DEPLOY check against the official Tailscale container docs: TS_ENABLE_HEALTH_CHECK,
     # TS_LOCAL_ADDR_PORT, TS_SERVE_CONFIG and the containerboot path are written from memory.
     image: tailscale/tailscale:v1.78.1
+    container_name: glassbox-tailscale
     hostname: "${TS_HOSTNAME:-glassbox}"                     # becomes <hostname>.<TAILNET_NAME>.ts.net
     restart: unless-stopped
-    # Outbound only: there is no `ports:` section anywhere in this file.
-    # The auth key is read from a secret file, never written in this file.
-    entrypoint: ["/bin/sh", "-c", "TS_AUTHKEY=\"$$(cat /run/secrets/ts_authkey 2>/dev/null || true)\" exec /usr/local/bin/containerboot"]
+    # Outbound only: there is no published-port section anywhere in this file.
+    # The auth key is read from a file on the VM, never written in this file. Once the node has
+    # joined, the state volume is enough (the file must still exist for the bind mount; it may be empty).
+    entrypoint: ["/bin/sh", "-c", "TS_AUTHKEY=\"$$(cat /run/tsconfig/ts_authkey 2>/dev/null || true)\" exec /usr/local/bin/containerboot"]
     environment:
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"                                   # no /dev/net/tun, no NET_ADMIN
       TS_ACCEPT_DNS: "false"
       TS_SOCKET: /var/run/tailscale/tailscaled.sock
-      TS_SERVE_CONFIG: /config/serve.json
-      TS_EXTRA_ARGS: "${TS_EXTRA_ARGS:-}"                    # --advertise-tags=tag:glassbox (recommended)
+      TS_SERVE_CONFIG: /run/tsconfig/serve.json
+      # Tag only. Never add route or exit-node advertising here (the deploy test and the
+      # workflow both fail on it).
+      TS_EXTRA_ARGS: "${TS_EXTRA_ARGS:---advertise-tags=tag:glassbox}"
       TS_ENABLE_HEALTH_CHECK: "true"
       TS_LOCAL_ADDR_PORT: "127.0.0.1:9002"                   # /healthz, reachable only inside the namespace
     volumes:
-      - tailscale-state:/var/lib/tailscale                   # node identity survives restarts
+      - tailscale-state:/var/lib/tailscale                   # node identity survives restarts and redeploys
       - tailscale-sock:/var/run/tailscale
-      - ./serve.json:/config/serve.json:ro
+      - type: bind
+        source: "${GLASSBOX_DIR:-/opt/glassbox}/serve.json"
+        target: /run/tsconfig/serve.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${GLASSBOX_DIR:-/opt/glassbox}/ts_authkey"
+        target: /run/tsconfig/ts_authkey
+        read_only: true
+        bind:
+          create_host_path: false
     extra_hosts:
       - "host.docker.internal:host-gateway"                  # reach Beszel / Uptime Kuma on the VM host
     cap_drop: [ALL]                                          # userspace mode needs no capabilities (verify on first start)
@@ -78,8 +104,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
-    secrets:
-      - ts_authkey
 
   docker-proxy:
     # Exact-path allowlist proxy: only GET /containers/json (optionally /vNN.NN/ prefixed) is
@@ -89,8 +113,9 @@ services:
     # documentation (wollomatic/socket-proxy): they are written from memory. Pin an exact tag
     # and digest at deploy time.
     image: wollomatic/socket-proxy:1
+    container_name: glassbox-docker-proxy
     restart: unless-stopped
-    user: "65534:${DOCKER_GID:?set DOCKER_GID in .env}"      # nobody, plus the group that owns the Docker socket
+    user: "65534:${DOCKER_GID:?set DOCKER_GID}"              # nobody, plus the group that owns the Docker socket
     command:
       - "-loglevel=info"
       - "-listenip=0.0.0.0"
@@ -98,24 +123,13 @@ services:
       - "-allowGET=^(/v[0-9.]+)?/containers/json$$"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    # read_only and cap_drop are untested here. If the proxy fails to start, remove `read_only`
+    # read_only and cap_drop are untested here. If the proxy fails to start, drop `read_only`
     # first, then `cap_drop`, and record which one was needed.
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+
 volumes:
   glassbox-data:
   tailscale-state:
   tailscale-sock:
-
-secrets:
-  ts_authkey:
-    file: ./secrets/ts_authkey
-  github_token:
-    file: ./secrets/github_token
-  gitea_main_token:
-    file: ./secrets/gitea_main_token
-  gitea_second_token:
-    file: ./secrets/gitea_second_token
-  beszel_password:
-    file: ./secrets/beszel_password
