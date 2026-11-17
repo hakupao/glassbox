@@ -93,6 +93,14 @@ js("pass-nullable-fields", "nulls lane A can emit on whitelisted nullable paths"
    runtimes=[{"machine": "A", "agent": "codex", "version": None, "processes": 0, "activeSessions": 0, "stale": True}],
    services=[{"name": {"masked": True}, "kind": "monitor", "machine": None, "status": "unknown", "uptimePct24h": None,
               "cpuPct": None, "memBytes": None}]))
+MACHINE = {"id": "A", "label": {"masked": True}, "role": "dev", "os": "macos", "icon": "laptop", "color": "blue",
+           "online": True, "lastSeen": None}
+js("pass-machine-look", "machine icon and colour from the closed lists (or null)", "pass", None, lambda o: o.update(
+   machines=[dict(MACHINE), dict(MACHINE, id="V", role="deploy", os="linux", icon=None, color=None)]))
+js("block-machine-icon", "machine icon off the list (could carry text)", "block", "is not enum",
+   lambda o: o.update(machines=[dict(MACHINE, icon="studio-dev")]))
+js("block-machine-color", "machine colour off the list (raw CSS)", "block", "is not enum",
+   lambda o: o.update(machines=[dict(MACHINE, color="#ff0000")]))
 js("block-title-path", "S12: absolute path in a title", "block", "path", title("fix: read /srv/data/app.db"))
 js("block-title-home-path", "S12: home path in a title (built at load time)", "block", "path", title("fix: read {{USERS}}someone/notes.md"))
 js("block-title-tilde-path", "S12: ~ path in a title", "block", "path", title("fix: write ~/notes/plan.txt"))

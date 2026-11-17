@@ -21,6 +21,15 @@ author_emails = ["<AUTHOR_EMAIL>"]
 [serve]
 hosts = ["<NODE>.<TAILNET_NAME>.ts.net"]
 
+# Machines: optional per code. role / os / label for machines without a probe; icon and color for
+# the page (both public). icon: laptop | desktop | server | vm | nas | mini | cloud | pi;
+# color: blue | green | paper | violet | orange | cyan | yellow | red. Unset = a default from
+# role / os (icon) and from the code (color); a value off these lists is dropped with a warning.
+[machines.A]
+label = "<NAME>"
+icon = "laptop"
+color = "blue"
+
 [github]
 login = "<GITHUB_LOGIN>"
 token_env = "GITHUB_TOKEN"    # fine-grained, read-only token

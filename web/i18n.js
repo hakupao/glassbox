@@ -334,7 +334,15 @@ window.GLASSBOX_I18N = {
   "rt.state": "状态",
   "rt.fresh": "正常",
   "rt.staleShort": "过期",
-  "rt.noRuntime": "无运行时"
+  "rt.noRuntime": "无运行时",
+  "micon.laptop": "笔记本",
+  "micon.desktop": "台式机",
+  "micon.server": "服务器",
+  "micon.vm": "虚拟机",
+  "micon.nas": "NAS",
+  "micon.mini": "小主机",
+  "micon.cloud": "云主机",
+  "micon.pi": "单板机"
  },
  "ja": {
   "brand": "glassbox",
@@ -670,7 +678,15 @@ window.GLASSBOX_I18N = {
   "rt.state": "状態",
   "rt.fresh": "最新",
   "rt.staleShort": "古い",
-  "rt.noRuntime": "ランタイムなし"
+  "rt.noRuntime": "ランタイムなし",
+  "micon.laptop": "ノート PC",
+  "micon.desktop": "デスクトップ",
+  "micon.server": "サーバー",
+  "micon.vm": "仮想マシン",
+  "micon.nas": "NAS",
+  "micon.mini": "小型 PC",
+  "micon.cloud": "クラウド",
+  "micon.pi": "シングルボード"
  },
  "en": {
   "brand": "glassbox",
@@ -1006,6 +1022,14 @@ window.GLASSBOX_I18N = {
   "rt.state": "State",
   "rt.fresh": "fresh",
   "rt.staleShort": "stale",
-  "rt.noRuntime": "no runtime"
+  "rt.noRuntime": "no runtime",
+  "micon.laptop": "laptop",
+  "micon.desktop": "desktop",
+  "micon.server": "server",
+  "micon.vm": "virtual machine",
+  "micon.nas": "NAS",
+  "micon.mini": "mini PC",
+  "micon.cloud": "cloud",
+  "micon.pi": "single-board"
  }
 };

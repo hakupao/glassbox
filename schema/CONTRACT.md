@@ -141,7 +141,7 @@
     "pushed": bool                              // provisional：false = 只在本地，还没推到远端
   }],
 
-  "machines": [{ … }],   // provisional：id、label: Text、role（可为 null）、os（可为 null）、online、lastSeen、probeLastReport、system、history
+  "machines": [{ … }],   // provisional：id、label: Text、role（可为 null）、os（可为 null）、icon（可为 null）、color（可为 null）、online、lastSeen、probeLastReport、system、history
   "services": [{ … }],   // provisional：一个服务一行（hub 在导出前合并容器与监控，打码后无法再合并）；name: Text、kind（container|monitor|both）、machine（可为 null：没配机器的监控）、status（up|down|paused|pending|maintenance|unknown）、uptimePct24h、cpuPct、memBytes
   "runtimes": [{ … }],   // provisional：machine、agent、version（可为 null）、processes、activeSessions、stale
   "tailnet":  [{ … }],   // provisional：name: Text、os、online、lastSeen（可为 null）
@@ -167,6 +167,10 @@
   - `services`：容器（Beszel 统计 / Docker 状态）和 Kuma 监控按 `(machine, 名字归一化后相等)` 合并；名字不同的用 hub 配置 `[services.merge]`（监控名 → 容器名）指定。没有配置机器的监控，只有在匹配的容器名在所有机器里唯一时才合并；否则单独成一行，`machine` 为 `null`。合并行用监控名，状态取两者中更差的。
   - `runtimes[].stale`：该机器探针超过 15 分钟没有上报。`machines[].online`：Beszel 15 分钟内报告在线，或探针 15 分钟内上报过。
   - `machines[].system` 要么字段齐全，要么为 `null`。没有探针的机器，`role` / `os` / `label` 来自 hub 配置 `[machines.<代号>]`。
+  - `machines[].icon` / `color` 来自 hub 配置 `[machines.<代号>] icon = "…"`、`color = "…"`，公开版也带（不涉及隐私）。
+    - icon ∈ `laptop | desktop | server | vm | nas | mini | cloud | pi`；color ∈ `blue | green | paper | violet | orange | cyan | yellow | red`。
+    - 没配置时给默认值：icon 按 role 和 os（dev / work → laptop，非 macOS 的 dev → desktop；deploy：macOS → mini、Linux → vm、其他 → server；gitea：macOS → nas、其他 → server；其余 server）；color 按代号固定取色板里的一个。
+    - 配置了但不在名单里：输出 `null`，并在 `warnings` 里写一条 `machine-config`。前端遇到 `null` 按同样的规则画默认图标和颜色。
 
 ### 2.2 详情页字段（*provisional*）
 

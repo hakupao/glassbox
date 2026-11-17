@@ -264,6 +264,24 @@
   "why": "nulls lane A can emit on whitelisted nullable paths"
  },
  {
+  "file": "pass-machine-look.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "machine icon and colour from the closed lists (or null)"
+ },
+ {
+  "file": "block-machine-icon.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "machine icon off the list (could carry text)"
+ },
+ {
+  "file": "block-machine-color.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "machine colour off the list (raw CSS)"
+ },
+ {
   "file": "block-title-path.json",
   "expect": "block",
   "reason": "path",

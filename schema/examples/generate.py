@@ -106,6 +106,9 @@ SYS = {"A": {"cpuPct": 23.4, "memUsed": 27.1e9, "memTotal": 36e9, "diskUsed": 1.
 MACHINES = [("A", "studio-dev", "dev", "macos"), ("B", "client-laptop", "work", "windows"),
             ("C", "home-server", "deploy", "macos"), ("V", "home-server-vm", "deploy", "linux"),
             ("D", "garage-mbp", "gitea", "macos")]
+# icon and colour per machine (hub config [machines.X] icon / color; CONTRACT §2.1)
+LOOK = {"A": ("laptop", "blue"), "B": ("desktop", "green"), "C": ("mini", "paper"), "V": ("vm", "violet"), "D": ("nas", "orange")}
+
 page = {
     "schema": "glassbox.page/1", "view": "private", "generatedAt": iso(NOW), "tz": "Asia/Tokyo",
     "pricingVersion": "2026-11-17",
@@ -164,7 +167,7 @@ page = {
          "url": "https://github.com/hakupao/shuttle-path/commit/7f20a19", "machine": "A", "pushed": True},
     ],
     "machines": [
-        {"id": i, "label": label, "role": role, "os": os_, "online": i != "D",
+        {"id": i, "label": label, "role": role, "os": os_, "icon": LOOK[i][0], "color": LOOK[i][1], "online": i != "D",
          "lastSeen": iso(NOW - timedelta(minutes=2 if i != "D" else 600)),
          "probeLastReport": iso(NOW - timedelta(minutes=3)) if role in ("dev", "work") else None,
          "system": SYS[i],

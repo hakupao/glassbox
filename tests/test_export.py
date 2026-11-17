@@ -60,6 +60,23 @@ class ExportTest(unittest.TestCase):
 
     # --- end to end ---------------------------------------------------------------------------
 
+    def test_machine_icon_and_color_are_exported(self):
+        pub, ctx = self.run_export()
+        want = {m["id"]: (m["icon"], m["color"]) for m in EXAMPLE["machines"]}
+        self.assertEqual({m["id"]: (m["icon"], m["color"]) for m in pub["machines"]}, want)
+        self.assertEqual(self.gate(pub, ctx), [])
+        page = copy.deepcopy(EXAMPLE)
+        page["machines"][0]["icon"] = None
+        pub, ctx = self.run_export(page)
+        self.assertIsNone(pub["machines"][0]["icon"])
+        self.assertEqual(self.gate(pub, ctx), [])
+        page["machines"][0]["icon"] = "rocket"                          # off the list: the export fails closed
+        with self.assertRaises(ex.ExportError):
+            self.run_export(page)
+        page["machines"][0]["icon"], page["machines"][0]["color"] = "laptop", "#ff0000"
+        with self.assertRaises(ex.ExportError):
+            self.run_export(page)
+
     def test_machine_today_by_agent_stays_private(self):
         page = copy.deepcopy(EXAMPLE)
         for m in page["machines"]:

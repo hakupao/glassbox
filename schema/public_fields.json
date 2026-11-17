@@ -36,6 +36,8 @@
   "machines[].id": "code", "machines[].label": "text", "machines[].role": "enum:dev|deploy|work|gitea?",
   "machines[].os": "enum:macos|linux|windows?", "machines[].online": "bool", "machines[].lastSeen": "iso?",
   "machines[].probeLastReport": "iso?",
+  "machines[].icon": "enum:laptop|desktop|server|vm|nas|mini|cloud|pi?",
+  "machines[].color": "enum:blue|green|paper|violet|orange|cyan|yellow|red?",
   "machines[].system.cpuPct": "number", "machines[].system.memUsed": "number", "machines[].system.memTotal": "number",
   "machines[].system.diskUsed": "number", "machines[].system.diskTotal": "number", "machines[].system.uptimeSec": "number",
   "machines[].history[].t": "iso", "machines[].history[].cpuPct": "number", "machines[].history[].memPct": "number",

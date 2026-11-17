@@ -54,6 +54,17 @@ const obj = v => v && typeof v === 'object' && !Array.isArray(v) ? v : {};
 const str = v => typeof v === 'string' ? v : null;
 const tok = v => { v = obj(v); return {input: num(v.input), output: num(v.output), cacheRead: num(v.cacheRead), cacheWrite: num(v.cacheWrite), reasoning: num(v.reasoning)}; };
 G.totTok = k => k.input + k.output + k.cacheRead + k.cacheWrite;
+/* machine icons (5x5 cells, the panel-icon language) and colours: the closed lists of
+   CONTRACT §2.1; anything else is treated as unset and gets the default */
+const MICON = {laptop: ['01110', '01010', '01110', '00000', '11111'], desktop: ['11111', '10001', '11111', '00100', '01110'],
+  server: ['11111', '10011', '11111', '10011', '11111'], vm: ['11011', '10001', '00000', '10001', '11011'],
+  nas: ['11111', '10101', '11111', '10101', '11111'], mini: ['00000', '11111', '10001', '11111', '00000'],
+  cloud: ['00000', '01100', '11110', '11111', '00000'], pi: ['10101', '11111', '10001', '11111', '10101']};
+const MCOLOR = {blue: '#6c97d6', green: '#79b98a', paper: '#efeadd', violet: '#a48ee0', orange: '#e3894d', cyan: '#5fb7b0', yellow: '#dba843', red: '#e0645a'};
+const MCOLORS = ['blue', 'green', 'paper', 'violet', 'orange', 'cyan', 'yellow', 'red'];
+const defIcon = (role, os) => role === 'dev' || role === 'work' ? (os === 'macos' || os === null || role === 'work' ? 'laptop' : 'desktop')
+  : role === 'deploy' ? ({macos: 'mini', linux: 'vm'}[os] || 'server') : role === 'gitea' ? (os === 'macos' ? 'nas' : 'server') : 'server';
+const defColor = code => MCOLORS[[...String(code)].reduce((a, c) => a + c.charCodeAt(0), 0) % MCOLORS.length];
 const text = v => (v && typeof v === 'object') ? (v.masked ? v : null) : (v === undefined || v === null ? null : String(v));
 function normCommit(a){
   return {t: str(a.t), source: str(a.source) || 'local', repo: text(a.repo), public: a.public === true, title: str(a.title) || '',
@@ -82,6 +93,7 @@ function normalize(raw){
     machines: arr(g.machines).map(m => {
       const s = m.system && typeof m.system === 'object' ? m.system : null;
       return {id: m.id == null ? '?' : String(m.id), label: text(m.label), role: str(m.role), os: str(m.os), online: m.online === true,
+        icon: MICON[m.icon] ? m.icon : null, color: MCOLOR[m.color] ? m.color : null,
         lastSeen: str(m.lastSeen), probeLastReport: str(m.probeLastReport),
         system: s ? {cpuPct: num(s.cpuPct), memUsed: num(s.memUsed), memTotal: num(s.memTotal), diskUsed: num(s.diskUsed), diskTotal: num(s.diskTotal), uptimeSec: numOrNull(s.uptimeSec)} : null,
         history: arr(m.history).map(h => ({t: str(h.t), cpuPct: numOrNull(h.cpuPct), memPct: numOrNull(h.memPct), diskPct: numOrNull(h.diskPct)})).filter(h => h.t),
@@ -208,6 +220,13 @@ G.agCls = a => a === 'codex' ? 'c-or' : 'c-fg';
 G.agCol = a => a === 'codex' ? OR : BLUE;
 G.agTag = a => bd(G.AG(a), G.agCls(a), true);
 G.code = id => `<span class="code" title="${esc(id)}">${esc(id)}</span>`;
+/* machine chip: the code in the machine's colour with its icon; unknown ids get the defaults */
+G.mlook = id => { const m = D.machines.find(x => x.id === id);
+  return {icon: (m && m.icon) || defIcon(m ? m.role : null, m ? m.os : null), color: (m && m.color) || defColor(id)}; };
+G.micon = (name, col, size = 10) => { const rows = MICON[name] || MICON.server, u = size / 5;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">${rows.flatMap((row, r) => [...row].map((v, k) => v === '1' ? `<rect x="${(k * u).toFixed(2)}" y="${(r * u).toFixed(2)}" width="${(u * 0.84).toFixed(2)}" height="${(u * 0.84).toFixed(2)}" fill="${col}"/>` : '')).join('')}</svg>`; };
+G.mc = (id, big) => { const L = G.mlook(id), col = MCOLOR[L.color];
+  return `<span class="mc${big ? ' big' : ''}" style="--mc:${col}" title="${esc(id)} \u00b7 ${esc(t('micon.' + L.icon))}">${G.micon(L.icon, col, big ? 15 : 12)}<b>${esc(id)}</b></span>`; };
 G.lbl = (prefix, v) => v == null ? '—' : G.has(prefix + v) ? esc(t(prefix + v)) : esc(v);
 G.OS = v => v === 'macos' ? 'macOS' : v === 'windows' ? 'Windows' : v === 'linux' ? 'Linux' : esc(v || '—');
 
@@ -224,7 +243,7 @@ G.cnt = s => `<span class="cnt">${s}</span>`;
 G.more = (href, key = 'more.all') => `<a class="more" href="${href}">${esc(t(key))}</a>`;
 /* panel header: icon, title, count badge, right side */
 G.ph = (id, icon, color, title, count, right, tag = 'h2') =>
-  `<div class="ph"><${tag} id="${id}">${G.ic(icon, color)}${title}${count != null && count !== '' ? G.cnt(count) : ''}</${tag}><span class="r">${right || ''}</span></div>`;
+  `<div class="ph"><${tag} id="${id}">${icon ? G.ic(icon, color) : ''}${title}${count != null && count !== '' ? G.cnt(count) : ''}</${tag}><span class="r">${right || ''}</span></div>`;
 G.grpH = (n, key) => `<div class="grp-h"><b>${n}</b>${esc(t(key))}</div>`;
 let panelI = 0;
 G.pn = (id, inner, cls = '') => `<section class="pn ${cls}" style="--i:${panelI++}" aria-labelledby="${id}">${inner}</section>`;

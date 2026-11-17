@@ -103,6 +103,12 @@ button{font:inherit;color:inherit}
 /* machines (one per line) */
 .mh{display:flex;align-items:center;gap:8px;margin-bottom:2px;min-width:0}
 .code{font:700 12px var(--mono);color:var(--bg);background:var(--text);padding:0 5px;line-height:18px;white-space:nowrap;max-width:9em;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
+/* machine chip: icon + code in the machine's colour (--mc) */
+.mc{display:inline-flex;align-items:center;gap:4px;padding:0 5px 0 4px;line-height:18px;vertical-align:middle;white-space:nowrap;
+  font:700 12px var(--mono);color:var(--mc);background:color-mix(in srgb,var(--mc) 16%,transparent);border:1px solid color-mix(in srgb,var(--mc) 55%,transparent)}
+.mc svg{display:block;flex:none}
+.mc b{font-weight:700;color:var(--mc)}
+.mc.big{font-size:14px;line-height:22px;gap:6px;padding:0 7px 0 6px}
 .mh b{font-weight:600;color:var(--hi);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .st{width:8px;height:8px;display:inline-block;flex:none}
 .mlist{display:grid;gap:0}

@@ -254,6 +254,42 @@ def _repos(commits, iso):
 
 
 # ------------------------------------------------------------------------------ machines and services
+# Machine icon and colour (hub config [machines.X] icon / color). Closed lists: the public snapshot
+# carries them (public_fields.json enum), the front end draws the icons as 5x5 cell glyphs.
+MACHINE_ICONS = ("laptop", "desktop", "server", "vm", "nas", "mini", "cloud", "pi")
+MACHINE_COLORS = ("blue", "green", "paper", "violet", "orange", "cyan", "yellow", "red")
+
+
+def default_icon(role, os_):
+    """An icon from role and OS when none is configured: dev/work machines are laptops (desktops
+    off macOS), a Linux deploy machine is taken to be a VM, a macOS one a mini, the rest servers."""
+    if role in ("dev", "work"):
+        return "laptop" if os_ in ("macos", None) or role == "work" else "desktop"
+    if role == "deploy":
+        return {"macos": "mini", "linux": "vm"}.get(os_, "server")
+    if role == "gitea":
+        return "nas" if os_ == "macos" else "server"
+    return "server"
+
+
+def default_color(code):
+    """A fixed colour per machine code, so a machine keeps its colour across pages and days."""
+    return MACHINE_COLORS[sum(map(ord, str(code))) % len(MACHINE_COLORS)]
+
+
+def _pick(o, key, allowed, default, mid, warnings):
+    """Configured value if it is on the list; a configured value off the list is dropped (null)
+    with a warning; no value at all gets the default."""
+    if key not in o:
+        return default
+    v = o[key]
+    if isinstance(v, str) and v in allowed:
+        return v
+    warnings.append({"t": None, "machine": mid, "kind": "machine-config",
+                     "detail": f"[machines.{mid}] {key} must be one of: {', '.join(allowed)}"})
+    return None
+
+
 def _today_by_machine(conn, tz, today):
     """machine -> [{agent, requests, unpricedRequests, costUsd, sessions}] for the local day
     `today` (CONTRACT §2.2, provisional). Cost sums priced rows only, as everywhere (§0)."""
@@ -274,7 +310,7 @@ def _today_by_machine(conn, tz, today):
     return out
 
 
-def _machines(conn, cfg, now_ts, iso, by_agent=None):
+def _machines(conn, cfg, now_ts, iso, by_agent=None, warnings=None):
     over = cfg.get("machines") or {}
     reg = {m: (role, os_, label, last) for m, role, os_, label, last in
            conn.execute("SELECT id, role, os, label, last_report FROM machines")}
@@ -299,6 +335,8 @@ def _machines(conn, cfg, now_ts, iso, by_agent=None):
         pct = lambda a, b: round(a / b * 100, 1) if a is not None and b else None
         out.append({
             "id": mid, "label": o.get("label") or label or mid, "role": o.get("role") or role, "os": o.get("os") or os_,
+            "icon": _pick(o, "icon", MACHINE_ICONS, default_icon(o.get("role") or role, o.get("os") or os_), mid, warnings if warnings is not None else []),
+            "color": _pick(o, "color", MACHINE_COLORS, default_color(mid), mid, warnings if warnings is not None else []),
             "online": beszel_up or probe_up, "lastSeen": iso(max(seen)) if seen else None,
             "probeLastReport": iso(last) if last is not None else None, "system": system,
             "history": [{"t": iso(t), "cpuPct": cpu, "memPct": pct(mu, mt), "diskPct": pct(du, dt)}
@@ -394,6 +432,7 @@ def build(conn, cfg, now=None):
     tailnet = [{"name": n, "os": o, "online": bool(on), "lastSeen": iso(ls)}
                for n, o, on, ls in conn.execute("SELECT name, os, online, last_seen FROM tailnet ORDER BY name")]
     quota = _quota(conn, cfg, iso, warnings)
+    machines = _machines(conn, cfg, now_ts, iso, _today_by_machine(conn, tz, today), warnings)
     for t, m, kind, detail in conn.execute(
             "SELECT t, machine, kind, detail FROM warnings WHERE t >= ? ORDER BY t DESC LIMIT 50", (now_ts - 7 * 86400,)):
         warnings.append({"t": iso(t), "machine": m, "kind": kind, "detail": detail})
@@ -407,7 +446,7 @@ def build(conn, cfg, now=None):
         "quota": quota,
         "contributions": contributions,
         "activity": [_activity_item(c, iso) for c in commits[:ACTIVITY_MAX]],
-        "machines": _machines(conn, cfg, now_ts, iso, _today_by_machine(conn, tz, today)),
+        "machines": machines,
         "services": _services(conn, cfg),
         "runtimes": runtimes,
         "tailnet": tailnet,

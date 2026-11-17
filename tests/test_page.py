@@ -193,6 +193,36 @@ class PageTest(unittest.TestCase):
         self.assertEqual(m["B"], [{"agent": "claude-code", "requests": 5, "unpricedRequests": 0, "costUsd": 2.0, "sessions": 0}])
         self.assertEqual(m["C"], [])
 
+    def test_machine_icon_and_color(self):
+        c = self.conn
+        c.execute("INSERT INTO machines(id, role, os) VALUES('A', 'dev', 'macos')")
+        c.execute("INSERT INTO machines(id, role, os) VALUES('B', 'dev', 'windows')")
+        cfg = {**CFG, "machines": {
+            "A": {"icon": "desktop", "color": "red"},                        # configured
+            "B": {"icon": "rocket", "color": "#ff0000"},                     # off the lists
+            "C": {"role": "deploy", "os": "macos"},                           # defaults
+            "V": {"role": "deploy", "os": "linux", "icon": 3},
+            "D": {"role": "gitea", "os": "macos", "color": "cyan"}}}
+        p = self.build(cfg)
+        m = {x["id"]: (x["icon"], x["color"]) for x in p["machines"]}
+        self.assertEqual(m["A"], ("desktop", "red"))
+        self.assertEqual(m["B"], (None, None))
+        self.assertEqual(m["C"], ("mini", page.default_color("C")))
+        self.assertEqual(m["V"], (None, page.default_color("V")))
+        self.assertEqual(m["D"], ("nas", "cyan"))
+        self.assertIn(page.default_color("C"), page.MACHINE_COLORS)
+        bad = [w for w in p["warnings"] if w["kind"] == "machine-config"]
+        self.assertEqual(sorted((w["machine"], w["detail"].split()[1]) for w in bad), [("B", "color"), ("B", "icon"), ("V", "icon")])
+        self.assertNotIn("rocket", json.dumps(p))                           # a dropped value is not echoed
+
+    def test_default_icon(self):
+        d = page.default_icon
+        self.assertEqual([d("dev", "macos"), d("dev", "linux"), d("work", "windows"), d("deploy", "macos"),
+                          d("deploy", "linux"), d("deploy", "windows"), d("gitea", "linux"), d(None, None)],
+                         ["laptop", "desktop", "laptop", "mini", "vm", "server", "server", "server"])
+        self.assertTrue(all(page.default_icon(r, o) in page.MACHINE_ICONS
+                            for r in ("dev", "work", "deploy", "gitea", None) for o in ("macos", "linux", "windows", None)))
+
     def test_machines_join_beszel_and_config(self):
         c, t = self.conn, NOW.timestamp()
         c.execute("INSERT INTO machine_state VALUES('C', 'up', 3600, ?)", (t - 30,))
