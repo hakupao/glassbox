@@ -1,0 +1,33 @@
+{
+ "_note": "Fields allowed into the public snapshot (CONTRACT §3 rule 1). Paths use [] for every list element. 'text' paths are Text-typed: masked unless their value is on the public allowlist. Anything not listed here is dropped by the exporter and rejected by the gate.",
+ "paths": [
+  "schema", "view", "generatedAt", "tz", "pricingVersion", "hidden[]",
+  "today.requests", "today.sessions", "today.unpricedRequests", "today.cacheHitRate", "today.costUsd",
+  "today.tokens.input", "today.tokens.output", "today.tokens.cacheRead", "today.tokens.cacheWrite", "today.tokens.reasoning",
+  "today.byAgent[].agent", "today.byAgent[].requests", "today.byAgent[].costUsd",
+  "today.byAgent[].tokens.input", "today.byAgent[].tokens.output", "today.byAgent[].tokens.cacheRead",
+  "today.byAgent[].tokens.cacheWrite", "today.byAgent[].tokens.reasoning",
+  "today.byModel[].model", "today.byModel[].agent", "today.byModel[].requests", "today.byModel[].costUsd",
+  "today.byProject[].project", "today.byProject[].public", "today.byProject[].requests", "today.byProject[].costUsd",
+  "trend[].date", "trend[].costUsd.claude-code", "trend[].costUsd.codex",
+  "quota[].account", "quota[].agent", "quota[].window", "quota[].usedPct", "quota[].resetsAt", "quota[].sampledAt",
+  "quota[].history[].t", "quota[].history[].usedPct",
+  "contributions.total", "contributions.days[].date", "contributions.days[].count",
+  "activity[].t", "activity[].source", "activity[].repo", "activity[].public", "activity[].title",
+  "activity[].branch", "activity[].hash", "activity[].url", "activity[].machine",
+  "machines[].id", "machines[].label", "machines[].role", "machines[].os", "machines[].online", "machines[].lastSeen",
+  "machines[].probeLastReport", "machines[].system.cpuPct", "machines[].system.memUsed", "machines[].system.memTotal",
+  "machines[].system.diskUsed", "machines[].system.diskTotal", "machines[].system.uptimeSec",
+  "machines[].history[].t", "machines[].history[].cpuPct", "machines[].history[].memPct",
+  "services[].name", "services[].kind", "services[].machine", "services[].status",
+  "services[].uptimePct24h", "services[].cpuPct", "services[].memBytes",
+  "runtimes[].machine", "runtimes[].agent", "runtimes[].version", "runtimes[].processes",
+  "runtimes[].activeSessions", "runtimes[].stale",
+  "tailnet[].name", "tailnet[].os", "tailnet[].online", "tailnet[].lastSeen",
+  "jobs[].name", "jobs[].machine", "jobs[].lastRun", "jobs[].lastSuccess", "jobs[].ok"
+ ],
+ "text": [
+  "today.byProject[].project", "quota[].account", "activity[].repo",
+  "machines[].label", "services[].name", "tailnet[].name", "jobs[].name"
+ ]
+}

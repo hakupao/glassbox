@@ -2,144 +2,159 @@
 
 两份契约：
 
-1. **探针上报**（`glassbox.probe/1`）：各台电脑 → 部署机的 `/ingest`。
-2. **页面数据**（`glassbox.page/1`）：部署机 → 网页。私有在线版和公开快照**结构完全相同**，只有取值不同（公开版的私有字段被替换成模糊占位）。
+1. **探针上报**（`glassbox.probe/1`）：各台电脑 → 部署机 `/ingest`。
+2. **页面数据**（`glassbox.page/1`）：部署机 → 网页。私有在线版和公开快照**结构相同**；公开版由导出器按白名单**重新构建**，私有值替换成模糊占位。
 
-示例在 `schema/examples/`，全部是虚构数据。
+示例见 `schema/examples/`，全部是虚构数据，由 `generate.py` 生成并自检。
+
+**冻结范围**：c-v6 已经用到的部分（§2 中没有标注的字段）现在冻结。标注 *provisional* 的块（机器、服务、运行时、tailnet、定时任务、按项目），在 S09 面板定稿之前还可以改。
 
 ## 0. 通用约定
 
-- **时间**：ISO 8601，带时区偏移，例如 `2026-11-17T10:30:00+09:00`。日期写成 `YYYY-MM-DD`，按部署机配置的时区切日。
-- **金额**：美元，浮点，字段名以 `Usd` 结尾。只是 API 等价估算。查不到价格时为 `null`，并计入 `unpricedRequests`。
-- **Token**：对象 `{input, output, cacheRead, cacheWrite, reasoning}`，都是整数。
-  - `input` 不含缓存部分。Codex 原始的 `input_tokens` 要先减掉 `cached_input_tokens`。
-  - `reasoning` 包含在 `output` 里，不重复计入总量。
+- **时间**：ISO 8601，带时区偏移。探针上报一律用 UTC。**切日、切小时只由 hub 按自己配置的时区完成**，探针不切。
+- **金额**：美元浮点，字段名以 `Usd` 结尾，是 API 等价估算。
+  - **只有**探针的 row 和 page 的 `byModel[]` 允许 `costUsd: null`（该模型完全没有定价）。
+  - 其余所有汇总金额只累加已定价的部分，永远不是 `null`；同时附带 `unpricedRequests`，记录有多少请求没算进去。
+  - 计价使用的价格表版本写进 `pricingVersion`（例如 `"2026-11-17"`）。价格表更新后，hub 可以要求探针重新上报。
+- **Token**：`{input, output, cacheRead, cacheWrite, reasoning}`，全部是整数。
+  - `input` 不含缓存部分：Codex 的 `input_tokens` 要先减去 `cached_input_tokens`。
+  - `reasoning` 是 `output` 的一部分，不额外计入总量。
   - 总量 = input + output + cacheRead + cacheWrite。
 - **Agent**：`"claude-code"` | `"codex"`。
-- **模型**：日志里的原始 ID，去掉日期后缀。fast 模式记为 `<model>:fast`。
+- **模型**：去掉日期后缀的基础 ID。fast 模式记为 `<model>:fast`。探针要把云厂商的 ARN 或推理配置名还原成基础模型名，还原不了就记为 `"other"`。
 
 ### 0.1 可隐藏文本 `Text`
 
-可能涉及隐私的字符串字段（项目名、仓库名、机器名、服务名、设备名、任务名），类型都是 `Text`：
+所有可能涉及隐私的名称都用 `Text` 类型：项目名、仓库名、机器名、服务名、设备名、任务名、账号。
 
 ```jsonc
-"repo": "sdtm-pedia"                    // 明文：私有版，或公开版里允许公开的值
-"repo": {"masked": true, "len": 11}     // 模糊占位：公开版里的私有值
+"repo": "sdtm-pedia"                           // 明文：私有版；或公开版里经白名单允许的值
+"repo": {"masked": true}                       // 模糊占位：前端按固定宽度（8 个占位字符）渲染并加模糊
+"project": {"masked": true, "group": "private"} // 合并行：前端显示固定文字「私有项目」
 ```
 
-- 前端遇到 `{"masked": true}` 时，渲染成 `len` 个占位字符再加模糊样式。真实文本从不进入公开产物。
-- `len` 取真实长度，并钳在 4 到 16 之间，避免从长度推出原文。
+- 不带长度信息，避免通过长度猜出原文。
 - 私有版里不会出现 `masked`。
 
 ## 1. 探针上报 `glassbox.probe/1`
 
-`POST /ingest`，请求头 `Authorization: Bearer <机器 token>`，请求体是 JSON。
+`POST /ingest`，请求头带 `Authorization: Bearer <机器 token>`，请求体为 JSON。
 
 ```jsonc
 {
   "schema": "glassbox.probe/1",
-  "machine": "A",                 // 机器代号，和 token 绑定；hub 以 token 为准
-  "probeVersion": "0.1.0",
-  "sentAt": "…",
-  "tz": "Asia/Tokyo",
+  "machine": "A",                    // 必须与 token 绑定的机器一致，否则返回 400
+  "probeVersion": "0.1.0", "pricingVersion": "2026-11-17",
+  "sentAt": "…Z", "tz": "Asia/Tokyo", // tz 只作展示
 
-  "usage": {                      // 按 (day, hour, agent, model, project) 聚合
-    "days": ["2026-11-16", "2026-11-17"],   // 本次覆盖的日期；hub 按 (machine, day) 整体替换
+  "usage": {
+    "range": {"from": "2026-11-15T00:00:00Z", "to": "2026-11-17T02:00:00Z"},  // 半开区间 [from, to)，UTC 整点
     "rows": [{
-      "day": "2026-11-17", "hour": 10,
-      "agent": "claude-code", "model": "claude-opus-5-5",
-      "project": "p_3f9a…",       // 项目键，见 projects
-      "requests": 42, "sessions": 3,
+      "hourStart": "2026-11-17T01:00:00Z",
+      "agent": "claude-code", "model": "claude-opus-5-5", "project": "p_…",
+      "requests": 42, "unpricedRequests": 0,
       "tokens": {…}, "costUsd": 1.23
+    }],
+    "sessions": [{                    // 按会话 ID 在本机去重后计数；会话 ID 本身不上报
+      "hourStart": "…Z",              // 会话第一条请求所在的 UTC 小时，会话按这个时间归属
+      "agent": "claude-code", "project": "p_…", "count": 3
     }]
   },
-  "projects": {                   // 项目键 → 身份；只给 hub 判断可见性用
-    "p_3f9a…": {"name": "sdtm-pedia", "remote": "github.com/owner/sdtm-pedia"}
+  "projects": {                       // 本次 rows / sessions / git 里引用到的所有项目键，都必须在这里出现
+    "p_…": {"name": "sdtm-pedia", "remote": "github.com/owner/sdtm-pedia"}
   },
-  "quota": [{                     // 额度样本（最新几条即可，hub 按窗口取最新）
-    "agent": "claude-code", "window": "7d", "usedPct": 41,
-    "resetsAt": "…", "sampledAt": "…"
-  }],
+  "quota": [{"account": "a_1f2e3d4c", "agent": "claude-code", "window": "7d",
+             "usedPct": 41, "resetsAt": "…", "sampledAt": "…"}],
   "runtimes": [{"agent": "codex", "version": "x.y.z", "processes": 2, "activeSessions": 1}],
-  "git": [{                       // 本机仓库的提交（只扫描配置里的项目根目录）
-    "project": "p_3f9a…", "branch": "main",
-    "commits": [{"t": "…", "hash": "4be0d71", "title": "docs: …"}]
+  "git": [{                           // 快照：每个项目近 60 天内、作者是本人的提交
+    "project": "p_…", "remote": true,  // remote=false 表示仓库没有远端
+    "commits": [{"t": "…", "hash": "4be0d71…（完整 40 位）", "branch": "main", "title": "docs: …"}]
   }],
   "jobs": [{"name": "backup", "lastRun": "…", "lastSuccess": "…", "ok": true}]
 }
 ```
 
-- **不上报**：对话正文、命令行、绝对路径、会话 ID、文件名。
-- **项目键**是 `p_` 加上 hash(remote 或仓库根目录名) 的前 12 位，保证各台电脑上同一个仓库得到同一个键。
-- `remote` 统一写成 `host/owner/repo`，去掉协议、凭据和 `.git`。没有远端时为 `null`，hub 一律按私有处理。
-- 各部分都可以省略，省略表示"这次没有新数据"，不表示清空。
+### 1.1 语义
+
+- **usage 是区间快照，不是增量**：`range` 内本机的全部数据都要给出，hub 按 `(machine, range)` 整体替换。探针每次都从本地缓存重新聚合整个区间，日志的增量缓存只用来加速解析。
+- **防止被残缺数据覆盖**：转录文件会被清理（Claude Code 默认约 30 天）。所以对于 2 天以前的小时，只要新值的请求数比 hub 已有值少 5% 以上，hub 就**保留旧值**并记一条告警。
+- **会话**：会话只存在于一台机器上，hub 跨机器直接相加即可。一个会话跨小时、跨模型也只计一次，按第一条请求的时间归属。
+- **去重的前提**：每台机器只解析本机产生的转录。`~/.claude` 和 `~/.codex` 如果被同步盘或 dotfiles 同步过，探针要检测出来并告警，同步过来的副本跳过不解析。
+- **项目键**：
+  1. 取 cwd 所在仓库的根目录（`git rev-parse --show-toplevel`）。cwd 不在任何 git 仓库里时，记为保留键 `p_other`，按私有处理。
+  2. 有 `origin` 远端时，先把远端地址归一化成 `host/owner/repo`：去掉协议、凭据、端口和 `.git`，主机名转小写，ssh 别名按 `.local` 里的映射表还原成真实主机。项目键 = `p_` + sha256(归一化后的远端地址) 的前 12 位。同一个仓库在不同机器上会得到同一个键。
+  3. 没有远端时，项目键 = `p_` + sha256(机器 id + 仓库根目录名) 的前 12 位，跨机器不合并。
+- **git 提交**：
+  - 按 `(machine, project)` 整体替换，rebase 掉的旧哈希会自然消失。
+  - 只计 `.local` 里配置的作者邮箱写的提交；邮箱本身不上报。
+- **额度**：`account` 是账号标识（邮箱或组织 ID）加盐后 sha256 的前 8 位。hub 按 `(account, agent, window)` 取最新的样本。
+- **快照过期**：机器离线超过 15 分钟后，它的 `runtimes` 视为过期，页面上标成灰色；`jobs` 保留最后一次的值。
+- 各个部分都可以省略。省略表示"这次没有新数据"，不等于清空。
+
+### 1.2 不上报
+
+对话正文、命令行、绝对路径、会话 ID、文件名、作者邮箱、账号原文。
 
 ## 2. 页面数据 `glassbox.page/1`
 
-网页读 `window.GB`。公开快照把它内嵌进 HTML；私有在线版由服务端注入。
+网页读取 `window.GB`。公开快照把它内嵌进 HTML，私有在线版由服务端注入。
 
 ```jsonc
 {
-  "schema": "glassbox.page/1",
-  "view": "private" | "public",
-  "generatedAt": "…", "tz": "Asia/Tokyo",
+  "schema": "glassbox.page/1", "view": "private" | "public",
+  "generatedAt": "…", "tz": "Asia/Tokyo", "pricingVersion": "2026-11-17",
 
   "today": {
     "requests": 1284, "sessions": 23, "unpricedRequests": 0,
-    "tokens": {…}, "cacheHitRate": 0.912,       // cacheRead / (input + cacheRead + cacheWrite)
+    "tokens": {…}, "cacheHitRate": 0.887,      // cacheRead / (input + cacheRead + cacheWrite)
     "costUsd": 48.7,
-    "byAgent":   [{"agent", "requests", "tokens": {…}, "costUsd"}],
-    "byModel":   [{"model", "agent", "requests", "costUsd"}],
-    "byProject": [{"project": Text, "public": bool, "requests", "costUsd"}],  // 公开版里的私有项目合并成一行，project 为 masked
-    "hourly":    [{"hour": 0, "requests", "costUsd"}]                         // 24 项
+    "byAgent": [{"agent", "requests", "tokens": {…}, "costUsd"}],
+    "byModel": [{"model", "agent", "requests", "costUsd"}],
+    "byProject": [{"project": Text, "public": bool, "requests", "costUsd"}],   // provisional
+    "hourly": [{"hour", "requests", "costUsd"}]                                // provisional；不进公开版
   },
 
-  "trend": [{"date", "costUsd": {"claude-code": 41.2, "codex": 7.5}, "requests", "tokens": {…}}],  // 近 30 天，旧 → 新
+  "trend": [{"date", "costUsd": {"claude-code": 41.2, "codex": 7.5}}],  // 近 30 天，旧→新，最后一项是今天
 
   "quota": [{
-    "agent", "window": "5h" | "7d", "usedPct", "resetsAt", "sampledAt",
-    "history": [{"t", "usedPct"}]               // 当前窗口内的样本，画燃尽图用
+    "account": Text, "agent", "window": "5h" | "7d",
+    "usedPct", "resetsAt", "sampledAt",
+    "history": [{"t", "usedPct"}]              // 当前窗口内的样本
   }],
 
   "contributions": {
-    "total": 6832,
-    "days": [{"date", "count", "github": n, "gitea": n, "local": n}]       // 近 53 周
+    "total": 6832,                              // = sum(days[].count)
+    "days": [{"date", "count"}]                 // 从 53 周前的那个周日起，到今天为止
   },
 
-  "activity": [{                                // 新 → 旧，最多 50 条
+  "activity": [{                                // 新→旧，最多 50 条
     "t", "source": "github" | "gitea" | "local",
-    "repo": Text, "public": bool, "title": "…（已正则打码）",
-    "branch": "main" | null, "hash": "4be0d71" | null, "url": "…" | null,  // 私有条目在公开版里都为 null
-    "machine": "A" | null
+    "repo": Text, "public": bool, "title",
+    "branch", "hash", "url", "machine"          // 私有条目在公开版里这几项都是 null
   }],
 
-  "machines": [{
-    "id": "A", "label": Text, "role": "dev" | "deploy" | "work" | "gitea",
-    "os": "macos" | "linux" | "windows",
-    "online": true, "lastSeen": "…", "probeLastReport": "…" | null,
-    "system": {"cpuPct", "memUsed", "memTotal", "diskUsed", "diskTotal", "uptimeSec"} | null,
-    "history": [{"t", "cpuPct", "memPct"}]       // 近 24 小时，每小时一点
-  }],
+  "machines": [{ … }],   // provisional：id、label: Text、role、os、online、lastSeen、probeLastReport、system、history
+  "services": [{ … }],   // provisional：name: Text、kind、machine、status、uptimePct24h、cpuPct、memBytes
+  "runtimes": [{ … }],   // provisional：machine、agent、version、processes、activeSessions、stale
+  "tailnet":  [{ … }],   // provisional：name: Text、os、online、lastSeen
+  "jobs":     [{ … }],   // provisional：name: Text、machine、lastRun、lastSuccess、ok
 
-  "services": [{
-    "name": Text, "kind": "container" | "monitor", "machine": "A",
-    "status": "up" | "down" | "paused" | "unknown",
-    "uptimePct24h": 99.9 | null, "cpuPct": 1.2 | null, "memBytes": 123 | null
-  }],
-
-  "runtimes": [{"machine", "agent", "version", "processes", "activeSessions"}],
-
-  "tailnet": [{"name": Text, "os", "online", "lastSeen"}],
-
-  "jobs": [{"name": Text, "machine", "lastRun", "lastSuccess", "ok"}],
-
-  "hidden": ["tailnet"]                          // 公开版里整块不公开的面板，前端显示"请看在线版"
+  "hidden": ["tailnet"]  // 公开版里整块不公开的面板；这些块的值为 []
 }
 ```
 
-## 3. 不变量（导出器和闸门都要检查）
+### 2.1 hub 的计算规则
 
-1. `view = "public"` 时，`.local/redact_terms.local.json` 里的任何词、任何私有项目或仓库的真实名字，都不能以任何形式出现在产物里（包括 HTML、JS、注释）。
-2. 公开版里 `public: false` 的条目，`branch`、`hash`、`url` 全部为 `null`。
-3. 公开版里 `machines[].label` 必须是 masked，或者是 `.local/public.local.toml` 里配置的代号。
-4. 字段只增不改：新增字段向后兼容。改动含义时升 `schema` 版本号。
+- **代码活动按 hash 跨来源去重**，同一个提交只保留一条，来源优先级 github > gitea > local。local 来源只保留 `remote=false` 的项目的提交，以及没有推送到远端的提交。
+- `contributions.days[].count` = 当天去重后的提交数。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
+- `trend` 的最后一项必须是今天，它的值与 `today` 一致。
+
+## 3. 公开版不变量（导出器构建、闸门检查，任何一条不满足就拒绝发布）
+
+1. **白名单重建**：导出器只按 `schema/public_fields.json` 里列出的字段路径，从私有版里逐个复制值，构建出公开版。**新增的字段默认不进公开版**，必须显式加进白名单。闸门遇到白名单以外的 key 就拒绝。
+2. **Text 字段**：每个 Text 字段要么是 `{"masked": true…}`，要么它的值在 `.local/public.local.toml` 的允许名单里（公开仓库名由 GitHub 可见性自动加入）。
+3. **其余字符串只能是**：封闭枚举（agent、source、window、role、os、status、kind）；ISO 时间；hash（`^[0-9a-f]{7,40}$`）；在价格表里出现过的模型名，或 `"other"`；`url` 必须指向公开仓库；`title` 走规则 5。
+4. **私有条目**（`public: false`）：`branch`、`hash`、`url`、`machine` 一律为 `null`，`t` 截断到整点。
+5. **提交标题**：先过正则打码（密钥、邮箱、IP、路径、工单号 `[A-Z][A-Z0-9]+-\d+`）和关键词屏蔽。`.local` 里的 `privateTitles` 开关有两档：`"redacted"`（默认，保留打码后的标题）或 `"prefix-only"`（只保留 `fix:` 这类前缀）。
+6. **名单比对**：`.local/redact_terms.local.json` 里的词和所有私有名字，归一化后（不分大小写，去掉 `-`、`_`、`.` 和空格）都不得出现在产物的任何位置，包括 HTML、JS 和注释。
+7. `hidden` 里列出的块，值为 `[]`。`today.hourly` 不进公开版。
