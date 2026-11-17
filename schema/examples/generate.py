@@ -37,7 +37,7 @@ def tok(i, o, cr, cw, r):
 # --- fabricated identities ------------------------------------------------------
 PUBLIC_REPOS = {"sdtm-pedia", "shuttle-path", "IT-Passport-Learning"}
 PRIVATE_NAMES = ["falcon-ledger", "orchid-batch", "ACME-42", "studio-dev", "client-laptop",
-                 "home-server", "garage-mbp", "pocket-phone", "nightly-backup", "gitea.example.org",
+                 "home-server", "home-server-vm", "garage-mbp", "report-worker", "metrics-hub", "pocket-phone", "nightly-backup", "gitea.example.org",
                  "billing-api", "a_1f2e3d4c", "a_9c8b7a6d"]
 PROJECTS = {
     "p_1a2b3c4d5e6f": {"name": "sdtm-pedia", "remote": "github.com/hakupao/sdtm-pedia"},
@@ -94,11 +94,18 @@ start = today_d - timedelta(days=52 * 7 + (today_d.isoweekday() % 7))   # the Su
 days = []
 d = start
 while d <= today_d:
-    days.append({"date": d.isoformat(), "count": 0 if rnd.random() < 0.3 else rnd.randint(1, 30)})
+    wk = d.isoweekday() >= 6
+    days.append({"date": d.isoformat(), "count": 0 if rnd.random() < (0.55 if wk else 0.2) else int(rnd.expovariate(1 / 6)) + 1})
     d += timedelta(days=1)
 
+SYS = {"A": {"cpuPct": 23.4, "memUsed": 27.1e9, "memTotal": 36e9, "diskUsed": 1.21e12, "diskTotal": 2e12, "uptimeSec": 412_000},
+       "B": {"cpuPct": 9.8, "memUsed": 11.2e9, "memTotal": 16e9, "diskUsed": 388e9, "diskTotal": 512e9, "uptimeSec": 86_000},
+       "C": {"cpuPct": 6.1, "memUsed": 13.1e9, "memTotal": 17.2e9, "diskUsed": 236e9, "diskTotal": 494e9, "uptimeSec": 1_051_000},
+       "V": {"cpuPct": 2.3, "memUsed": 3.2e9, "memTotal": 8.3e9, "diskUsed": 18e9, "diskTotal": 42e9, "uptimeSec": 974_000},
+       "D": {"cpuPct": 1.2, "memUsed": 5.4e9, "memTotal": 16e9, "diskUsed": 301e9, "diskTotal": 494e9, "uptimeSec": 2_210_000}}
 MACHINES = [("A", "studio-dev", "dev", "macos"), ("B", "client-laptop", "work", "windows"),
-            ("C", "home-server", "deploy", "linux"), ("D", "garage-mbp", "gitea", "macos")]
+            ("C", "home-server", "deploy", "macos"), ("V", "home-server-vm", "deploy", "linux"),
+            ("D", "garage-mbp", "gitea", "macos")]
 page = {
     "schema": "glassbox.page/1", "view": "private", "generatedAt": iso(NOW), "tz": "Asia/Tokyo",
     "pricingVersion": "2026-11-17",
@@ -152,15 +159,21 @@ page = {
         {"id": i, "label": label, "role": role, "os": os_, "online": i != "D",
          "lastSeen": iso(NOW - timedelta(minutes=2 if i != "D" else 600)),
          "probeLastReport": iso(NOW - timedelta(minutes=3)) if role in ("dev", "work") else None,
-         "system": {"cpuPct": 12.5, "memUsed": 9.1e9, "memTotal": 16e9, "diskUsed": 410e9, "diskTotal": 1e12, "uptimeSec": 593_000},
-         "history": [{"t": iso(NOW - timedelta(hours=23 - h)), "cpuPct": round(8 + 6 * rnd.random(), 1),
+         "system": SYS[i],
+         "history": [{"t": iso(NOW - timedelta(hours=23 - h)),
+                      "cpuPct": round(max(1, SYS[i]["cpuPct"] * (0.4 + 1.2 * rnd.random()) * (0.3 if 1 <= (h + 10) % 24 <= 7 else 1)), 1),
                       "memPct": round(50 + 10 * rnd.random(), 1)} for h in range(24)]}
         for i, label, role, os_ in MACHINES
     ],
+    # One row per service: the hub merges the container (Beszel/Docker) and the monitor (Kuma) of the
+    # same service before export, because masked names cannot be matched afterwards.
     "services": [
-        {"name": "gitea", "kind": "container", "machine": "C", "status": "up", "uptimePct24h": 100.0, "cpuPct": 0.4, "memBytes": 210e6},
-        {"name": "billing-api", "kind": "container", "machine": "C", "status": "up", "uptimePct24h": 99.3, "cpuPct": 2.1, "memBytes": 480e6},
-        {"name": "status-page", "kind": "monitor", "machine": "C", "status": "down", "uptimePct24h": 96.5, "cpuPct": None, "memBytes": None},
+        {"name": "report-worker", "kind": "both", "machine": "V", "status": "down", "uptimePct24h": 96.5, "cpuPct": None, "memBytes": None},
+        {"name": "gitea", "kind": "both", "machine": "V", "status": "up", "uptimePct24h": 100.0, "cpuPct": 0.4, "memBytes": 210e6},
+        {"name": "billing-api", "kind": "both", "machine": "V", "status": "up", "uptimePct24h": 99.3, "cpuPct": 2.1, "memBytes": 480e6},
+        {"name": "status-page", "kind": "both", "machine": "V", "status": "up", "uptimePct24h": 99.8, "cpuPct": 0.2, "memBytes": 95e6},
+        {"name": "metrics-hub", "kind": "container", "machine": "V", "status": "up", "uptimePct24h": None, "cpuPct": 0.9, "memBytes": 160e6},
+        {"name": "glassbox", "kind": "container", "machine": "V", "status": "up", "uptimePct24h": None, "cpuPct": 0.3, "memBytes": 70e6},
     ],
     "runtimes": [
         {"machine": "A", "agent": "claude-code", "version": "2.1.326", "processes": 3, "activeSessions": 2, "stale": False},
@@ -178,12 +191,12 @@ page = {
 # In the real exporter these come from .local/public.local.toml and GitHub visibility.
 # Text allowlists are per field (CONTRACT §3 rule 2).
 ALLOW = {
+    "services[].name": {"gitea", "status-page", "glassbox"},
     "today.byProject[].project": PUBLIC_REPOS,
     "activity[].repo": PUBLIC_REPOS,
     "activity[].branch": {"main", "dev"},           # branches of public repos, added automatically
-    "services[].name": {"gitea", "status-page"},
 }
-CODES = {"A", "B", "C", "D", "K", "L"}             # machine and account codes
+CODES = {"A", "B", "C", "D", "V", "K", "L"}             # machine and account codes
 HIDDEN = ["tailnet"]
 KEYWORDS = ["ACME-42"]
 MODELS = {"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "gpt-6-astra"}
@@ -317,6 +330,11 @@ assert not problems, "gate rejects public example:\n  " + "\n  ".join(problems)
 for name, obj in (("probe.json", probe), ("page.private.json", page), ("page.public.json", pub)):
     (HERE / name).write_text(json.dumps(obj, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print("wrote", name)
+# The mockups load data with <script src> because file:// pages cannot fetch JSON.
+(HERE.parent.parent / "design" / "mockups" / "sample-page.js").write_text(
+    "// Generated by schema/examples/generate.py — fabricated data in the glassbox.page/1 shape.\n"
+    "window.GB_PAGES = " + json.dumps({"private": page, "public": pub}, ensure_ascii=False) + ";\n", encoding="utf-8")
+print("wrote design/mockups/sample-page.js")
 
 # --- self-checks ----------------------------------------------------------------------
 refs = {r["project"] for r in probe["usage"]["rows"]} | {s["project"] for s in probe["usage"]["sessions"]} \

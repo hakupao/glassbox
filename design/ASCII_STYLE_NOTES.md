@@ -96,3 +96,4 @@
   - C-v6（`design/mockups/c-v6.html`）：画作改为 fixed 在视口底部、向上渐隐的背景层；正文改为直角细线半透明面板（带轻模糊）；三级字号统一为标签 13、数值 28 等宽、补充行 12 等宽；首屏直接是 5 个 KPI，然后是额度、整行宽的热力图、趋势加构成（Token 与按模型）、活动。扫描线、暗角、光晕默认关闭，`?fx=crt` 可加回对比。
 - 2026-11-17 用户：「可以不用这么深的颜色吗，同是深色，淡一点的深色可能有高级感」。c-v6 加了三档底色，`?theme=ink`（原 #0f1218）、`graphite`（#1d2129，现默认）、`slate`（#272c35），截图在 `shots/c-v6-{ink,graphite,slate}-full.png`。等用户定档。
 - 2026-11-17 用户定底色：**slate**（#272c35），c-v6 默认改为 slate。
+- 2026-11-17 S09：C-v7（`design/mockups/c-v7.html`）= C-v6（slate）+ 机器（每台：代号、角色、系统、在线状态、CPU/内存/磁盘条、24h CPU 格点、探针状态）、服务（一个服务一行：状态、24h 在线率、CPU、内存）、Agent 运行时、定时任务、tailnet；"GitHub 贡献"改名为"提交"（含 GitHub、Gitea、本地）。直接读 glassbox.page/1；`?view=public` 显示公开快照的模糊占位。截图 `shots/c-v7-{private,public}-full.png`、`c-v7-mobile.png`。

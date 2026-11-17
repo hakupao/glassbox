@@ -141,7 +141,7 @@
   }],
 
   "machines": [{ … }],   // provisional：id、label: Text、role、os、online、lastSeen、probeLastReport、system、history
-  "services": [{ … }],   // provisional：name: Text、kind、machine、status（up|down|paused|pending|maintenance|unknown）、uptimePct24h、cpuPct、memBytes
+  "services": [{ … }],   // provisional：一个服务一行（hub 在导出前合并容器与监控，打码后无法再合并）；name: Text、kind（container|monitor|both）、machine、status（up|down|paused|pending|maintenance|unknown）、uptimePct24h、cpuPct、memBytes
   "runtimes": [{ … }],   // provisional：machine、agent、version、processes、activeSessions、stale
   "tailnet":  [{ … }],   // provisional：name: Text、os、online、lastSeen
   "jobs":     [{ … }],   // provisional：name: Text、machine、lastRun、lastSuccess、ok
