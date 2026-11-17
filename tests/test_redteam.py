@@ -14,7 +14,7 @@ vp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(vp)
 
 # Values the repo's own privacy scan would flag are assembled here, not stored in the samples.
-PLACEHOLDERS = {"{{USERS}}": "/" + "Users/", "{{GHP}}": "ghp" + "_" + "A1b2C3d4" * 5}
+PLACEHOLDERS = {"{{USERS}}": "/" + "Users/", "{{HOMEDIR}}": "/" + "home/", "{{GHP}}": "ghp" + "_" + "A1b2C3d4" * 5}
 
 
 def context():

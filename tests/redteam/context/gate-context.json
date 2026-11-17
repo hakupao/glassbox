@@ -1,6 +1,21 @@
 {
  "_note": "Fabricated runtime gate context (what hub.export writes). 'other' and 'gitea' are page vocabulary and must not block anything.",
- "privateNames": ["billing-api", "report-worker", "studio-dev", "e1f2a3b", "0a1b2c3", "other", "gitea"],
- "publicRepos": ["sdtm-pedia", "shuttle-path"],
- "publicBranches": ["main", "dev"]
+ "privateNames": [
+  "billing-api",
+  "report-worker",
+  "studio-dev",
+  "e1f2a3b",
+  "0a1b2c3",
+  "other",
+  "gitea"
+ ],
+ "publicRepos": [
+  "sdtm-pedia",
+  "shuttle-path",
+  "dotfiles-sandbox"
+ ],
+ "publicBranches": [
+  "main",
+  "dev"
+ ]
 }

@@ -192,6 +192,36 @@
   "why": "S12: IPv6 in a title"
  },
  {
+  "file": "block-title-ipv4-sentence-end.json",
+  "expect": "block",
+  "reason": "ipv4",
+  "why": "S12: IP at the end of a sentence"
+ },
+ {
+  "file": "block-title-tilde-file.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "S12: ~/file in a title"
+ },
+ {
+  "file": "block-title-home-inside.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "S12: home dir inside a relative path"
+ },
+ {
+  "file": "block-private-project.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "privateProjects: a public repo the owner keeps private"
+ },
+ {
+  "file": "block-config-hidden-missing.json",
+  "expect": "block",
+  "reason": "config hides tailnet",
+  "why": "config hides tailnet but the page does not list it"
+ },
+ {
   "file": "block-title-path.json",
   "expect": "block",
   "reason": "path",
@@ -388,6 +418,24 @@
   "expect": "block",
   "reason": "ipv4",
   "why": "pattern: tailnet IP anywhere"
+ },
+ {
+  "file": "block-html-ip-sentence-end.html",
+  "expect": "block",
+  "reason": "ipv4",
+  "why": "pattern: IP ending a sentence"
+ },
+ {
+  "file": "block-html-script-d-ip.html",
+  "expect": "block",
+  "reason": "ipv4",
+  "why": "SVG exemption must not cover a script variable named d"
+ },
+ {
+  "file": "block-html-data-d-email.html",
+  "expect": "block",
+  "reason": "email",
+  "why": "SVG exemption must not cover data-d attributes"
  },
  {
   "file": "block-html-gb-payload.html",

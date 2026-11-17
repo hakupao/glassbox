@@ -121,7 +121,7 @@ class ExportTest(unittest.TestCase):
 
     def test_gitea_and_blacklisted_projects_are_private(self):
         self.page["activity"][4]["public"] = True                     # a gitea commit flagged public
-        cfg = write_cfg(self.tmp.name, 'privateProjects = ["shuttle-path"]\n' + CFG_TEXT)
+        cfg = write_cfg(self.tmp.name, CFG_TEXT.replace('"dotfiles-sandbox"', '"shuttle-path"'))
         pub, ctx = self.run_export(cfg=cfg)
         self.assertFalse(pub["activity"][4]["public"])
         shuttle = [a for a in pub["activity"] if a["t"].startswith("2026-11-16T21")][0]
@@ -138,7 +138,9 @@ class ExportTest(unittest.TestCase):
                "fix: reply to ops@example.com", "chore: point at 203.0.113.7:8080", f"fix: read {home}",
                "fix: read /srv/data/app.db", "chore: rotate AKIAIOSFODNN7EXAMPLE", "test: password=hunter22",
                "fix: ABC-123 crash", "docs: see https://intranet.example.com/wiki", "docs: Project_Nightjar notes",
-               "fix: owl config", "test: fooqxbar", "chore: report-worker restart", "ci: listen on fd7a:115c:a1e0::1"]
+               "fix: owl config", "test: fooqxbar", "chore: report-worker restart", "ci: listen on fd7a:115c:a1e0::1",
+               "chore: deploy to 203.0.113.7.", "fix: edit ~/notes.md", "docs: move docs/" + "home/index.md",
+               "feat: support s3:// and file:// schemes", "fix: open C:\\Users\\x\\a.txt"]
         for i, t in enumerate(bad):
             a = copy.deepcopy(self.page["activity"][i % 2 * 3])        # alternate a public and a private commit
             a["title"] = t
@@ -148,6 +150,11 @@ class ExportTest(unittest.TestCase):
         self.assertTrue(all("******" in t for t in titles), titles)
         self.assertEqual(self.gate(pub, ctx), [])
         self.assertEqual(titles[0], "feat: sync with ******")
+        for t in bad:                                   # the gate rejects every original title
+            self.assertTrue(vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), ctx,
+                                    vp.load_toml(Path(self.tmp.name) / "public.toml")).title_problems(t), t)
+        for ok in ("fix: v1.2.3 bump at 10:30", "refactor: split a/b/c w/ tests and/or docs"):
+            self.assertEqual(ex.scrub_title(ok, [], {}), ok)
         self.assertEqual(ex.scrub_title("docs: nightjars and owls", ["nightjar", "owl"], {"nightjar": "word"}),
                          "docs: nightjars and owls")
 

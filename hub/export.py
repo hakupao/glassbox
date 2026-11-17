@@ -53,12 +53,13 @@ SCRUB = [
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}"
                r"|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"),
     re.compile(r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|auth)\s*[=:]\s*\S+"),
-    re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://\S+"),                                   # any URL
+    re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://\S*"),                                   # any URL
     re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),                     # e-mail
-    re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?![\w.])"),               # IPv4
+    re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?!\w|\.\d)"),             # IPv4
     re.compile(r"(?i)\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b|\b(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}\b)?"),  # IPv6
     re.compile(r"(?:[A-Za-z]:\\|\\\\)[^\s'\"`)]*"),                                    # Windows path
-    re.compile(r"(?<![\w.])(?:~|\.{1,2})?/[\w.-]+(?:/[\w.-]*)+"),                      # unix path
+    re.compile(r"\S*(?:/Users/|/home/|/Volumes/|/root/|/private/|/mnt/|/srv/|/var/)\S*"),  # well-known dirs
+    re.compile(r"(?<![\w.~])(?:~|\.{1,2})?/[\w.~-]+(?:/\S*)?"),                         # rooted path
     re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b"),                                             # ticket id
     re.compile(r"\b[0-9a-f]{32,}\b"),                                                  # long hex blobs
 ]

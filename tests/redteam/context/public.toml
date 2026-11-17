@@ -3,6 +3,7 @@ privateTitles = "redacted"
 hidden = ["tailnet"]
 keywords = ["project-nightjar"]
 githubOwners = ["example-owner"]
+privateProjects = ["dotfiles-sandbox"]
 
 [allow]
 "services[].name" = ["gitea", "status-page"]

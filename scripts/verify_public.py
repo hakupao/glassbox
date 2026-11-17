@@ -45,7 +45,7 @@ GROUP_FIELD = "today.byProject[].project"
 
 PATTERNS = {
     "email": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"),
-    "ipv4": re.compile(r"(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\w.])"),
+    "ipv4": re.compile(r"(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\w|\.\d)"),
     "ipv6": re.compile(r"(?i)(?<![\w:])(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}(?![\w:])"
                        r"|(?<![\w:])(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?(?![\w:])"),
     "path": re.compile(r"(?:/Users/|/home/|/Volumes/|/root/|/private/|/mnt/|/srv/|/var/folders/"
@@ -55,16 +55,18 @@ PATTERNS = {
                          r"|sk-[A-Za-z0-9_-]{16,}|xox[abprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"
                          r"|(?i:\b(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*[\"']?[^\s\"'<>{}]{4,})"),
 }
-TITLE_EXTRA = {
+TITLE_EXTRA = {                  # keys differ from PATTERNS: both sets apply to titles
     "ticket": re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b"),
     "url": re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://"),
-    "path": re.compile(r"(?<![\w.])(?:~|\.{1,2})?/[\w.-]+/[\w.-]+"),
+    "rooted path": re.compile(r"(?<![\w.])(?:~|\.{1,2})?/[\w.-]+/[\w.-]+"),
 }
 ABS_URL = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>()\\]*")
 REL_URL = re.compile(r"(?i)(?:\b(?:src|href|srcset|action|data|poster|xlink:href)\s*=\s*[\"']?\s*"
                      r"|url\(\s*[\"']?\s*|@import\s+[\"']?\s*|\bimport\s*\(\s*[\"']|\bfetch\s*\(\s*[\"'])//")
 XMLNS = re.compile(r"http://www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink|XML/1998/namespace)")
-SVG_NUMBERS = re.compile(r"(?i)\b(?:d|points|viewBox|transform)\s*=\s*\"[^\"]*\"")
+# Inside SVG shape tags only, number-only geometry ("M1.5.5.25 ...") is not an IP address.
+SVG_TAG = re.compile(r"(?i)<(?:svg|path|polyline|polygon|g|use|rect|circle|ellipse|line)\b[^>]*>")
+SVG_GEOMETRY = re.compile(r"(?i)(?<![\w-])(?:d|points|viewBox|transform)\s*=\s*\"[-0-9\s.,+eEMmLlHhVvCcSsQqTtAaZz()]*\"")
 GB_MARK = re.compile(r"window\.GB\s*=\s*")
 
 
@@ -114,7 +116,10 @@ class Gate:
             raise SetupError(f"terms file: unknown match mode(s) {sorted(bad)}")
         self.allow = {k: set(v) for k, v in config.get("allow", {}).items()}
         ctx = context or {}
-        self.public_repos = set(ctx.get("publicRepos", [])) | self.allow.get("activity[].repo", set())
+        self.private_projects = set(config.get("privateProjects", []))
+        self.hidden = set(config.get("hidden", []))
+        self.public_repos = (set(ctx.get("publicRepos", [])) | self.allow.get("activity[].repo", set())) \
+            - self.private_projects
         for f in ("activity[].repo", GROUP_FIELD):
             self.allow.setdefault(f, set()).update(self.public_repos)
         self.allow.setdefault("activity[].branch", set()).update(ctx.get("publicBranches", []))
@@ -130,7 +135,8 @@ class Gate:
         runtime = [n for n in ctx.get("privateNames", [])
                    if norm(n) and norm(n) not in vocab and n not in allowed_values]
         words = [t for t in terms.get("terms", []) if t and t.casefold() not in allow_words]
-        self.names = sorted(set(words) | set(runtime) | set(self.keywords), key=len, reverse=True)
+        self.names = sorted(set(words) | set(runtime) | set(self.keywords) | self.private_projects,
+                            key=len, reverse=True)
         self.word_re, self.long = self._compile(self.names)
 
     def _compile(self, names):
@@ -166,9 +172,9 @@ class Gate:
                 if norm(h) not in seen:
                     seen.add(norm(h))
                     bad.append(f"{where}: private name {hide(h)} ({how})")
-            scan = SVG_NUMBERS.sub('""', t) if is_html else t
+            no_svg = SVG_TAG.sub(lambda m: SVG_GEOMETRY.sub('d=""', m.group(0)), t) if is_html else t
             for kind, rx in PATTERNS.items():
-                for m in rx.finditer(scan):
+                for m in rx.finditer(no_svg if kind == "ipv4" else t):
                     if (kind, m.group(0)) not in seen:
                         seen.add((kind, m.group(0)))
                         bad.append(f"{where}: {kind} {hide(m.group(0))} ({how})")
@@ -311,6 +317,8 @@ class Gate:
         if sum(1 for r in rows if isinstance(r, dict) and r.get("project") == MASK_PRIVATE) > 1:
             bad.append(f"{where}: today.byProject: more than one merged private row")
         hidden = page.get("hidden") if isinstance(page.get("hidden"), list) else []
+        for h in sorted(self.hidden - set(h for h in hidden if isinstance(h, str))):
+            bad.append(f"{where}: config hides {h} but the page does not")
         for h in (h for h in hidden if isinstance(h, str)):
             block = today.get("byProject") if h == "byProject" else page.get(h)
             if block not in ([], None):
