@@ -32,7 +32,8 @@
       "note": "GitHub collector verified on real account (23 public repos, 2688 commits; privacy cross-checked via gh api). Gitea tested on a fake API only — needs real read-only tokens at deploy time"
     },
     "S08": {
-      "status": "todo"
+      "status": "review",
+      "note": "Beszel + Kuma verified read-only against the real instances (2 systems, 148 points, 19 containers, 12 monitors); Docker proxy and tailscale tested on fakes only"
     },
     "S09": {
       "status": "todo"
@@ -74,7 +75,10 @@
       "install the pre-commit privacy hook (.git/hooks is not versioned) on every clone",
       "Gitea read-only tokens for both instances; GitHub fine-grained read-only token for the hub",
       "verify Gitea /user/repos includes organization repositories on both real instances; else add /orgs/{org}/repos",
-      "start the deploy hub from a fresh database (schema_version guard refuses old dev DBs)"
+      "start the deploy hub from a fresh database (schema_version guard refuses old dev DBs)",
+      "install Beszel agents on the dev machine, the work machine and the Gitea machine (Beszel lists only the deploy host and its VM today)",
+      "install Tailscale on the dev machine (not present) — the probe pushes over the tailnet",
+      "docker-socket-proxy for container run state (Beszel gives cpu/mem only)"
     ]
   }
 }

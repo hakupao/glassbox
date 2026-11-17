@@ -13,6 +13,10 @@ Config (TOML, optional; defaults shown):
     tz = "Asia/Tokyo"
     [github]  login = "...", token_env = "GITHUB_TOKEN"
     [[gitea]] name = "...", url = "https://...", user = "...", token_env = "..."
+    [beszel]  url = "...", user = "...", password_env = "BESZEL_PASSWORD"; [beszel.map] "<system name>" = "C"
+    [kuma]    url = "...", slug = "...", machine = "C"
+    [docker]  url = "http://docker-proxy:2375", machine = "C"
+    [tailscale] socket = "/var/run/tailscale/tailscaled.sock"   # or cli = "tailscale"
 """
 import argparse
 import secrets
@@ -47,7 +51,7 @@ def main(argv=None):
     rb = msub.add_parser("rebaseline")
     rb.add_argument("id")
     c = sub.add_parser("collect")
-    c.add_argument("what", nargs="?", default="all", choices=["github", "gitea", "all"])
+    c.add_argument("what", nargs="?", default="all", choices=["github", "gitea", "monitors", "all"])
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     conn = db.connect(cfg["db"])
@@ -69,8 +73,11 @@ def main(argv=None):
             sys.exit(f"no machine {args.id}")
         print(f"machine {args.id}: next report may rebaseline (valid 1 hour)")
     elif args.cmd == "collect":
-        from . import sources
-        sources.collect(conn, cfg, args.what)
+        from . import monitors, sources
+        if args.what in ("github", "gitea", "all"):
+            sources.collect(conn, cfg, args.what)
+        if args.what in ("monitors", "all"):
+            print("monitors:", monitors.collect(conn, cfg))
 
 
 if __name__ == "__main__":

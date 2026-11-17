@@ -2,7 +2,7 @@
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = "2"   # bump on any table change; an older database refuses to open (no silent breakage)
+SCHEMA_VERSION = "3"   # bump on any table change; an older database refuses to open (no silent breakage)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS machines (
@@ -45,6 +45,16 @@ CREATE TABLE IF NOT EXISTS commits (
   PRIMARY KEY (source, hash, machine)
 );
 CREATE INDEX IF NOT EXISTS commits_t ON commits(t);
+CREATE TABLE IF NOT EXISTS machine_state (machine TEXT PRIMARY KEY, status TEXT, uptime INTEGER, updated REAL);
+CREATE TABLE IF NOT EXISTS machine_stats (
+  machine TEXT, t TEXT, cpu REAL, mem_used REAL, mem_total REAL, disk_used REAL, disk_total REAL,
+  PRIMARY KEY (machine, t)
+);
+CREATE TABLE IF NOT EXISTS services (
+  kind TEXT, name TEXT, machine TEXT, status TEXT, uptime24 REAL, cpu REAL, mem REAL, updated REAL,
+  PRIMARY KEY (kind, name)
+);
+CREATE TABLE IF NOT EXISTS tailnet (name TEXT PRIMARY KEY, os TEXT, online INTEGER, last_seen TEXT);
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS warnings (t REAL, machine TEXT, kind TEXT, detail TEXT);
 """
