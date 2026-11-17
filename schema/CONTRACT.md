@@ -69,7 +69,7 @@
   "git": [{                           // 快照：每个项目近 60 天内、作者是本人的提交
     "project": "p_…", "remote": true,  // remote=false 表示仓库没有远端
     "commits": [{"t": "…", "hash": "4be0d71…（完整 40 位）", "branch": "main", "title": "docs: …",
-                 "pushed": true}]           // false = 还没推到任何远端；hub 只对这类和无远端项目保留 local 来源
+                 "pushed": true}]           // false = 还没推到任何远端；远端来源没有同 hash 时，hub 用 local 兜底（§2.1）
   }],
   "jobs": [{"name": "backup", "lastRun": "…", "lastSuccess": "…", "ok": true}]
 }
@@ -153,7 +153,10 @@
 
 ### 2.1 hub 的计算规则
 
-- **代码活动按 hash 跨来源去重**，同一个提交只保留一条，来源优先级 github > gitea > local。local 来源只保留 `remote=false` 的项目的提交，以及没有推送到远端的提交。
+- **代码活动按 hash 跨来源去重**，同一个提交只保留一条，来源优先级 github > gitea > local。
+  - **local 兜底**（2026-11-17 用户决定）：有远端、已经推送、但 GitHub / Gitea 采集里找不到同 hash 的本地提交（私有仓库、非默认分支、没配 token 等），也计入 `activity`、`contributions` 和 `code.commits`，来源记为 `local`。
+  - 同一个 hash 只要 github 或 gitea 来源里有，就只保留那一条；`machine` 从同 hash 的 local 行补上。
+  - 这取代了原来"local 只保留无远端项目和未推送提交"的规则。
 - `contributions.days[].count` = 当天去重后的提交数。它不是 GitHub 官方的贡献数，所以 S10 要把 c-v6 的标题"GitHub 贡献"改成"提交"一类的说法。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
 - `trend` 的最后一项必须是今天，它的值与 `today` 一致。
 - 其余规则（`hub/page.py`）：

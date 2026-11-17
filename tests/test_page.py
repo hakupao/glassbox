@@ -100,29 +100,31 @@ class PageTest(unittest.TestCase):
         commit(c, "local", H, "2026-11-16T01:00:00Z", machine="B", project="p_pub")      # same commit, pushed
         commit(c, "gitea", g, "2026-11-16T02:00:00Z", repo="app", remote="gitea.test/team/app", private=1)
         commit(c, "local", g, "2026-11-16T02:00:00Z", machine="A", repo="app", remote="gitea.test/team/app", pushed=0)
-        commit(c, "local", l1, "2026-11-16T03:00:00Z", machine="A", project="p_pub")       # pushed, has a remote: dropped
+        commit(c, "local", l1, "2026-11-16T03:00:00Z", machine="A", project="p_pub")       # pushed, no collector has it: local fallback
         commit(c, "local", l2, "2026-11-16T04:00:00Z", machine="A", project="p_pub", pushed=0)
         commit(c, "local", l3, "2026-11-16T05:00:00Z", machine="A", repo="notebook", remote=None, project="p_loc")
         commit(c, "github", b, "2025-11-15T00:00:00Z")                                      # before the window
         p = self.build()
         act = p["activity"]
-        self.assertEqual([a["hash"] for a in act], [l3, l2, g, H])
+        self.assertEqual([a["hash"] for a in act], [l3, l2, l1, g, H])
+        self.assertEqual(sum(a["hash"] == H for a in act), 1)                              # github copy only
         top = {a["hash"]: a for a in act}
         self.assertEqual((top[H]["source"], top[H]["machine"], top[H]["public"], top[H]["pushed"]), ("github", "B", True, True))
         self.assertEqual((top[g]["source"], top[g]["public"], top[g]["machine"]), ("gitea", False, "A"))
         self.assertEqual((top[l2]["source"], top[l2]["pushed"], top[l2]["public"], top[l2]["url"]), ("local", False, True, None))
         self.assertEqual((top[l3]["public"], top[l3]["pushed"]), (False, True))         # no remote: private
+        self.assertEqual((top[l1]["source"], top[l1]["pushed"], top[l1]["machine"], top[l1]["url"]), ("local", True, "A", None))
         self.assertEqual(top[H]["t"], "2026-11-16T10:00:00+09:00")
         cont = p["contributions"]
-        self.assertEqual(cont["total"], 4)
+        self.assertEqual(cont["total"], 5)
         self.assertEqual(cont["total"], sum(d["count"] for d in cont["days"]))
         self.assertEqual(cont["days"][0]["date"], "2025-11-16")
         self.assertEqual(date.fromisoformat(cont["days"][0]["date"]).isoweekday(), 7)     # a Sunday
         self.assertEqual(cont["days"][-1]["date"], "2026-11-17")
-        self.assertEqual(next(d for d in cont["days"] if d["date"] == "2026-11-16")["count"], 4)
+        self.assertEqual(next(d for d in cont["days"] if d["date"] == "2026-11-16")["count"], 5)
         repos = {r["repo"]: r for r in p["code"]["repos"]}
-        self.assertEqual((repos["demo"]["commits"], repos["demo"]["unpushed"], repos["demo"]["sources"]), (2, 1, ["github", "local"]))
-        self.assertEqual(len(p["code"]["commits"]), 4)
+        self.assertEqual((repos["demo"]["commits"], repos["demo"]["unpushed"], repos["demo"]["sources"]), (3, 1, ["github", "local"]))
+        self.assertEqual(len(p["code"]["commits"]), 5)
 
     def test_activity_is_capped_newest_first(self):
         for i in range(60):

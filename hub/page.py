@@ -196,9 +196,9 @@ def _quota(conn, cfg, iso, warnings):
 
 # ------------------------------------------------------------------------------ code activity
 def _commits(conn, since_utc):
-    """Commits deduplicated by hash across sources (CONTRACT §2.1): github > gitea > local, and
-    local rows count only for remote-less projects or commits not pushed anywhere. A winner from
-    github / gitea borrows the machine of a local copy of the same commit."""
+    """Commits deduplicated by hash across sources (CONTRACT §2.1): github > gitea > local. A local
+    commit counts even when it was pushed but no collector has it (private repo, other branch, no
+    token): the local fallback. A winner from github / gitea borrows the machine of a local copy."""
     vis = dict(conn.execute("SELECT key, visibility FROM projects"))
     by_hash = defaultdict(list)
     for row in conn.execute(
@@ -208,11 +208,8 @@ def _commits(conn, since_utc):
     out = []
     for h, rows in by_hash.items():
         machines = sorted({r[2] for r in rows if r[0] == "local" and r[2]})
-        eligible = [r for r in rows if r[0] != "local" or r[5] is None or not r[10]]
-        if not eligible:
-            continue
         src, _, mach, t, repo, remote, project, branch, title, url, pushed, private = min(
-            eligible, key=lambda r: (SOURCE_RANK.get(r[0], 9), r[2]))
+            rows, key=lambda r: (SOURCE_RANK.get(r[0], 9), r[2]))
         if src == "local":
             public = vis.get(project) == "public"
         else:
