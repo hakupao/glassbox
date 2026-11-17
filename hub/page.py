@@ -254,7 +254,27 @@ def _repos(commits, iso):
 
 
 # ------------------------------------------------------------------------------ machines and services
-def _machines(conn, cfg, now_ts, iso):
+def _today_by_machine(conn, tz, today):
+    """machine -> [{agent, requests, unpricedRequests, costUsd, sessions}] for the local day
+    `today` (CONTRACT §2.2, provisional). Cost sums priced rows only, as everywhere (§0)."""
+    lo, hi = (datetime.combine(d, datetime.min.time(), tz).astimezone(UTC).strftime("%Y-%m-%dT%H:00:00Z")
+              for d in (today, today + timedelta(days=1)))
+    acc = defaultdict(lambda: {"requests": 0, "unpricedRequests": 0, "costUsd": 0.0, "sessions": 0})
+    for m, agent, req, unp, cost in conn.execute(
+            "SELECT machine, agent, SUM(requests), SUM(unpriced), SUM(cost) FROM usage "
+            "WHERE hour >= ? AND hour < ? GROUP BY machine, agent", (lo, hi)):
+        a = acc[(m, agent)]
+        a.update(requests=req or 0, unpricedRequests=unp or 0, costUsd=_r(cost or 0.0))
+    for m, agent, n in conn.execute(
+            "SELECT machine, agent, SUM(count) FROM sessions WHERE hour >= ? AND hour < ? GROUP BY machine, agent", (lo, hi)):
+        acc[(m, agent)]["sessions"] = n or 0
+    out = defaultdict(list)
+    for (m, agent), a in sorted(acc.items(), key=lambda kv: (kv[0][0], AGENTS.index(kv[0][1]) if kv[0][1] in AGENTS else 9, kv[0][1])):
+        out[m].append({"agent": agent, **a})
+    return out
+
+
+def _machines(conn, cfg, now_ts, iso, by_agent=None):
     over = cfg.get("machines") or {}
     reg = {m: (role, os_, label, last) for m, role, os_, label, last in
            conn.execute("SELECT id, role, os, label, last_report FROM machines")}
@@ -283,6 +303,7 @@ def _machines(conn, cfg, now_ts, iso):
             "probeLastReport": iso(last) if last is not None else None, "system": system,
             "history": [{"t": iso(t), "cpuPct": cpu, "memPct": pct(mu, mt), "diskPct": pct(du, dt)}
                         for t, cpu, mu, mt, du, dt in pts if t >= since and cpu is not None],
+            "todayByAgent": (by_agent or {}).get(mid, []),      # provisional (CONTRACT §2.2)
         })
     return out
 
@@ -386,7 +407,7 @@ def build(conn, cfg, now=None):
         "quota": quota,
         "contributions": contributions,
         "activity": [_activity_item(c, iso) for c in commits[:ACTIVITY_MAX]],
-        "machines": _machines(conn, cfg, now_ts, iso),
+        "machines": _machines(conn, cfg, now_ts, iso, _today_by_machine(conn, tz, today)),
         "services": _services(conn, cfg),
         "runtimes": runtimes,
         "tailnet": tailnet,

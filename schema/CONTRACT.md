@@ -191,6 +191,7 @@
 
 已有块的扩充（同样是 *provisional*）：
 - `machines[].history[]` 增加 `diskPct`。history 覆盖近 24 小时，每 20 分钟一个点（来自 Beszel）。
+- `machines[].todayByAgent`：`[{"agent", "requests", "unpricedRequests", "costUsd", "sessions"}]`，这台机器今天（按 hub 时区切日）按 agent 的用量，来自 `usage` / `sessions` 表按 machine 汇总；`costUsd` 只累加已定价部分（§0）。今天没有用量的机器为 `[]`。
 - `contributions.githubOfficialTotal`：采集过 GitHub 日历后才给出。
 
 ## 3. 公开版不变量（导出器构建、闸门检查，任何一条不满足就拒绝发布）

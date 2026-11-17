@@ -84,7 +84,10 @@ function normalize(raw){
       return {id: m.id == null ? '?' : String(m.id), label: text(m.label), role: str(m.role), os: str(m.os), online: m.online === true,
         lastSeen: str(m.lastSeen), probeLastReport: str(m.probeLastReport),
         system: s ? {cpuPct: num(s.cpuPct), memUsed: num(s.memUsed), memTotal: num(s.memTotal), diskUsed: num(s.diskUsed), diskTotal: num(s.diskTotal), uptimeSec: numOrNull(s.uptimeSec)} : null,
-        history: arr(m.history).map(h => ({t: str(h.t), cpuPct: numOrNull(h.cpuPct), memPct: numOrNull(h.memPct), diskPct: numOrNull(h.diskPct)})).filter(h => h.t)};
+        history: arr(m.history).map(h => ({t: str(h.t), cpuPct: numOrNull(h.cpuPct), memPct: numOrNull(h.memPct), diskPct: numOrNull(h.diskPct)})).filter(h => h.t),
+        /* provisional (CONTRACT §2.2): null when absent, e.g. in the public snapshot */
+        todayByAgent: Array.isArray(m.todayByAgent) ? arr(m.todayByAgent).map(a => ({agent: str(a.agent) || 'other', requests: num(a.requests),
+          unpricedRequests: num(a.unpricedRequests), costUsd: num(a.costUsd), sessions: num(a.sessions)})) : null};
     }),
     services: arr(g.services).map(s => ({name: text(s.name), kind: str(s.kind), machine: str(s.machine), status: str(s.status) || 'unknown',
       uptimePct24h: numOrNull(s.uptimePct24h), cpuPct: numOrNull(s.cpuPct), memBytes: numOrNull(s.memBytes)})),

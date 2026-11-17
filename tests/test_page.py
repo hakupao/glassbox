@@ -172,6 +172,27 @@ class PageTest(unittest.TestCase):
         self.assertIsNone(m["A"]["system"])
         self.assertEqual(m["B"]["probeLastReport"], "2026-11-17T10:44:00+09:00")
 
+    def test_machine_today_by_agent(self):
+        c = self.conn
+        c.execute("INSERT INTO machines(id, role, os) VALUES('A', 'dev', 'macos')")
+        c.execute("INSERT INTO machines(id, role, os) VALUES('B', 'work', 'windows')")
+        c.execute("INSERT INTO machines(id, role, os) VALUES('C', 'deploy', 'linux')")
+        # NOW is 2026-11-17 11:00 in Tokyo; the local day starts at 2026-11-16T15:00Z
+        usage(c, "2026-11-16T14:00:00Z", 100, machine="A", cost=9.0)                     # yesterday in Tokyo
+        usage(c, "2026-11-16T15:00:00Z", 3, machine="A", cost=1.5)
+        usage(c, "2026-11-17T01:00:00Z", 2, machine="A", model="m2", cost=0.5)
+        usage(c, "2026-11-17T01:00:00Z", 4, machine="A", agent="codex", model="gpt", cost=None)   # unpriced
+        usage(c, "2026-11-17T00:00:00Z", 5, machine="B", cost=2.0)
+        c.execute("INSERT INTO sessions VALUES('A', '2026-11-17T00:00:00Z', 'claude-code', 'p_pub', 2)")
+        c.execute("INSERT INTO sessions VALUES('A', '2026-11-16T10:00:00Z', 'claude-code', 'p_pub', 7)")   # yesterday
+        c.execute("INSERT INTO sessions VALUES('A', '2026-11-17T01:00:00Z', 'codex', 'p_pub', 1)")
+        m = {x["id"]: x["todayByAgent"] for x in self.build()["machines"]}
+        self.assertEqual(m["A"], [
+            {"agent": "claude-code", "requests": 5, "unpricedRequests": 0, "costUsd": 2.0, "sessions": 2},
+            {"agent": "codex", "requests": 4, "unpricedRequests": 4, "costUsd": 0.0, "sessions": 1}])
+        self.assertEqual(m["B"], [{"agent": "claude-code", "requests": 5, "unpricedRequests": 0, "costUsd": 2.0, "sessions": 0}])
+        self.assertEqual(m["C"], [])
+
     def test_machines_join_beszel_and_config(self):
         c, t = self.conn, NOW.timestamp()
         c.execute("INSERT INTO machine_state VALUES('C', 'up', 3600, ?)", (t - 30,))

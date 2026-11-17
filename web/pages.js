@@ -152,10 +152,10 @@ function runtimeRows(list, withMachine = true){
   return `<tr>${withMachine ? `<th>${esc(t('rt.machine'))}</th>` : ''}<th>${esc(t('rt.agent'))}</th><th class="v">${esc(t('rt.version'))}</th><th class="v">${esc(t('rt.processes'))}</th><th class="v">${esc(t('rt.active'))}</th></tr>` +
     list.map(r => `<tr${r.stale ? ' style="opacity:.45" title="' + esc(t('rt.stale')) + '"' : ''}>${withMachine ? `<td class="k">${G.code(r.machine)}</td>` : ''}<td class="n">${G.agTag(r.agent)}</td><td class="v">${bd('v' + esc(r.version || '?'), 'c-dim')}</td><td class="v">${F.n(r.processes)}</td><td class="v ${r.activeSessions ? 'c-ok' : ''}">${r.activeSessions && !r.stale ? '<span class="st live" style="width:6px;height:6px;background:var(--ok);margin-right:6px"></span>' : ''}${F.n(r.activeSessions)}</td></tr>`).join('');
 }
-function jobRows(list, full){
+function jobRows(list, full, withMachine = true){
   if(!list.length) return `<tr><td class="k">${esc(t('none'))}</td></tr>`;
-  const head = full ? `<tr><th>${esc(t('job.name'))}</th><th>${esc(t('job.result'))}</th><th>${esc(t('job.machine'))}</th><th class="v">${esc(t('job.lastRun'))}</th><th class="v">${esc(t('job.lastSuccess'))}</th></tr>` : '';
-  return head + list.map(j => `<tr><td class="n">${T(j.name)}</td><td>${bd(esc(t(j.ok ? 'job.ok' : 'job.fail')), j.ok ? 'c-ok' : 'c-bad', true)}</td><td class="k">${j.machine ? G.code(j.machine) : '—'}</td>${full ? `<td class="v" title="${esc(F.full(j.lastRun))}">${esc(F.ago(j.lastRun))}</td>` : ''}<td class="v" title="${esc(F.full(j.lastSuccess))}">${j.lastSuccess ? esc(F.ago(j.lastSuccess)) : esc(t('job.never'))}</td></tr>`).join('');
+  const head = full ? `<tr><th>${esc(t('job.name'))}</th><th>${esc(t('job.result'))}</th>${withMachine ? `<th>${esc(t('job.machine'))}</th>` : ''}<th class="v">${esc(t('job.lastRun'))}</th><th class="v">${esc(t('job.lastSuccess'))}</th></tr>` : '';
+  return head + list.map(j => `<tr><td class="n">${T(j.name)}</td><td>${bd(esc(t(j.ok ? 'job.ok' : 'job.fail')), j.ok ? 'c-ok' : 'c-bad', true)}</td>${withMachine ? `<td class="k">${j.machine ? G.code(j.machine) : '—'}</td>` : ''}${full ? `<td class="v" title="${esc(F.full(j.lastRun))}">${esc(F.ago(j.lastRun))}</td>` : ''}<td class="v" title="${esc(F.full(j.lastSuccess))}">${j.lastSuccess ? esc(F.ago(j.lastSuccess)) : esc(t('job.never'))}</td></tr>`).join('');
 }
 
 /* stacked daily cell chart: days [{date, parts:{key:value}}], series [{key,label,color}] bottom-up */
@@ -548,44 +548,101 @@ function hourCount(w, hours){
 }
 
 /* ================================================================== #/machines */
-P.machines = () => {
+/* per-machine roll-ups shared by the summary table, the header badges and the sections */
+function machineFacts(m){
+  const rts = D.runtimes.filter(r => r.machine === m.id), live = rts.filter(r => !r.stale);
+  const svcs = D.services.filter(x => x.machine === m.id), jobs = D.jobs.filter(j => j.machine === m.id);
+  const tba = m.todayByAgent;                         /* null when the field is absent (public snapshot) */
+  return {rts, svcs, jobs, tba,
+    agents: rts.length, proc: sum(rts.map(r => r.processes)), active: sum(live.map(r => r.activeSessions)),
+    req: tba && tba.length ? sum(tba.map(a => a.requests)) : null, cost: tba && tba.length ? sum(tba.map(a => a.costUsd)) : null,
+    up: svcs.filter(x => x.status === 'up').length, down: svcs.filter(x => x.status === 'down').length};
+}
+const HID = k => D.hidden.has(k);
+const dash = '—';
+function agentSection(m, f){
+  if(HID('runtimes')) return `<div class="hiddenpn">${esc(t('hidden.online'))}</div>`;
+  const by = new Map();
+  f.rts.forEach(r => by.set(r.agent, {agent: r.agent, rt: r, today: null}));
+  (f.tba || []).forEach(a => { const x = by.get(a.agent) || {agent: a.agent, rt: null, today: null}; x.today = a; by.set(a.agent, x); });
+  const rows = [...by.values()].sort((x, y) => (AGENTS.indexOf(x.agent) + 9) % 9 - (AGENTS.indexOf(y.agent) + 9) % 9);
+  if(!rows.length) return G.empty('mach.noAgent');
+  const today = f.tba !== null;
+  return `<div class="tbw"><table class="tb"><tr><th>${esc(t('rt.agent'))}</th><th class="v hide-s">${esc(t('rt.version'))}</th><th class="v">${esc(t('rt.processes'))}</th><th class="v">${esc(t('rt.active'))}</th><th>${esc(t('rt.state'))}</th>` +
+    (today ? `<th class="v hide-s">${esc(t('mach.todayReq'))}</th><th class="v hide-s">${esc(t('mach.todaySes'))}</th><th class="v">${esc(t('mach.todayCost'))}</th>` : '') + `</tr>` +
+    rows.map(({agent, rt, today: a}) => `<tr${rt && rt.stale ? ' style="opacity:.55"' : ''}><td class="n">${G.agTag(agent)}</td>
+      <td class="v hide-s">${rt ? bd('v' + esc(rt.version || '?'), 'c-dim') : dash}</td><td class="v">${rt ? F.n(rt.processes) : dash}</td>
+      <td class="v ${rt && rt.activeSessions && !rt.stale ? 'c-ok' : ''}">${rt ? (rt.activeSessions && !rt.stale ? '<span class="st live" style="width:6px;height:6px;background:var(--ok);margin-right:6px"></span>' : '') + F.n(rt.activeSessions) : dash}</td>
+      <td>${rt ? `<span${rt.stale ? ` title="${esc(t('rt.stale'))}"` : ''}>${bd(esc(t(rt.stale ? 'rt.staleShort' : 'rt.fresh')), rt.stale ? 'c-warn' : 'c-ok', true)}</span>` : bd(esc(t('rt.noRuntime')), 'c-dim')}</td>` +
+      (today ? `<td class="v hide-s">${a ? F.n(a.requests) : dash}</td><td class="v hide-s">${a ? F.n(a.sessions) : dash}</td><td class="v">${a ? F.usd(a.costUsd) + (a.unpricedRequests ? ` <span class="c-warn" title="${esc(t('today.unpriced', {n: F.n(a.unpricedRequests)}))}">*</span>` : '') : dash}</td>` : '') + `</tr>`).join('') + `</table></div>`;
+}
+function taskSection(m, f){
+  let h = HID('jobs') ? `<div class="hiddenpn">${esc(t('hidden.online'))}</div>` : `<table class="tb">${jobRows(f.jobs, true, false)}</table>`;
+  h += `<div class="sep" style="height:12px"></div><div class="ph sm"><h3>${esc(t('mach.svcSec'))}</h3><span class="r">${!HID('services') && f.svcs.length ? `<a class="more" href="${G.href('services', {machine: m.id})}">${esc(t('mach.viewSvc'))}</a>` : ''}</span></div>`;
+  if(HID('services')) return h + `<div class="hiddenpn">${esc(t('hidden.online'))}</div>`;
+  if(!f.svcs.length) return h + G.empty('mach.noSvc');
+  const kinds = k => f.svcs.filter(x => x.kind === k || (k === 'container' && x.kind === 'both')).length;
+  return h + `<div class="bds">${bd(esc(t('svc.count', {n: f.svcs.length})), 'c-hi')}${bd(esc(t('mach.svcUp', {n: f.up})), 'c-ok', true)}${f.down ? bd(esc(t('svc.bad', {n: f.down})), 'c-bad', true) : ''}${f.svcs.length - f.up - f.down ? bd(esc(t('mach.svcOther', {n: f.svcs.length - f.up - f.down})), 'c-warn', true) : ''}${bd(esc(t('mach.svcContainers', {n: kinds('container')})), 'c-dim')}${bd(esc(t('mach.svcMonitors', {n: f.svcs.filter(x => x.kind === 'monitor' || x.kind === 'both').length})), 'c-dim')}</div>`;
+}
+function summaryTable(){
+  const today = D.machines.some(m => m.todayByAgent !== null);
+  const cell = (hid, v) => hid ? `<span class="c-dim">${dash}</span>` : v;
+  return `<div class="tbw"><table class="tb"><tr><th>${esc(t('svc.machine'))}</th><th class="v">${esc(t('mach.colAgents'))}</th><th class="v hide-s">${esc(t('rt.processes'))}</th><th class="v">${esc(t('rt.active'))}</th>` +
+    (today ? `<th class="v hide-s">${esc(t('mach.todayReq'))}</th><th class="v">${esc(t('mach.todayCost'))}</th>` : '') + `<th class="v">${esc(t('mach.colJobs'))}</th><th class="v">${esc(t('mach.colSvc'))}</th></tr>` +
+    D.machines.map(m => { const f = machineFacts(m);
+      return `<tr><td class="n"><a class="mlink" href="${G.href('machines', {m: m.id})}">${G.code(m.id)} ${T(m.label)}</a> <span class="st ${m.online ? 'up' : 'off'}" style="width:6px;height:6px;vertical-align:middle;background:${m.online ? 'var(--ok)' : 'none'};border:1px solid ${m.online ? 'var(--ok)' : 'var(--dim)'}"></span></td>
+        <td class="v">${cell(HID('runtimes'), f.agents ? F.n(f.agents) : dash)}</td><td class="v hide-s">${cell(HID('runtimes'), f.agents ? F.n(f.proc) : dash)}</td><td class="v ${f.active ? 'c-ok' : ''}">${cell(HID('runtimes'), f.agents ? F.n(f.active) : dash)}</td>` +
+        (today ? `<td class="v hide-s">${f.req == null ? dash : F.n(f.req)}</td><td class="v">${f.cost == null ? dash : F.usd(f.cost)}</td>` : '') +
+        `<td class="v">${cell(HID('jobs'), f.jobs.length ? F.n(f.jobs.length) : dash)}</td><td class="v ${f.down ? 'c-bad' : ''}">${cell(HID('services'), f.svcs.length ? `<a class="more nomark" href="${G.href('services', {machine: m.id})}">${F.n(f.svcs.length)}</a>` + (f.down ? ` <span class="c-bad">(${F.n(f.down)})</span>` : '') : dash)}</td></tr>`; }).join('') + `</table></div>`;
+}
+function machineBadges(f){
+  const out = [];
+  if(!HID('runtimes')) out.push(f.agents ? bd(esc(t('mach.badgeAgents', {a: F.n(f.agents), p: F.n(f.proc), s: F.n(f.active)})), f.active ? 'c-fg' : 'c-dim', true, '', f.active > 0) : bd(esc(t('mach.noAgent')), 'c-dim'));
+  const parts = [];
+  if(!HID('jobs')) parts.push(t('mach.nJobs', {n: F.n(f.jobs.length)}));
+  if(!HID('services')) parts.push(t('mach.nSvc', {n: F.n(f.svcs.length)}));
+  if(parts.length) out.push(bd(esc(parts.join(' · ')), f.down || f.jobs.some(j => !j.ok) ? 'c-warn' : 'c-vio'));
+  return out.join('');
+}
+
+P.machines = params => {
   const online = D.machines.filter(m => m.online).length, live = D.runtimes.filter(r => !r.stale);
   const withSys = D.machines.filter(m => m.system);
   const fresh = D.machines.filter(m => m.probeLastReport && D.T0 - Date.parse(m.probeLastReport) <= 9e5).length, probes = D.machines.filter(m => m.probeLastReport).length;
   let h = G.grpH('01', 'mach.grpSummary');
   h += G.pn('m-sum', G.ph('m-sum', 'server', 'ok', esc(t('mach.title')), esc(t('mach.onlineN', {a: online, b: D.machines.length})), esc(t('mach.src'))) + `<div class="kpis sm" style="--n:5">
     ${kpi('mach.kOnline', `${G.roll(online, 'n')}<span class="c-dim" style="font-size:.6em"> / ${F.n(D.machines.length)}</span>`, D.machines.filter(m => !m.online).map(m => esc(m.id)).join(' ') ? esc(t('mach.offlineIds', {ids: D.machines.filter(m => !m.online).map(m => m.id).join(' ')})) : esc(t('mach.allOnline')), 'g')}
-    ${kpi('mach.kCpu', withSys.length ? G.roll(sum(withSys.map(m => m.system.cpuPct)) / withSys.length / 100, 'pct1') : '—', esc(t('mach.ofN', {n: withSys.length})), 'c')}
-    ${kpi('mach.kActive', G.roll(sum(live.map(r => r.activeSessions)), 'n'), esc(t('mach.kProc', {n: F.n(sum(live.map(r => r.processes)))})), 'w')}
+    ${kpi('mach.kCpu', withSys.length ? G.roll(sum(withSys.map(m => m.system.cpuPct)) / withSys.length / 100, 'pct1') : dash, esc(t('mach.ofN', {n: withSys.length})), 'c')}
+    ${HID('runtimes') ? kpi('mach.kActive', dash, esc(t('hidden.online'))) : kpi('mach.kActive', G.roll(sum(live.map(r => r.activeSessions)), 'n'), esc(t('mach.kProc', {n: F.n(sum(live.map(r => r.processes)))})), 'w')}
     ${kpi('mach.kProbes', `${G.roll(fresh, 'n')}<span class="c-dim" style="font-size:.6em"> / ${F.n(probes)}</span>`, esc(t('mach.freshHint')), fresh < probes ? 'w' : 'v')}
-    ${D.hidden.has('services') ? kpi('mach.kServices', '\u2014', esc(t('hidden.online'))) : kpi('mach.kServices', G.roll(D.services.length, 'n'), esc(t('svc.bad', {n: D.services.filter(s => s.status === 'down').length})), D.services.some(s => s.status === 'down') ? 'b' : '')}
-  </div>`, 'hero');
+    ${HID('services') ? kpi('mach.kServices', dash, esc(t('hidden.online'))) : kpi('mach.kServices', G.roll(D.services.length, 'n'), esc(t('svc.bad', {n: D.services.filter(s => s.status === 'down').length})), D.services.some(s => s.status === 'down') ? 'b' : '')}
+  </div>` + (D.machines.length ? `<div class="sep"></div><div class="ph sm"><h3>${esc(t('mach.byMachine'))}</h3><span class="r">${D.machines.some(m => m.todayByAgent !== null) ? esc(t('mach.todayNote')) : ''}</span></div>` + summaryTable() : ''), 'hero');
   h += G.grpH('02', 'mach.grpEach');
   if(!D.machines.length) h += G.pn('m-none', G.ph('m-none', 'server', 'ok', esc(t('mach.title')), '', '') + G.empty());
   D.machines.forEach((m, i) => {
-    const s = m.system, rts = D.runtimes.filter(r => r.machine === m.id), svcs = D.services.filter(x => x.machine === m.id), jobs = D.jobs.filter(j => j.machine === m.id);
-    const svcBad = svcs.filter(x => x.status === 'down').length;
+    const s = m.system, f = machineFacts(m);
     const id = 'm-' + i;
     const head = `${G.code(m.id)} ${T(m.label)}`;
     const right = `<span class="bds">${bd(esc(t(m.online ? 'mach.online' : 'mach.offline')), m.online ? 'c-ok' : 'c-bad', true, '', m.online)}${m.os ? bd(G.OS(m.os), 'c-dim') : ''}${m.role ? bd(G.lbl('role.', m.role), 'c-vio') : ''}${probeBadge(m)}</span>`;
-    const facts = [['mach.lastSeen', m.lastSeen ? `${esc(F.full(m.lastSeen))} <span class="rel">${esc(F.ago(m.lastSeen))}</span>` : '—'],
+    const facts = [['mach.lastSeen', m.lastSeen ? `${esc(F.full(m.lastSeen))} <span class="rel">${esc(F.ago(m.lastSeen))}</span>` : dash],
       ['mach.probeLast', m.probeLastReport ? `${esc(F.full(m.probeLastReport))} <span class="rel">${esc(F.ago(m.probeLastReport))}</span>` : esc(t('mach.noProbe'))],
-      ['mach.uptimeK', s && s.uptimeSec != null ? esc(F.dur(s.uptimeSec)) : '—'],
-      ['mach.services', svcs.length ? `<a class="more" href="${G.href('services', {machine: m.id})}">${esc(t('svc.count', {n: svcs.length}))}</a>${svcBad ? ' ' + bd(esc(t('svc.bad', {n: svcBad})), 'c-bad', true) : ''}` : '—']];
+      ['mach.uptimeK', s && s.uptimeSec != null ? esc(F.dur(s.uptimeSec)) : dash]];
     const hist = m.history;
-    const chart = (key, k, color) => { const vals = hist.map(x => x[k]); const last = [...vals].reverse().find(v => v != null);
-      return `<div class="chart3"><div class="lab"><span>${esc(t(key))}</span><span>${last == null ? '—' : esc(t('mach.nowMax', {v: F.pctN(last), m: F.pctN(max(vals.filter(v => v != null)))}))}</span></div><div class="stretch">${G.fit(`${id}-${k}`, w => histChart(w, hist, k))}</div></div>`; };
-    h += G.pn(id, G.ph(id, 'server', m.online ? 'ok' : 'bad', head, '', right) + `<div class="mdet">
+    const chart = (key, k) => { const vals = hist.map(x => x[k]); const last = [...vals].reverse().find(v => v != null);
+      return `<div class="chart3"><div class="lab"><span>${esc(t(key))}</span><span>${last == null ? dash : esc(t('mach.nowMax', {v: F.pctN(last), m: F.pctN(max(vals.filter(v => v != null)))}))}</span></div><div class="stretch">${G.fit(`${id}-${k}`, w => histChart(w, hist, k))}</div></div>`; };
+    h += `<div id="mach-${esc(m.id)}"></div>` + G.pn(id, G.ph(id, 'server', m.online ? 'ok' : 'bad', head + ' ' + `<span class="bds">${machineBadges(f)}</span>`, '', right) + `<div class="mdet">
         <div class="metrics">${s ? metrics(s).map(metricHtml).join('') : `<div class="nodata">${esc(t('mach.noSystem'))}</div>`}
           <dl class="facts">${facts.map(([k, v]) => `<dt>${esc(t(k))}</dt><dd>${v}</dd>`).join('')}</dl></div>
         <div class="charts">${hist.length ? chart('mach.cpu24', 'cpuPct') + chart('mach.mem24', 'memPct') + (hist.some(x => x.diskPct != null) ? chart('mach.disk24', 'diskPct') : '') : `<div class="nodata">${esc(t('mach.noHistory'))}</div>`}
           ${hist.length ? `<div class="xl flat"><span>${esc(F.when(hist[0].t))}</span><span>${esc(F.when(hist[hist.length - 1].t))}</span></div>` : ''}</div>
       </div><div class="sep"></div>
-      <div class="grid2 even" style="margin:0;gap:22px"><div><div class="ph sm"><h3>${esc(t('rt.title'))}</h3><span class="r">${esc(t('rt.sum', {a: F.n(sum(rts.filter(r => !r.stale).map(r => r.activeSessions))), p: F.n(sum(rts.map(r => r.processes)))}))}</span></div><table class="tb">${runtimeRows(rts, false)}</table></div>
-      <div><div class="ph sm"><h3>${esc(t('job.title'))}</h3></div><table class="tb">${jobRows(jobs, false)}</table></div></div>`, m.online ? '' : 'offpn');
+      <div class="msec"><div><div class="ph sm"><h3>${G.ic('term', 'vio')}${esc(t('mach.agentSec'))}</h3><span class="r"></span></div>${agentSection(m, f)}</div>
+      <div><div class="ph sm"><h3>${G.ic('clock', 'or')}${esc(t('mach.taskSec'))}</h3><span class="r"></span></div>${taskSection(m, f)}</div></div>`, m.online ? '' : 'offpn');
   });
   const ids = new Set(machineIds()), orphan = D.runtimes.filter(r => !ids.has(r.machine));
-  if(orphan.length) h += G.pn('m-orph', G.ph('m-orph', 'term', 'vio', esc(t('mach.otherRt')), '', '') + `<table class="tb">${runtimeRows(orphan)}</table>`);
+  if(orphan.length && !HID('runtimes')) h += G.pn('m-orph', G.ph('m-orph', 'term', 'vio', esc(t('mach.otherRt')), '', '') + `<table class="tb">${runtimeRows(orphan)}</table>`);
+  const jump = params && params.get('m');
+  if(jump) G.after(() => { const el = G.$('mach-' + jump); if(el) el.scrollIntoView({block: 'start'}); });
   return h;
 };
 function histChart(w, hist, k){
