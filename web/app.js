@@ -7,9 +7,6 @@ const Q = new URLSearchParams(location.search);
 const FROZEN = Q.has('t') && isFinite(parseFloat(Q.get('t'))) ? parseFloat(Q.get('t')) : null;
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 G.STATIC = FROZEN !== null || REDUCE;
-/* machine tile frame: square (default) | round | outline, for comparing variants (?tile=) */
-const TILE = ['round', 'outline'].includes(Q.get('tile')) ? Q.get('tile') : 'square';
-document.documentElement.dataset.tile = TILE;
 const $ = G.$ = id => document.getElementById(id);
 
 /* ------------------------------------------------------------------ i18n */
@@ -279,10 +276,7 @@ const GLYPH = {bolt: ['00110', '01100', '11111', '00110', '01100'], gauge: ['011
   branch: ['10001', '10001', '11010', '10100', '10000'], clock: ['01110', '10101', '10111', '10001', '01110'], net: ['00100', '01110', '10101', '00100', '01110'],
   alert: ['00100', '01110', '01010', '11111', '11011'], list: ['10111', '00000', '10111', '00000', '10111'], chip: ['01010', '11111', '01010', '11111', '01010']};
 const ICOLOR = {fg: BLUE, or: OR, ok: OK, vio: VIO, bad: BAD, warn: WARN, hi: HI};
-/* panel-title icons: 5x5 cells (default) or, as a preview only, Phosphor duotone (?panel=phosphor) */
-const PANEL_PH = Q.get('panel') === 'phosphor' ? ((window.GLASSBOX_ICONS || {}).panel || {}) : null;
 G.ic = (g, c) => { const rows = GLYPH[g] || GLYPH.box, col = ICOLOR[c] || HI;
-  if(PANEL_PH && PANEL_PH[g]) return `<i class="ic" aria-hidden="true" style="color:${col}"><svg width="16" height="16" viewBox="0 0 256 256" fill="currentColor"><path d="${PANEL_PH[g].fill}" opacity="0.25"/><path d="${PANEL_PH[g].line}"/></svg></i>`;
   return `<i class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 15 15">${rows.flatMap((row, r) => [...row].map((v, k) => v === '1' ? `<rect x="${k * 3}" y="${r * 3}" width="2.4" height="2.4" fill="${col}"/>` : '')).join('')}</svg></i>`; };
 G.cnt = s => `<span class="cnt">${s}</span>`;
 G.more = (href, key = 'more.all') => `<a class="more" href="${href}">${esc(t(key))}</a>`;
