@@ -238,6 +238,15 @@ class ExportTest(unittest.TestCase):
         q["quota"][0]["account"] = "a_1f2e3d4c"
         self.assertTrue(any("is not code" in b for b in gate(q)))
 
+    def test_label_equal_to_code_is_not_a_private_name(self):
+        for m in self.page["machines"]:
+            m["label"] = m["id"]                       # hub default when no label is configured
+        pub, ctx = self.run_export()
+        self.assertFalse({"A", "B", "C", "D", "V"} & set(ctx["privateNames"]))
+        self.assertTrue(all(m["label"] == {"masked": True} for m in pub["machines"]))
+        ctx["privateNames"] += ["A", "V"]             # a context from elsewhere: the gate ignores codes too
+        self.assertEqual(self.gate(pub, ctx), [])
+
     def test_local_commit_of_public_repo_loses_branch_keeps_hash(self):
         pub, ctx = self.run_export()
         a = pub["activity"][1]                                    # source local, public repo, branch "dev"

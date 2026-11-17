@@ -335,7 +335,8 @@ def export(page, cfg, terms):
              and not (g in ("activity[].repo", "today.byProject[].project") and v in public_repos)}
     names |= {e["repo"] for e in activity if isinstance(e.get("repo"), str) and not is_public(e, "repo")}
     names |= {p["project"] for p in by_project if isinstance(p.get("project"), str) and not is_public(p, "project")}
-    names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all}
+    # Codes (A, K, ...) are public by design; a label that equals its code reveals nothing.
+    names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all and not is_code(n, cfg)}
     scrub_names = sorted(names | set(terms["terms"]) | set(cfg["keywords"]), key=len, reverse=True)
     modes = terms["match"]
 

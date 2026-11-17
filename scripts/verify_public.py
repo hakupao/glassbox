@@ -133,7 +133,8 @@ class Gate:
         vocab = vocabulary()
         allowed_values = set().union(*self.allow.values()) if self.allow else set()
         runtime = [n for n in ctx.get("privateNames", [])
-                   if norm(n) and norm(n) not in vocab and n not in allowed_values]
+                   if norm(n) and norm(n) not in vocab and n not in allowed_values
+                   and not (re.fullmatch(r"[A-Z]", n) or n in self.codes)]     # codes are public by design
         words = [t for t in terms.get("terms", []) if t and t.casefold() not in allow_words]
         self.names = sorted(set(words) | set(runtime) | set(self.keywords) | self.private_projects,
                             key=len, reverse=True)
