@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:,">
+<title data-i18n="app.title"></title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<canvas id="art" role="img" data-i18n-aria="art.aria"></canvas>
+<div class="in">
+  <header class="top">
+    <a class="brand" href="#/" data-i18n="brand"></a>
+    <nav class="nav" id="nav" data-i18n-aria="nav.aria">
+      <a href="#/" data-route="overview"><b>01</b><span data-i18n="nav.overview"></span></a>
+      <a href="#/usage" data-route="usage"><b>02</b><span data-i18n="nav.usage"></span></a>
+      <a href="#/code" data-route="code"><b>03</b><span data-i18n="nav.code"></span></a>
+      <a href="#/machines" data-route="machines"><b>04</b><span data-i18n="nav.machines"></span></a>
+      <a href="#/services" data-route="services"><b>05</b><span data-i18n="nav.services"></span></a>
+    </nav>
+    <div class="meta">
+      <span class="chip" id="viewChip"></span><span class="chip line" id="stamp"></span><span id="clock"></span>
+      <span class="lang" id="lang" role="group" data-i18n-aria="lang.aria"></span>
+    </div>
+  </header>
+  <main id="view" tabindex="-1"></main>
+  <div class="cap"><span id="cap0"></span><span id="capMid"></span><span id="cap1"></span></div>
+  <div class="tail"></div>
+</div>
+<div id="tip" role="tooltip"></div>
+<script id="gb-data"></script>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+<script src="pages.js"></script>
+</body>
+</html>

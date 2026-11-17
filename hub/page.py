@@ -399,10 +399,13 @@ def build(conn, cfg, now=None):
     }
 
 
+MARKER = '<script id="gb-data"></script>'      # in web/index.html; replaced by the page data
+
+
 def html(page, template):
-    """The c-v9 mockup with page data inlined in place of its sample data (until web/ exists)."""
+    """web/index.html with the page data inlined as window.GB (CONTRACT §2). The public snapshot uses
+    the same template and marker."""
     data = json.dumps(page, ensure_ascii=False).replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-    tag = '<script src="sample-page.js"></script>'
-    if tag not in template:
-        raise ValueError("template has no sample-data script tag")
-    return template.replace(tag, f"<script>window.GB={data};window.GB_PAGES={{private:window.GB}};</script>", 1)
+    if MARKER not in template:
+        raise ValueError("template has no gb-data script tag")
+    return template.replace(MARKER, f'<script id="gb-data">window.GB={data};</script>', 1)

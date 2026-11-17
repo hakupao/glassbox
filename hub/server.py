@@ -11,7 +11,9 @@ from pathlib import Path
 
 from . import ingest, page
 
-TEMPLATE = Path(__file__).resolve().parent.parent / "design" / "mockups" / "c-v9.html"   # until web/ exists
+WEB = Path(__file__).resolve().parent.parent / "web"     # the front end; index.html is the page template
+STATIC_TYPES = {".css": "text/css", ".js": "text/javascript", ".json": "application/json",
+                ".svg": "image/svg+xml", ".woff2": "font/woff2", ".png": "image/png"}
 
 MAX_BODY = 8 * 1024 * 1024          # compressed request body
 MAX_JSON = 64 * 1024 * 1024          # after gzip; a normal report is well under 1 MB
@@ -22,6 +24,32 @@ LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 
 class TooLarge(Exception):
     pass
+
+
+def static_files(root=WEB):
+    """URL path -> file for every servable asset under web/, listed once. Requests are looked up in
+    this map and never joined onto a directory, so no path (../, %2e%2e, //, symlinks out) escapes it."""
+    out = {}
+    if not root.is_dir():
+        return out
+    base = root.resolve()
+    for f in sorted(root.rglob("*")):
+        rel = f.relative_to(root)
+        if not f.is_file() or f.suffix not in STATIC_TYPES or any(part.startswith(".") for part in rel.parts):
+            continue
+        if not f.resolve().is_relative_to(base):
+            continue
+        out["/" + rel.as_posix()] = f
+    return out
+
+
+def serve_hosts(cfg):
+    """[serve] hosts as a set of lower-case names. A bare string is a config error: iterating it
+    would allow single characters as Host names."""
+    hosts = ((cfg or {}).get("serve") or {}).get("hosts", [])
+    if not isinstance(hosts, list) or not all(isinstance(h, str) and h.strip() for h in hosts):
+        raise ValueError('[serve] hosts must be a list of names, e.g. hosts = ["glassbox.<tailnet>.ts.net"]')
+    return {h.strip().lower() for h in hosts}
 
 
 def gunzip_bounded(raw, limit=MAX_JSON):
@@ -52,7 +80,8 @@ class Hub:
         self.lock = threading.Lock()
         # Host names the private view answers to (DNS rebinding): loopback plus [serve] hosts,
         # e.g. the tailnet name that `tailscale serve` forwards with.
-        self.hosts = LOOPBACK | {h.lower() for h in ((cfg or {}).get("serve") or {}).get("hosts", [])}
+        self.hosts = LOOPBACK | serve_hosts(cfg)
+        self.static = static_files()
 
     def host_ok(self, header):
         """True when the Host header (port ignored) is an allowed name."""
@@ -80,9 +109,13 @@ def make_handler(hub):
         timeout = 30                              # slow or stalled clients
 
         def _send(self, code, obj, ctype="application/json"):
-            body = obj.encode("utf-8") if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False).encode("utf-8")
+            if isinstance(obj, bytes):
+                body = obj
+            else:
+                body = obj.encode("utf-8") if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
-            self.send_header("Content-Type", ctype + "; charset=utf-8")
+            self.send_header("Content-Type", ctype + ("; charset=utf-8" if ctype.startswith(("text/", "application/")) else ""))
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(body)))
             if code == 200 and self.command == "GET":
                 self.send_header("Cache-Control", "no-store")
@@ -111,10 +144,17 @@ def make_handler(hub):
                         data = page.build(hub.conn, hub.cfg)
                     if path == "/page.json":
                         return self._send(200, data)
-                    return self._send(200, page.html(data, TEMPLATE.read_text(encoding="utf-8")), "text/html")
+                    template = (WEB / "index.html").read_text(encoding="utf-8")
+                    return self._send(200, page.html(data, template), "text/html")
                 except Exception as e:            # never echo data
                     print(f"page error: {type(e).__name__}", file=sys.stderr, flush=True)
                     return self._send(500, {"error": "internal error"})
+            f = hub.static.get(path)
+            if f is not None and path != "/index.html":   # assets carry no data; the page needs them
+                try:
+                    return self._send(200, f.read_bytes(), STATIC_TYPES[f.suffix])
+                except OSError:
+                    return self._send(404, {"error": "not found"})
             return self._send(404, {"error": "not found"})
 
         def do_POST(self):

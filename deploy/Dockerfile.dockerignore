@@ -1,6 +1,6 @@
 *
 !hub/
 !probe/
-!design/mockups/c-v9.html
+!web/
 !deploy/entrypoint.sh
 **/__pycache__

@@ -202,10 +202,10 @@ class PageTest(unittest.TestCase):
 
     # ---- serving the private view
     def test_html_inlines_data_safely(self):
-        tpl = '<html><script src="sample-page.js"></script><script>go()</script></html>'
+        tpl = '<html><script id="gb-data"></script><script>go()</script></html>'
         out = page.html({"title": "</script><b>x"}, tpl)
         self.assertNotIn("</script><b>", out)
-        self.assertIn("window.GB_PAGES={private:window.GB}", out)
+        self.assertIn('<script id="gb-data">window.GB={', out)
         with self.assertRaises(ValueError):
             page.html({}, "<html></html>")
 
@@ -222,8 +222,9 @@ class PageTest(unittest.TestCase):
             with urllib.request.urlopen(base + "/", timeout=10) as r:
                 body = r.read().decode("utf-8")
                 self.assertTrue(r.headers["Content-Type"].startswith("text/html"))
-            self.assertIn("window.GB=", body)
-            self.assertNotIn('src="sample-page.js"', body)
+            self.assertIn('<script id="gb-data">window.GB=', body)
+            self.assertNotIn('<script id="gb-data"></script>', body)
+            self.assertNotIn("mockups", body)
         finally:
             httpd.shutdown()
             httpd.server_close()
@@ -268,7 +269,7 @@ class PageTest(unittest.TestCase):
         self.assertEqual([h["usedPct"] for h in q["history"]], [2, 3])   # window start is inclusive
 
     def test_html_escapes_line_separators(self):
-        out = page.html({"title": "a b c"}, '<script src="sample-page.js"></script>')
+        out = page.html({"title": "a b c"}, page.MARKER)
         self.assertNotIn(" ", out)
         self.assertNotIn(" ", out)
         self.assertIn("a\\u2028b\\u2029c", out)
@@ -300,6 +301,50 @@ class PageTest(unittest.TestCase):
         finally:
             httpd.shutdown()
             httpd.server_close()
+
+    def test_serve_hosts_must_be_a_list(self):
+        self.assertEqual(server.serve_hosts({"serve": {"hosts": ["A.example.ts.net "]}}), {"a.example.ts.net"})
+        self.assertEqual(server.serve_hosts({}), set())
+        for bad in ("glassbox.example.ts.net", [""], [1], {"a": 1}):
+            with self.assertRaises(ValueError, msg=repr(bad)):
+                server.Hub(self.conn, {**CFG, "serve": {"hosts": bad}})
+
+    def test_static_assets_from_web_only(self):
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(server.Hub(self.conn, CFG)))
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        port = httpd.server_address[1]
+
+        def get(path):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=10) as r:
+                    return r.status, r.headers.get("Content-Type", ""), r.read()
+            except urllib.error.HTTPError as e:
+                return e.code, "", b""
+        try:
+            code, ctype, body = get("/app.js")
+            self.assertEqual(code, 200)
+            self.assertTrue(ctype.startswith("text/javascript"))
+            self.assertEqual(body, (server.WEB / "app.js").read_bytes())
+            self.assertEqual(get("/styles.css")[0], 200)
+            for path in ("/../hub/server.py", "/%2e%2e/hub/server.py", "/..%2fhub%2fserver.py", "//etc/passwd",
+                         "/web/app.js", "/i18n/../app.js", "/APP.JS", "/.git/config", "/app.js/"):
+                self.assertEqual(get(path)[0], 404, path)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    def test_static_map_skips_dotfiles_and_links_out(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "web"
+            (root / "sub").mkdir(parents=True)
+            (root / "a.js").write_text("x")
+            (root / "sub" / "b.css").write_text("x")
+            (root / ".hidden.js").write_text("x")
+            (root / "notes.txt").write_text("x")
+            (Path(d) / "secret.js").write_text("x")
+            (root / "out.js").symlink_to(Path(d) / "secret.js")
+            self.assertEqual(sorted(server.static_files(root)), ["/a.js", "/sub/b.css"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,7 +8,7 @@ Three containers, no published host port:
 | `glassbox` | The hub (`python -m hub serve`) plus a background `collect all` loop. Shares the sidecar's network namespace (`network_mode: service:tailscale`), so it has no network of its own to expose. |
 | `docker-proxy` | Docker socket proxy with an exact allowlist (`wollomatic/socket-proxy`): only `GET /containers/json` (optionally `/vNN.NN/` prefixed) is forwarded; inspect, logs, exec, archive, export and all write methods answer 403, and only the sidecar's address may connect. |
 
-**Status: written and statically checked only.** The author's machine has no Docker, so `docker compose config` and `docker compose up` have never been run. The image contains `hub/`, all of `probe/` (price table) and `design/mockups/c-v9.html` (the template; moves to `web/` later, see the comment in `Dockerfile`); without them `/` answers 500. Image parameters written from memory (socket-proxy flags and port, Tailscale health-check variables, image tags) are marked in `compose.yaml`: check them against the official documentation before deploying, and pin image digests. `read_only`, `cap_drop` and the `:ro` socket mount are also untested; the fallback for each is written next to it in `compose.yaml` or in section 5.
+**Status: written and statically checked only.** The author's machine has no Docker, so `docker compose config` and `docker compose up` have never been run. The image contains `hub/`, all of `probe/` (price table) and `web/` (the front end; `web/index.html` is the page template); without them `/` answers 500. Image parameters written from memory (socket-proxy flags and port, Tailscale health-check variables, image tags) are marked in `compose.yaml`: check them against the official documentation before deploying, and pin image digests. `read_only`, `cap_drop` and the `:ro` socket mount are also untested; the fallback for each is written next to it in `compose.yaml` or in section 5.
 
 Placeholders in this directory: `<TAILNET_NAME>`, `<GITEA_URL>` and so on. Real values go only in the git-ignored files `hub.toml`, `.env` and `secrets/`.
 
@@ -55,7 +55,7 @@ An unreadable or empty secret file makes the container exit at start (see `docke
 
 `docker compose exec glassbox glassbox-entrypoint <args>` runs `python -m hub --config /etc/glassbox/hub.toml <args>` with the secrets in its environment. A plain `docker compose exec glassbox python -m hub ...` would not have them.
 
-Set `[serve] hosts` in `hub.toml` to the node's tailnet name (`<NODE>.<TAILNET_NAME>.ts.net`, where `<NODE>` is `TS_HOSTNAME`). Without it the hub answers every page request with **421** (see Troubleshooting in section 5).
+Set `[serve] hosts` in `hub.toml` to the node's tailnet name (`<NODE>.<TAILNET_NAME>.ts.net`, where `<NODE>` is `TS_HOSTNAME`). Without it the hub answers every page request with **421** (see Troubleshooting in section 5). `hosts` must be a list (`hosts = ["..."]`); a bare string stops the hub with a config error. To open the page by the node's tailnet IP (`http://100.x.y.z/`) instead of its name, add that IP to `hosts` as well, otherwise the IP gets 421 too.
 
 ## 2. Start from an empty database
 
