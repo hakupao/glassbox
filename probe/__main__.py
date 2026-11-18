@@ -23,6 +23,7 @@ Config (TOML, optional; defaults shown):
 """
 import argparse
 import json
+import os
 import sys
 import time
 import tomllib
@@ -124,7 +125,33 @@ def cmd_daily(conn, cfg, args):
         print(f"{d:10} {agent:11} {a[0]:6} {a[1]:11} {a[2]:11} {a[3]:13} {a[4]:12} {a[5]:9.2f} {a[6]}")
 
 
+def windowless_log(home=None):
+    """pythonw.exe (Windows, no console window) sets sys.stdout / sys.stderr to None, so every message
+    and traceback would be lost. Then append them to ~/.glassbox/probe.log instead (rotated at 1 MB).
+    With a console nothing changes."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return None
+    path = Path(home or Path.home()) / ".glassbox" / "probe.log"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and path.stat().st_size > 1_000_000:
+            try:
+                path.replace(path.with_name("probe.log.1"))
+            except OSError:                   # another run or a scanner holds it (Windows): keep appending
+                pass
+        f = open(path, "a", encoding="utf-8", buffering=1)
+    except OSError:                           # never die silently on the log itself
+        f, path = open(os.devnull, "w", encoding="utf-8"), None
+    if sys.stdout is None:
+        sys.stdout = f
+    if sys.stderr is None:
+        sys.stderr = f
+    print(f"--- {datetime.now().astimezone().isoformat(timespec='seconds')} (no console)", file=f)
+    return path
+
+
 def main(argv=None):
+    windowless_log()
     ap = argparse.ArgumentParser(prog="probe")
     ap.add_argument("--config")
     sub = ap.add_subparsers(dest="cmd", required=True)

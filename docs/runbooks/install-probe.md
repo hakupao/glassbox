@@ -129,7 +129,7 @@ Expect `last exit code = 0` and a `pushed:` line in the log within a minute (`Ru
 **ASK THE USER FIRST**. In PowerShell, as the normal user (no admin needed):
 
 ```powershell
-$py  = "<PYTHON312_ABSOLUTE_PATH>"
+$py  = "<PYTHON_DIR>\pythonw.exe"      # pythonw: no console window every 15 minutes
 $cfg = "$HOME\.glassbox\probe.toml"
 $act = New-ScheduledTaskAction -Execute $py -Argument "-m probe --config `"$cfg`" push" -WorkingDirectory "<CLONE_PATH>"
 $trg = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 15)
@@ -141,7 +141,7 @@ Register-ScheduledTask -TaskName "glassbox-probe" -Action $act -Trigger $trg -Se
 Start-ScheduledTask -TaskName "glassbox-probe"; Start-Sleep 30
 Get-ScheduledTaskInfo -TaskName "glassbox-probe" | Select-Object LastRunTime, LastTaskResult
 ```
-Expect `LastTaskResult` 0. To see the output, run the push command by hand once (step 3). Remove: `Unregister-ScheduledTask -TaskName glassbox-probe -Confirm:$false`.
+Expect `LastTaskResult` 0. Under `pythonw.exe` there is no console: the probe appends its output to `%USERPROFILE%\.glassbox\probe.log` (rotated at 1 MB); check there, or run the push command by hand once with `python.exe` (step 3). An existing task that still uses `python.exe` flashes a console window on every run: re-register it with `pythonw.exe` from the same directory. The probe starts `git` with `CREATE_NO_WINDOW`, so those child processes open no window either. Remove: `Unregister-ScheduledTask -TaskName glassbox-probe -Confirm:$false`.
 
 ## 5. End check
 

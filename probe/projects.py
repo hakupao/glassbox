@@ -10,6 +10,9 @@ import subprocess
 import time
 from pathlib import Path
 
+# Windows: under pythonw.exe (no console) every console child (git) would open its own window; 0 elsewhere.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 OTHER = "p_other"
 RECHECK = 24 * 3600
 
@@ -20,7 +23,8 @@ def _key(text):
 
 def _git(args, cwd):
     try:
-        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=5)
+        r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=5,
+                           stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout.strip() if r.returncode == 0 else None

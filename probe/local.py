@@ -26,7 +26,7 @@ def scrub(title):
 def _run(args, cwd=None, timeout=20):
     try:
         r = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=timeout,
-                           encoding="utf-8", errors="replace")
+                           encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, creationflags=projects.NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout if r.returncode == 0 else None
