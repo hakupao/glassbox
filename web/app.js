@@ -266,9 +266,10 @@ G.uicon = (name, size) => { const ic = UICON[name]; if(!ic) return '';
   return `<svg width="${size}" height="${size}" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${ic.fill}" opacity="0.2"/><path d="${ic.line}"/></svg>`; };
 G.micon = (name, size) => { const ic = MICON[name] || MICON.server; if(!ic) return '';
   return `<svg width="${size}" height="${size}" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="${ic.fill}" opacity="0.25"/><path d="${ic.line}"/></svg>`; };
-/* machine tile: the icon on a tinted rounded square in the machine's colour, its code as a corner tag */
-G.mc = (id, big) => { const L = G.mlook(id), col = MCOLOR[L.color];
-  return `<span class="mt${big ? ' big' : ''}" style="--mc:${col}" title="${esc(id)} \u00b7 ${esc(t('micon.' + L.icon))}${L.online ? ' \u00b7 ' + esc(t('mach.online')) : ''}">${G.micon(L.icon, big ? 24 : 13)}<b>${esc(id)}</b>${L.online ? '<i class="on" aria-hidden="true"></i>' : ''}</span>`; };
+/* machine tile: the icon on a tinted rounded square in the machine's colour, its code as a corner tag;
+   codes longer than 2 characters (e.g. "host-macmini-m4") turn the tile into a pill, icon then code */
+G.mc = (id, big) => { const L = G.mlook(id), col = MCOLOR[L.color], long = [...String(id)].length > 2;
+  return `<span class="mt${big ? ' big' : ''}${long ? ' long' : ''}" style="--mc:${col}" title="${esc(id)} \u00b7 ${esc(t('micon.' + L.icon))}${L.online ? ' \u00b7 ' + esc(t('mach.online')) : ''}">${G.micon(L.icon, big ? 24 : 13)}<b>${esc(id)}</b>${L.online ? '<i class="on" aria-hidden="true"></i>' : ''}</span>`; };
 G.lbl = (prefix, v) => v == null ? '—' : G.has(prefix + v) ? esc(t(prefix + v)) : esc(v);
 G.OS = v => v === 'macos' ? 'macOS' : v === 'windows' ? 'Windows' : v === 'linux' ? 'Linux' : esc(v || '—');
 
