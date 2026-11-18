@@ -30,8 +30,8 @@ concurrency:
 env:
   REGISTRY: ${{ vars.REGISTRY }}
   IMAGE: ${{ vars.IMAGE }}
-  # 预检和取 docker 组 id 用的小镜像：部署前核对 tag 是否存在并固定 digest
-  PREFLIGHT_IMAGE: alpine:3.20.3
+  # 预检和取 docker 组 id 用的小镜像：按 tag + digest 固定（2026-11-18 首次部署时核对过）
+  PREFLIGHT_IMAGE: alpine:3.20.3@sha256:1e42bbe2508154c9126d48c2b8a75420c3544343bf86fd041fb7527e017a4b4a
   SECRETS_DIR: /opt/glassbox
 
 jobs:

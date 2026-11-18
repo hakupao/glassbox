@@ -1,5 +1,6 @@
 """The hub's sqlite store. One file inside the deploy volume (default ~/.glassbox/hub.sqlite)."""
 import sqlite3
+import time
 from pathlib import Path
 
 SCHEMA_VERSION = "4"   # bump on any table change; an older database refuses to open (no silent breakage)
@@ -60,11 +61,33 @@ CREATE TABLE IF NOT EXISTS warnings (t REAL, machine TEXT, kind TEXT, detail TEX
 """
 
 
+def _enable_wal(conn, wait=30.0):
+    """Switch to WAL, retrying while another opener holds the lock. Changing the journal mode
+    needs an exclusive lock and SQLite answers "database is locked" at once instead of waiting
+    for the busy timeout, so two processes opening a fresh file together (the container starts
+    `collect all` and `serve` at the same moment) would make one of them exit."""
+    delay, waited = 0.02, 0.0
+    while True:
+        try:
+            mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if mode.lower() == "wal":
+                return
+            # Losing the race can also show up as the old mode being returned: retry until the deadline.
+            if waited >= wait:
+                raise sqlite3.OperationalError(f"journal_mode is {mode}, not wal")
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) and "busy" not in str(e) or waited >= wait:
+                raise
+        time.sleep(delay)
+        waited += delay
+        delay = min(delay * 2, 0.5)
+
+
 def connect(path):
     path = Path(path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL")
+    _enable_wal(conn)
     conn.execute("PRAGMA synchronous=NORMAL")
     fresh = not conn.execute("SELECT 1 FROM sqlite_master WHERE name='kv'").fetchone()
     conn.executescript(SCHEMA)

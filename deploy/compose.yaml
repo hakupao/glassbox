@@ -119,8 +119,8 @@ services:
     # forwarded; inspect, logs, exec, archive, export and every write method answer 403, and only
     # the tailscale container (the hub shares its network namespace) may connect.
     # Flag names, port 2375 and user 65534 checked against the image (`-help`) at the first
-    # deploy (2026-11-18). Still to do: pin an exact tag and digest instead of the major tag.
-    image: wollomatic/socket-proxy:1
+    # deploy (2026-11-18); pinned to the version that ran then (1.13.2) by digest.
+    image: wollomatic/socket-proxy:1.13.2@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
     container_name: glassbox-docker-proxy
     restart: unless-stopped
     user: "65534:${DOCKER_GID:?set DOCKER_GID}"              # nobody, plus the group that owns the Docker socket
