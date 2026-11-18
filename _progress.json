@@ -52,8 +52,8 @@
       "note": "deployed 2026-11-18 via Gitea workflow (cc257f9): tailnet-only hub, README section 5 all 11 checks pass, workflow health/exposure steps replayed on VM pass; attempt 1 crash-looped on tailscale v1.78.1 (archived), pinned v1.104.7 by digest; verifier PASS. Follow-ups: WAL first-start race in db.connect; pin socket-proxy/alpine digests; data volume into backup (ask user)"
     },
     "S14": {
-      "status": "in_progress",
-      "note": "2026-11-18: dev Mac probe live (launchd every 15 min, hub receives reports; quota account codes set, no warnings). Windows machine registered on the hub; install pending on that machine (checklist kept privately on the dev Mac)"
+      "status": "done",
+      "note": "2026-11-18: both probe machines report to the hub over the tailnet (dev Mac via launchd, Windows via Task Scheduler, every 15 min); same account_salt confirmed (no unnamed-account warning); secrets handed over by Taildrop and deleted afterwards"
     },
     "S15": {
       "status": "todo"
