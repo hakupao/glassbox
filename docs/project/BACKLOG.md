@@ -17,6 +17,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | B1 | Background art: refine | Several versions to choose from |
 | B2 | Machine mini charts: replay the 24 h history as a sliding window (one step per second, looping), like the reference site's public snapshot | Only when visible and without `prefers-reduced-motion`; show a small "replay" mark so it is not mistaken for live data |
 | B3 | i18n: zh `rt.fresh` "正常" vs ja "最新" | Make the pair consistent |
+| B4 | Activity view: learn from the reference site's activity feed (`#cat=activity&tab=feed`) | Ours is a flat commit list with a detail popup (`web/pages.js` `commitItem`). Reference: a vertical timeline grouped by day ("today, 6 changes"); each commit is a nested card (repo tag, short hash, "unpushed" badge, author, time, file list with M/A/R badges, "load more (17)", diff link); filter chips with counts (all / commits / pushed / unpushed ...); on phones a bottom tab bar, cards keep the timeline rail, long paths cut with an ellipsis; smooth expand and switch animations. Public snapshot rule still applies: private repo names and file paths must not leak, so the file list may be public-repo only or counts only |
 
 ## C. Operations
 
