@@ -174,7 +174,8 @@ function makeFormatters(){
   const L = LOCALE[G.lang];
   const n0 = new Intl.NumberFormat(L, {maximumFractionDigits: 0});
   const n1 = new Intl.NumberFormat(L, {maximumFractionDigits: 1, minimumFractionDigits: 1});
-  const cmp = new Intl.NumberFormat(L, {notation: 'compact', maximumSignificantDigits: 4});
+  /* token counts read the same in every language: 1.2K / 128.3M / 1.5B, never CJK myriad units (owner 2026-11-18) */
+  const cmp = new Intl.NumberFormat('en', {notation: 'compact', maximumSignificantDigits: 4});
   const usd = new Intl.NumberFormat(L, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 2, maximumFractionDigits: 2});
   const usd0 = new Intl.NumberFormat(L, {style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0});
   const pct0 = new Intl.NumberFormat(L, {style: 'percent', maximumFractionDigits: 0});
