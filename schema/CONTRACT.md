@@ -166,7 +166,7 @@
   - `quota`：每个 `(account, agent, window)` 取最新样本；`history` 是 `resetsAt - 窗口长度` 之后的样本。代号来自 hub 配置 `[accounts]`，没配的显示哈希，并在 `warnings` 里提示。
   - `services`：容器（Beszel 统计 / Docker 状态）和 Kuma 监控按 `(machine, 名字归一化后相等)` 合并；名字不同的用 hub 配置 `[services.merge]`（监控名 → 容器名）指定。没有配置机器的监控，只有在匹配的容器名在所有机器里唯一时才合并；否则单独成一行，`machine` 为 `null`。合并行用监控名，状态取两者中更差的。
   - `runtimes[].stale`：该机器探针超过 15 分钟没有上报。`machines[].online`：Beszel 15 分钟内报告在线，或探针 15 分钟内上报过。
-  - `machines[].system` 要么字段齐全，要么为 `null`。没有探针的机器，`role` / `os` / `label` 来自 hub 配置 `[machines.<代号>]`。
+  - `machines[].system` 要么字段齐全，要么为 `null`。当前值取 Beszel 最近一条 1 分钟记录（15 分钟内且字段齐全）；没有时退回最近一个 20 分钟点。`history` 仍是 20 分钟序列。没有探针的机器，`role` / `os` / `label` 来自 hub 配置 `[machines.<代号>]`。
   - `machines[].icon` / `color` 来自 hub 配置 `[machines.<代号>] icon = "…"`、`color = "…"`，公开版也带（不涉及隐私）。
     - icon ∈ `laptop | desktop | server | vm | nas | mini | cloud | pi`；color ∈ `blue | green | paper | violet | orange | cyan | yellow | red`。
     - 没配置时给默认值：icon 按 role 和 os（dev / work → laptop，非 macOS 的 dev → desktop；deploy：macOS → mini、Linux → vm、其他 → server；gitea：macOS → nas、其他 → server；其余 server）；color 按代号固定取色板里的一个。

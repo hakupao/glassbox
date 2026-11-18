@@ -23,6 +23,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from . import db
+
 UTC = timezone.utc
 GIB, MIB = 1024 ** 3, 1024 ** 2
 KUMA_STATUS = {0: "down", 1: "up", 2: "pending", 3: "maintenance"}
@@ -100,7 +102,7 @@ def beszel(conn, cfg):
     mapping = b.get("map", {})
     now = datetime.now(UTC)
     since = _pb_time(now - timedelta(hours=25))
-    state, stats, containers, unmapped = [], [], [], 0
+    state, stats, containers, unmapped, current = [], [], [], 0, {}
     for s in _pb_list(base, "systems", auth):
         code = mapping.get(s.get("name"))
         if not code or not PB_ID.fullmatch(str(s.get("id"))):
@@ -113,6 +115,16 @@ def beszel(conn, cfg):
             st = rec.get("stats") or {}
             g = lambda k: None if st.get(k) is None else st[k] * GIB
             stats.append((code, _zulu_from_pb(rec["created"]), st.get("cpu"), g("mu"), g("m"), g("du"), g("d")))
+        # Current values: the latest 1-minute record (the 20m series above only feeds the 24h history and
+        # lags up to 20 minutes; a new system has no 20m record for its first 20 minutes).
+        last = _get(f"{base}/api/collections/system_stats/records?" + urllib.parse.urlencode({
+            "perPage": 1, "sort": "-created",
+            "filter": f"system='{s['id']}' && type='1m' && created>'{_pb_time(now - FRESH)}'"}), auth).get("items") or []
+        if last:
+            st = last[0].get("stats") or {}
+            g = lambda k: None if st.get(k) is None else st[k] * GIB
+            current[code] = {"t": _zulu_from_pb(last[0]["created"]), "cpu": st.get("cpu"),
+                             "mu": g("mu"), "m": g("m"), "du": g("du"), "d": g("d")}
         latest = _get(f"{base}/api/collections/container_stats/records?" + urllib.parse.urlencode({
             "perPage": 1, "sort": "-created",
             "filter": f"system='{s['id']}' && type='1m' && created>'{_pb_time(now - FRESH)}'"}), auth).get("items") or []
@@ -126,7 +138,9 @@ def beszel(conn, cfg):
         conn.executemany("INSERT OR REPLACE INTO machine_stats VALUES(?,?,?,?,?,?,?)", stats)
         conn.execute("DELETE FROM container_stats")
         conn.executemany("INSERT OR REPLACE INTO container_stats VALUES(?,?,?,?)", containers)
-    return {"systems": len(state), "unmapped": unmapped, "points": len(stats), "containers": len(containers)}
+        db.put(conn, "beszel.now", json.dumps(current))     # kv, not a table: no schema change
+    return {"systems": len(state), "unmapped": unmapped, "points": len(stats), "current": len(current),
+            "containers": len(containers)}
 
 
 # ------------------------------------------------------------------------------ Uptime Kuma

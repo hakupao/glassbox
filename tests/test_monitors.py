@@ -140,7 +140,16 @@ class MonitorsTest(unittest.TestCase):
         self.assertNotIn("unlisted-box", json.dumps(self.q("SELECT * FROM machine_state")))
         # the Beszel queries really filter what we expect
         stat_q = [q for p, q in Fake.seen if p == "/api/collections/system_stats/records"]
-        self.assertTrue(all("type='20m'" in q["filter"][0] and "created>'" in q["filter"][0] for q in stat_q))
+        hist_q = [q for q in stat_q if "type='20m'" in q["filter"][0]]
+        now_q = [q for q in stat_q if "type='1m'" in q["filter"][0]]
+        self.assertEqual(len(hist_q) + len(now_q), len(stat_q))       # nothing but 20m history and 1m "now"
+        self.assertTrue(all("created>'" in q["filter"][0] for q in stat_q))
+        self.assertEqual(len(now_q), 2)                                # one latest-1m query per mapped system
+        self.assertTrue(all(q["sort"] == ["-created"] and q["perPage"] == ["1"] for q in now_q))
+        cur = json.loads(db.get(self.conn, "beszel.now"))
+        self.assertEqual(sorted(cur), ["C", "V"])
+        self.assertEqual((cur["C"]["cpu"], cur["C"]["mu"], cur["C"]["m"]), (12.5, 8 * 1024 ** 3, 16 * 1024 ** 3))
+        self.assertEqual(cur["C"]["t"], "2026-11-17T01:00:00Z")
         cont_q = [q for p, q in Fake.seen if p == "/api/collections/container_stats/records"]
         self.assertTrue(all("type='1m'" in q["filter"][0] and "created>'" in q["filter"][0] for q in cont_q))
         self.assertNotIn(SX, json.dumps(stat_q))                      # unmapped system never queried

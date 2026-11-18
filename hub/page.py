@@ -319,6 +319,10 @@ def _machines(conn, cfg, now_ts, iso, by_agent=None, warnings=None):
     for row in conn.execute("SELECT machine, t, cpu, mem_used, mem_total, disk_used, disk_total FROM machine_stats ORDER BY t"):
         stats[row[0]].append(row[1:])
     since = datetime.fromtimestamp(now_ts - 24 * 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        current = json.loads(db.get(conn, "beszel.now") or "{}")
+    except ValueError:
+        current = {}
     out = []
     for mid in sorted(set(reg) | set(state) | set(over)):
         role, os_, label, last = reg.get(mid, (None, None, None, None))
@@ -329,8 +333,17 @@ def _machines(conn, cfg, now_ts, iso, by_agent=None, warnings=None):
         seen = [x for x in (updated if st == "up" else None, last) if x is not None]
         pts = stats.get(mid, [])
         system = None
-        if pts and uptime is not None and None not in pts[-1][1:]:
-            _, cpu, mu, mt, du, dt = pts[-1]
+        cur = current.get(mid) if isinstance(current, dict) else None
+        cur_vals = [cur.get(k) for k in ("cpu", "mu", "m", "du", "d")] if isinstance(cur, dict) else [None]
+        try:
+            cur_age = now_ts - datetime.fromisoformat(cur["t"].replace("Z", "+00:00")).timestamp()
+        except (TypeError, KeyError, ValueError, AttributeError):
+            cur_age = None
+        if uptime is not None and None not in cur_vals and cur_age is not None and cur_age <= STALE:
+            cpu, mu, mt, du, dt = cur_vals            # fresh 1-minute record: near-real-time values
+            system = {"cpuPct": cpu, "memUsed": mu, "memTotal": mt, "diskUsed": du, "diskTotal": dt, "uptimeSec": uptime}
+        elif pts and uptime is not None and None not in pts[-1][1:]:
+            _, cpu, mu, mt, du, dt = pts[-1]          # fallback: last 20-minute point (up to 20 min behind)
             system = {"cpuPct": cpu, "memUsed": mu, "memTotal": mt, "diskUsed": du, "diskTotal": dt, "uptimeSec": uptime}
         pct = lambda a, b: round(a / b * 100, 1) if a is not None and b else None
         out.append({

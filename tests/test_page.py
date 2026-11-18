@@ -235,6 +235,31 @@ class PageTest(unittest.TestCase):
                                        "diskTotal": 4e11, "uptimeSec": 3600})
         self.assertEqual(m["history"], [{"t": "2026-11-17T10:40:00+09:00", "cpuPct": 5.5, "memPct": 50.0, "diskPct": 25.0}])
 
+    def test_machine_current_values_prefer_fresh_1m_record(self):
+        c, t = self.conn, NOW.timestamp()
+        for m in ("C", "N"):
+            c.execute("INSERT INTO machine_state VALUES(?, 'up', 3600, ?)", (m, t - 30))
+        c.execute("INSERT INTO machine_stats VALUES('C', '2026-11-17T01:40:00Z', 5.5, 4e9, 8e9, 1e11, 4e11)")
+        now = {"C": {"t": "2026-11-17T01:59:00Z", "cpu": 42.0, "mu": 6e9, "m": 8e9, "du": 2e11, "d": 4e11},
+               # N: a new machine with no 20m point yet still shows current values
+               "N": {"t": "2026-11-17T01:59:30Z", "cpu": 3.0, "mu": 1e9, "m": 2e9, "du": 5e10, "d": 1e11}}
+        db.put(c, "beszel.now", json.dumps(now))
+        ms = {m["id"]: m for m in self.build(CFG)["machines"]}
+        self.assertEqual(ms["C"]["system"], {"cpuPct": 42.0, "memUsed": 6e9, "memTotal": 8e9, "diskUsed": 2e11,
+                                             "diskTotal": 4e11, "uptimeSec": 3600})
+        self.assertEqual([h["cpuPct"] for h in ms["C"]["history"]], [5.5])   # history stays the 20m series
+        self.assertEqual(ms["N"]["system"]["cpuPct"], 3.0)
+        self.assertEqual(ms["N"]["history"], [])
+        # a stale 1m record (older than STALE) falls back to the last 20m point
+        now["C"]["t"] = "2026-11-17T01:00:00Z"
+        db.put(c, "beszel.now", json.dumps(now))
+        ms = {m["id"]: m for m in self.build(CFG)["machines"]}
+        self.assertEqual(ms["C"]["system"]["cpuPct"], 5.5)
+        # an incomplete 1m record is ignored too
+        now["C"] = {**now["N"], "cpu": None}
+        db.put(c, "beszel.now", json.dumps(now))
+        self.assertEqual({m["id"]: m for m in self.build(CFG)["machines"]}["C"]["system"]["cpuPct"], 5.5)
+
     def test_quota_latest_sample_with_window_history(self):
         c = self.conn
         rows = [("2026-11-10T00:00:00Z", 90, "2026-11-12T00:00:00Z"),       # previous window
