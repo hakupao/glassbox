@@ -28,7 +28,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | C4 | Token expiry reminders: GitHub read-only token, Gitea read-only token, publish token | Calendar entries before they expire |
 | C5 | After a reboot, confirm Tailscale reconnects by itself on the Windows machine and on the dev Mac | `tailscale status` |
 | C6 | Windows probe: confirm which agent log roots should be reported (defaults `~/.claude/projects`, `~/.codex/sessions`) | |
-| C7 | Windows probe: confirm the scheduled task now runs `pythonw.exe` (no console window) and `probe.log` shows `pushed` | |
 | C8 | The home-lab services README still describes the backup scope without glassbox | Separate repository |
 
 ## D. Optional
@@ -42,3 +41,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | # | Item | Notes |
 |---|---|---|
 | E1 | S16: project retrospective, `RETROSPECTIVE.md` (kept, gaps, key decisions) | Per-step retros for S13 and S15 exist in the private evidence folder |
+
+## Done
+
+- C7 (2026-11-18): Windows task runs `pythonw.exe`; no console window (no conhost child), `LastTaskResult` 0, `probe.log` shows `(no console)` and `pushed: {"ok": true ...}`.
