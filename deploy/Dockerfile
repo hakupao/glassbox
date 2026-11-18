@@ -17,6 +17,8 @@ COPY hub/ /app/hub/
 # bundles from <repo root>/web into the single inlined page that / serves.
 COPY probe/ /app/probe/
 COPY web/ /app/web/
+COPY scripts/verify_public.py /app/scripts/verify_public.py
+COPY schema/public_fields.json /app/schema/public_fields.json
 COPY deploy/entrypoint.sh /usr/local/bin/glassbox-entrypoint
 RUN chmod 0755 /usr/local/bin/glassbox-entrypoint
 

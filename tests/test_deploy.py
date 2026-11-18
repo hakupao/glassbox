@@ -27,6 +27,35 @@ def code_lines(text):
 
 
 class DeployTest(unittest.TestCase):
+    def test_image_contents_can_import_publisher_and_gate(self):
+        """Rebuild /app from the Dockerfile's COPY lines (and only those) and import the publisher
+        and the gate there: a module-level read of a file the image lacks crashes the container."""
+        import shutil
+        import subprocess
+        import sys
+        import tempfile
+        df = (ROOT / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        copies = re.findall(r"^COPY\s+(\S+)\s+(/app/\S*)$", df, re.M)
+        self.assertTrue(copies)
+        with tempfile.TemporaryDirectory() as tmp:
+            for src, dst in copies:
+                target = Path(tmp) / dst.removeprefix("/app/")
+                if (ROOT / src).is_dir():
+                    shutil.copytree(ROOT / src, target, ignore=shutil.ignore_patterns("__pycache__"))
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(ROOT / src, target)
+            r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, '.'); "
+                                "import hub.publish as p; p._gate_module(); import hub.server"],
+                               cwd=tmp, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr[-800:])
+
+    def test_dockerignore_lets_every_copied_path_through(self):
+        df = (ROOT / "deploy" / "Dockerfile").read_text(encoding="utf-8")
+        ign = (ROOT / "deploy" / "Dockerfile.dockerignore").read_text(encoding="utf-8")
+        for src, _ in re.findall(r"^COPY\s+(\S+)\s+(\S+)$", df, re.M):
+            self.assertIn("!" + src, ign.splitlines(), src)
+
     def test_compose_publishes_no_ports(self):
         for ln in code_lines(COMPOSE):
             self.assertNotRegex(ln, r"^\s*ports\s*:", ln)
@@ -47,7 +76,7 @@ class DeployTest(unittest.TestCase):
     def test_every_bind_mount_is_read_only_and_never_created(self):
         lines = COMPOSE.splitlines()
         starts = [i for i, ln in enumerate(lines) if ln.strip() == "- type: bind"]
-        self.assertEqual(len(starts), 4)                    # hub.toml, secrets/, serve.json, ts_authkey
+        self.assertEqual(len(starts), 5)                    # hub.toml, secrets/, serve.json, ts_authkey, publish/
         for i in starts:
             blk = "\n".join(lines[i:i + 7])
             self.assertIn("read_only: true", blk, blk)

@@ -14,7 +14,8 @@
 # Everything private lives on the VM in ${GLASSBOX_DIR:-/opt/glassbox}, bind-mounted read-only and
 # never created by compose (create_host_path: false, so a missing directory is an error, not an
 # empty directory silently taking its place):
-#   hub.toml, serve.json, ts_authkey (root only), secrets/<name> (one file per token)
+#   hub.toml, serve.json, ts_authkey (root only), secrets/<name> (one file per token),
+#   publish/ (publisher only: token, public.toml, terms.json, settings.toml)
 
 name: glassbox
 
@@ -113,6 +114,38 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+
+  publisher:
+    # Public snapshot -> gh-pages (hub/publish.py): export, publish gate, one parentless commit.
+    # Off until /opt/glassbox/publish/token exists (logs "publish disabled"), so deploying this
+    # container does not publish. Own uid 10002: it cannot read the hub's secrets/, and the hub
+    # (10001) cannot read the publish token. It reads the private page over the shared namespace.
+    image: "${GLASSBOX_IMAGE:?set GLASSBOX_IMAGE}:${IMAGE_TAG:?set IMAGE_TAG}"
+    container_name: glassbox-publisher
+    restart: unless-stopped
+    network_mode: "service:tailscale"
+    init: true
+    user: "10002:10002"
+    entrypoint: ["python", "-m", "hub.publish", "--loop"]
+    depends_on:
+      tailscale:
+        condition: service_healthy
+        restart: true
+      glassbox:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    environment:
+      GLASSBOX_PUBLISH_DIR: /run/glassbox-publish
+    volumes:
+      - type: bind
+        source: "${GLASSBOX_DIR:-/opt/glassbox}/publish"
+        target: /run/glassbox-publish
+        read_only: true
+        bind:
+          create_host_path: false
 
   docker-proxy:
     # Exact-path allowlist proxy: only GET /containers/json (optionally /vNN.NN/ prefixed) is

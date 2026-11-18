@@ -134,6 +134,31 @@ class GateCliTest(unittest.TestCase):
         self.assertIn("gate error (ZeroDivisionError)", out)
         self.assertNotIn("Traceback", out)
 
+    def test_branch_fragments_that_are_page_code_words_do_not_count(self):
+        """S15: a private branch part such as "motion" (feat/reduced-motion-zorblax) also occurs in the
+        public page's own code (CSS prefers-reduced-motion), which made every real snapshot fail. Words
+        of the shipped web/ sources are exempt for branch fragments only; real names, terms and
+        unrelated fragments still count."""
+        terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
+        priv = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))
+        cfg = vp.load_toml(RT / "context" / "public.toml")
+        priv["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "orchid-batch",
+                                 "public": False, "title": "fix: y", "branch": "feat/reduced-motion-zorblax",
+                                 "hash": "abc1234", "machine": "A"})
+        g = vp.Gate(terms, priv, cfg)
+        self.assertEqual(g.name_hits("@media (prefers-reduced-motion: reduce) { .x { animation: none } }"), set())
+        self.assertTrue(g.name_hits("shipping zorblax tonight"))            # not a page-code word: still private
+        self.assertTrue(g.name_hits("orchid-batch"))                        # real private names unaffected
+        # the same word as an explicit private term is never exempt
+        g2 = vp.Gate(dict(terms, terms=terms["terms"] + ["motion"]), priv, cfg)
+        self.assertTrue(g2.name_hits("prefers-reduced-motion"))
+        # a private commit's URL host is never exempt, even when it is a page-code word (security review L1)
+        priv2 = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))
+        priv2["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "orchid-batch",
+                                  "public": False, "title": "fix: z", "branch": "main", "hash": "abc1234",
+                                  "url": "http://motion/o/r/commit/abc1234", "machine": "A"})
+        self.assertTrue(vp.Gate(terms, priv2, cfg).name_hits("prefers-reduced-motion"))
+
     def test_review2_generated_at_and_conflicts_in_results(self):
         terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
         priv = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))

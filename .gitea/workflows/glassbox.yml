@@ -85,6 +85,18 @@ jobs:
           grep -q '^\[serve\]' /s/hub.toml || { echo "预检失败：hub.toml 缺少 [serve] hosts，页面会返回 421"; exit 1; }
           echo "预检通过：配置文件齐全，uid 10001 可读"
           EOS
+          # 发布器（uid 10002）：和 compose 一样只挂 publish/ 子目录（/opt/glassbox 本身 10002 进不去，这是对的）。
+          # 目录必须存在且可遍历；token 可以没有（没有就不发布）。再确认 10002 读不到 hub 的 secrets/。
+          docker run -i --rm --user 10002:10002 -v "$SECRETS_DIR/publish":/p:ro -v "$SECRETS_DIR/secrets":/sec:ro "$PREFLIGHT_IMAGE" sh -s <<'EOS'
+          miss=""
+          { [ -d /p ] && [ -x /p ] && [ -r /p ]; } || miss="$miss publish/(目录不可遍历)"
+          for f in public.toml terms.json settings.toml; do { [ -r "/p/$f" ] && [ -s "/p/$f" ]; } || miss="$miss publish/$f"; done
+          [ -z "$miss" ] || { echo "预检失败：/opt/glassbox 的发布器文件缺少或对 uid 10002 不可读：$miss"; exit 1; }
+          bad=""; [ -r /sec ] || [ -x /sec ] && bad=1
+          for f in /sec/* /sec/.[!.]*; do [ -r "$f" ] && bad=1; done
+          [ -n "$bad" ] && { echo "预检失败：uid 10002 能进入或读取 secrets/（发布器不应读到 hub 的 token）"; exit 1; }
+          echo "预检通过：发布器配置齐全，读不到 hub 的 secrets"
+          EOS
           # Tailscale 状态卷不存在时（首次部署）必须有 ts_authkey；已有状态则可省略
           if ! docker volume inspect glassbox_tailscale-state >/dev/null 2>&1; then
             docker run --rm -v "$SECRETS_DIR":/s:ro "$PREFLIGHT_IMAGE" test -s /s/ts_authkey \
@@ -155,7 +167,7 @@ jobs:
             echo "funnel 已开启，不允许"; exit 1
           fi
           if echo "$s" | grep -Ei 'funnel on' >/dev/null; then echo "serve 状态里出现 Funnel on，不允许"; exit 1; fi
-          for c in glassbox glassbox-tailscale glassbox-docker-proxy; do
+          for c in glassbox glassbox-tailscale glassbox-docker-proxy glassbox-publisher; do
             b=$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$c")
             case "$b" in
               '{}'|'null') ;;
@@ -165,7 +177,7 @@ jobs:
           if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' glassbox-tailscale | grep '^TS_EXTRA_ARGS=' | grep -Eq 'advertise-routes|advertise-exit-node|exit-node'; then
             echo "tailscale 通告了路由或出口节点，不允许"; exit 1
           fi
-          echo "暴露面检查通过：三个容器都没有发布端口，TS_EXTRA_ARGS 不含路由或出口节点"
+          echo "暴露面检查通过：四个容器都没有发布端口，TS_EXTRA_ARGS 不含路由或出口节点"
 
       - name: 退出镜像仓库
         if: always()

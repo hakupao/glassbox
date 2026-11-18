@@ -2,5 +2,7 @@
 !hub/
 !probe/
 !web/
+!scripts/verify_public.py
+!schema/public_fields.json
 !deploy/entrypoint.sh
 **/__pycache__

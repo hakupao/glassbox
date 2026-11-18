@@ -294,6 +294,21 @@ def vocabulary():
     return {norm(w) for w in words}
 
 
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+
+
+def page_code_words():
+    """Lower-cased words (letters only, 4+ characters) of the page sources in web/: the template and
+    code that every snapshot ships with. Read from the repository, not from the file being checked.
+    A missing web/ directory gives an empty set (nothing exempt: fail closed)."""
+    out = set()
+    if WEB_DIR.is_dir():
+        for p in sorted(WEB_DIR.rglob("*")):
+            if p.is_file() and p.suffix in (".js", ".css", ".html"):
+                out.update(w.casefold() for w in re.findall(r"[A-Za-z]{4,}", p.read_text(encoding="utf-8", errors="replace")))
+    return out
+
+
 def walk_items(node, path):
     """Dicts at `path` ("a.b[].c" style, list-valued at the end)."""
     nodes = [node]
@@ -314,7 +329,7 @@ SITES = [("activity", "repo"), ("today.byProject", "project"), ("code.commits", 
 TEXT_PATHS = [p for p, t in FIELDS.items() if t.rstrip("?") == "text" and p != "activity[].branch"]
 
 
-def derive(private, private_projects):
+def derive(private, private_projects, with_frags=False):
     """Visibility and private names, read from the PRIVATE page itself — not from the exporter.
     A name is public only when every occurrence is public:true and not Gitea (review H1)."""
     seen = {}
@@ -353,7 +368,8 @@ def derive(private, private_projects):
                     host = re.sub(r"^\w+://([^/]+).*", r"\1", e["url"]).lower()
                     if host not in ("github.com", "www.github.com"):
                         hashes.add(host)
-    return public, names | hashes | frags, branches, (hashes | frags) - names
+    out = (public, names | hashes | frags, branches, (hashes | frags) - names)
+    return out + (frags - names,) if with_frags else out
 
 
 class Gate:
@@ -370,7 +386,16 @@ class Gate:
         self.private_titles = config.get("privateTitles", "prefix-only")      # default: owner's decision 2026-11-17
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
-        public, derived, branches, whole_words = derive(private or {}, self.private_projects)
+        public, derived, branches, whole_words, frag_words = derive(private or {}, self.private_projects, with_frags=True)
+        # Branch fragments (never hashes or URL hosts of private commits) that are words of the page's own shipped code
+        # (web/ in this repository, never the file under check) reveal nothing: "motion" from a
+        # private branch "feat/reduced-motion" also sits in the public CSS (prefers-reduced-motion).
+        # Only fragments are exempt; terms, keywords, private projects and real names never are.
+        strong = ({t.casefold() for t in terms.get("terms", [])} | {k.casefold() for k in config.get("keywords", [])}
+                  | {p.casefold() for p in self.private_projects})
+        code_words = page_code_words()
+        exempt = {w for w in frag_words if w.casefold() in code_words and w.casefold() not in strong}
+        derived, whole_words = derived - exempt, whole_words - exempt
         # Review 2: the snapshot must come from this private page: same generatedAt (copied as is).
         self.private_generated = None if private is None else (private.get("generatedAt") or "(missing)")
         self.public_repos = public
