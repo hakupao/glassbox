@@ -118,9 +118,8 @@ services:
     # Exact-path allowlist proxy: only GET /containers/json (optionally /vNN.NN/ prefixed) is
     # forwarded; inspect, logs, exec, archive, export and every write method answer 403, and only
     # the tailscale container (the hub shares its network namespace) may connect.
-    # BEFORE DEPLOY check the flag names, the default port (2375) and the tag against the project's
-    # documentation (wollomatic/socket-proxy): they are written from memory. Pin an exact tag
-    # and digest at deploy time.
+    # Flag names, port 2375 and user 65534 checked against the image (`-help`) at the first
+    # deploy (2026-11-18). Still to do: pin an exact tag and digest instead of the major tag.
     image: wollomatic/socket-proxy:1
     container_name: glassbox-docker-proxy
     restart: unless-stopped

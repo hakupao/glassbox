@@ -1,7 +1,7 @@
 {
   "project": "glassbox",
   "tier": 3,
-  "updated": "2026-11-17",
+  "updated": "2026-11-18",
   "steps": {
     "S01": {
       "status": "done",
@@ -48,8 +48,8 @@
       "note": "scripts/verify_public.py: independent visibility from --private, strict CSP head check per HTML spec, single-file site, homoglyph/encoding-aware name match; 4 security review rounds, APPROVE; reviewer red-team set (105 must-block) in tests/redteam/reviewer/"
     },
     "S13": {
-      "status": "in_progress",
-      "note": "deploy/ + docs/runbooks/ written (lane C), security review APPROVE after 2 rounds; never run in docker yet; image tags/params marked verify-before-deploy"
+      "status": "done",
+      "note": "deployed 2026-11-18 via Gitea workflow (cc257f9): tailnet-only hub, README section 5 all 11 checks pass, workflow health/exposure steps replayed on VM pass; attempt 1 crash-looped on tailscale v1.78.1 (archived), pinned v1.104.7 by digest; verifier PASS. Follow-ups: WAL first-start race in db.connect; pin socket-proxy/alpine digests; data volume into backup (ask user)"
     },
     "S14": {
       "status": "todo"
