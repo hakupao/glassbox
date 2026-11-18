@@ -64,10 +64,11 @@ services:
       retries: 3
 
   tailscale:
-    # Pinned tag; bump to the current stable release and add the @sha256 digest when deploying.
-    # BEFORE DEPLOY check against the official Tailscale container docs: TS_ENABLE_HEALTH_CHECK,
-    # TS_LOCAL_ADDR_PORT, TS_SERVE_CONFIG and the containerboot path are written from memory.
-    image: tailscale/tailscale:v1.78.1
+    # Pinned tag + digest (current stable at first deploy, 2026-11-18). v1.78.1 crash-looped here:
+    # containerboot exited with "failed running server: http: Server closed" right after applying
+    # TS_SERVE_CONFIG with the health check enabled. Env names and the containerboot path were
+    # checked against this image.
+    image: tailscale/tailscale:v1.104.7@sha256:72c1e19e0aedca96b8533bbb0b4368564410ff20b17e53b804eb6c1f04a31be4
     container_name: glassbox-tailscale
     hostname: "${TS_HOSTNAME:-glassbox}"                     # becomes <hostname>.<TAILNET_NAME>.ts.net
     restart: unless-stopped
