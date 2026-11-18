@@ -111,12 +111,12 @@ function commitItem(a){
   const tags = [G.repoTag(a.repo), srcBadge(a.source), a.pushed === false ? bd(esc(t('commit.unpushed')), 'c-warn', true) : '',
     a.machine ? G.mc(a.machine) : '', a.branch ? `<span class="rel">${esc(a.branch)}${a.hash ? ' · ' + esc(a.hash.slice(0, 7)) : ''}</span>` : ''].join(' ');
   G.detail(key, () => commitDetail(a));
-  return `<li ${G.xattrs(key)}><time>${esc(F.when(a.t))}</time><span class="p bds">${tags}</span><span class="d"><span><span class="tw">▸</span>${esc(a.title)}</span><span class="rel">${esc(F.ago(a.t))}</span></span></li>
+  return `<li ${G.xattrs(key)}><time>${esc(F.when(a.t))}</time><span class="p bds">${tags}</span><span class="d"><span><span class="tw">▸</span>${G.ttl(a.title)}</span><span class="rel">${esc(F.ago(a.t))}</span></span></li>
     <li class="xd" id="xd-${key}" hidden><div class="box" data-slot></div></li>`;
 }
 function commitDetail(a){
   const url = G.safeLink(a.url);
-  const rows = [['commit.title', esc(a.title)], ['commit.repo', T(a.repo)], ['commit.source', srcBadge(a.source)],
+  const rows = [['commit.title', G.ttl(a.title)], ['commit.repo', T(a.repo)], ['commit.source', srcBadge(a.source)],
     ['commit.time', esc(F.full(a.t))], ['commit.branch', a.branch ? esc(a.branch) : '—'], ['commit.hash', a.hash ? `<span class="m">${esc(a.hash)}</span>` : '—'],
     ['commit.machine', a.machine ? G.mc(a.machine) : '—'], ['commit.pushed', esc(t(a.pushed ? 'yes' : 'no'))],
     ['commit.visibility', esc(t(a.public ? 'commit.public' : 'commit.private'))]];

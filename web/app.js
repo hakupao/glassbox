@@ -236,11 +236,25 @@ makeFormatters();
 
 /* ------------------------------------------------------------------ html helpers */
 const esc = G.esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-const MASK = '█'.repeat(8);
+/* masked text: a small pixel matrix in the page's own cell language (like the heatmap and the
+   background), drawn as SVG so it does not depend on fonts. The patterns are fixed and rotate per
+   placeholder; they never depend on the hidden value (CONTRACT §0.1). Digits are cell shades 0-3. */
+const MASK_ROWS = [['3213012320312302', '1302321031203213'], ['2031203213021320', '3120312023130231'],
+                   ['1230321302312031', '2302130231203123'], ['3021320312031230', '1320230121302312']];
+const MASK_OP = [0.12, 0.38, 0.62, 0.9];
+const MASKS = MASK_ROWS.map(rows => `<svg width="63" height="7" viewBox="0 0 63 7" aria-hidden="true">${
+  rows.map((r, y) => [...r].map((v, x) => `<rect x="${x * 4}" y="${y * 4}" width="3" height="3" opacity="${MASK_OP[+v]}"/>`).join('')).join('')}</svg>`);
+let maskI = 0;
+const MASK_NEXT = () => MASKS[maskI++ % MASKS.length];
+/* the same matrix, 8 cells wide, for the "******" that export puts in place of scrubbed words in titles */
+const MASKS_SHORT = MASK_ROWS.map(rows => `<svg width="31" height="7" viewBox="0 0 31 7" aria-hidden="true">${
+  rows.map((r, y) => [...r.slice(0, 8)].map((v, x) => `<rect x="${x * 4}" y="${y * 4}" width="3" height="3" opacity="${MASK_OP[+v]}"/>`).join('')).join('')}</svg>`);
 /* Text (CONTRACT §0.1): plain / masked placeholder (fixed 8 cells, blurred) / merged group */
 G.T = v => v && typeof v === 'object'
-  ? (v.group === 'private' ? `<span class="grp">${esc(t('text.private'))}</span>` : `<span class="mask" role="img" aria-label="${esc(t('text.masked'))}">${MASK}</span>`)
+  ? (v.group === 'private' ? `<span class="grp">${esc(t('text.private'))}</span>` : `<span class="mask" role="img" aria-label="${esc(t('text.masked'))}">${MASK_NEXT()}</span>`)
   : esc(v == null ? '—' : v);
+/* commit title: escaped text, with each scrubbed run ("******", hub/export.py RED) drawn as a short matrix */
+G.ttl = v => esc(v).replace(/\*{6}/g, () => `<span class="mask redact" role="img" aria-label="${esc(t('text.masked'))}">${MASKS_SHORT[maskI++ % MASKS_SHORT.length]}</span>`);
 G.Tplain = v => v && typeof v === 'object' ? (v.group === 'private' ? t('text.private') : t('text.masked')) : (v == null ? '—' : String(v));
 G.Tkey = v => v && typeof v === 'object' ? (v.group === 'private' ? '\u0000private' : '\u0000masked') : String(v == null ? '' : v);
 G.safeLink = u => typeof u === 'string' && /^https:[/][/][^\s"'<>]+$/.test(u) ? u : null;
@@ -253,7 +267,7 @@ const TAGS = ['#e07a8a', '#7fa8e8', '#79b98a', '#d9a441', '#a48ee0', '#5fb7b0', 
 G.hue = s => { let h = 0; for(const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return TAGS[h % TAGS.length]; };
 const bd = G.bd = (txt, cls = '', dot = false, style = '', live = false) => `<span class="bd ${cls}${dot ? ' dot' : ''}${live ? ' live' : ''}"${style ? ` style="${style}"` : ''}>${txt}</span>`;
 G.repoTag = r => typeof r === 'string' ? bd(esc(r), '', true, `color:${G.hue(r)}`)
-  : (r && r.group === 'private' ? `<span class="grp">${esc(t('text.private'))}</span>` : bd(`<span class="mask" role="img" aria-label="${esc(t('text.masked'))}">${MASK}</span>`, 'c-dim', true));
+  : (r && r.group === 'private' ? `<span class="grp">${esc(t('text.private'))}</span>` : bd(`<span class="mask" role="img" aria-label="${esc(t('text.masked'))}">${MASK_NEXT()}</span>`, 'c-dim', true));
 G.AG = a => a === 'claude-code' ? 'Claude Code' : a === 'codex' ? 'Codex' : esc(a);
 G.agCls = a => a === 'codex' ? 'c-or' : 'c-fg';
 G.agCol = a => a === 'codex' ? OR : BLUE;
@@ -287,7 +301,7 @@ G.more = (href, key = 'more.all') => `<a class="more" href="${href}">${esc(t(key
 /* panel header: icon, title, count badge, right side */
 G.ph = (id, icon, color, title, count, right, tag = 'h2') =>
   `<div class="ph"><${tag} id="${id}">${icon ? G.ic(icon, color) : ''}${title}${count != null && count !== '' ? G.cnt(count) : ''}</${tag}><span class="r">${right || ''}</span></div>`;
-G.grpH = (n, key) => `<div class="grp-h"><b>${n}</b>${esc(t(key))}</div>`;
+G.grpH = (n, key) => `<div class="grp-h">${esc(t(key))}</div>`;   /* n kept for call sites; no numbering (owner 2026-11-18) */
 let panelI = 0;
 G.pn = (id, inner, cls = '') => `<section class="pn ${cls}" style="--i:${panelI++}" aria-labelledby="${id}">${inner}</section>`;
 G.resetPanels = () => { panelI = 0; barN = 0; };

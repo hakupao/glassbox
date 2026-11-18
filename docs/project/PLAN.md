@@ -117,7 +117,7 @@
 
 ## 7. 交接（2026-11-17 session 3 结束）
 
-**新 session 先读**：本文件 → `_progress.json`（步骤状态与 followups）→ `schema/CONTRACT.md` → `design/ASCII_STYLE_NOTES.md` 末尾几条 → `.local/HANDOFF.local.md`（环境、凭据位置、并行分工细节）。
+**新 session 先读**：本文件 → `docs/project/progress.json`（步骤状态与 followups）→ `schema/CONTRACT.md` → `design/ASCII_STYLE_NOTES.md` 末尾几条 → `.local/HANDOFF.local.md`（环境、凭据位置、并行分工细节）。
 
 **已完成**：S01–S09。
 - 探针（`probe/`）：用量已和独立计数器、ccusage 核对一致；额度、本地 git、运行时也已完成。

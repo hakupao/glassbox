@@ -18,7 +18,7 @@ Rules for every runbook:
 
 ## Follow-ups S13 and where each is handled
 
-| # | Follow-up (from `_progress.json`, S13) | Handled in |
+| # | Follow-up (from `docs/project/progress.json`, S13) | Handled in |
 |---|---|---|
 | 1 | Install the pre-commit privacy hook on every clone (`.git/hooks` is not versioned) | install-probe.md step 1 (also do it on every other clone, including the deploy machine's) |
 | 2 | Gitea read-only token (single instance); GitHub fine-grained read-only token | deploy/README.md section 1 (what to create); deploy-hub.md step 2 (who hands them over) |
