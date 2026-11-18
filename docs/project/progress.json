@@ -56,7 +56,8 @@
       "note": "2026-11-18: glassbox probes on dev Mac (launchd) and Windows (Task Scheduler) report to the hub, same salt; Beszel agents on dev Mac (own launchd plist, brew binary), MacBook Pro (release binary 0.21.2, verified checksum, user LaunchAgent) and Windows (by that machine's agent, firewall limited to the Beszel host); all 5 machines online with current values from Beszel 1m records (489a10b)"
     },
     "S15": {
-      "status": "todo"
+      "status": "done",
+      "note": "2026-11-18: public at https://status.bojiang.org (GitHub Pages, custom domain, HTTPS enforced); repo public with READMEs en/zh/ja, MIT; publisher on the deploy VM republishes every 10 min as one parentless gh-pages commit after export + gate; live page re-gated clean. Follow-ups: machines online count mismatch, overview requests < per-agent count, background art, Kuma alert for the publisher, label==code export error"
     },
     "S16": {
       "status": "todo"
