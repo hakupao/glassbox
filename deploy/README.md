@@ -178,6 +178,11 @@ GLASSBOX_DIR=<DIR_LIKE_OPT_GLASSBOX> \
 docker compose -f deploy/compose.yaml -f deploy/compose.build.yaml up -d --build
 ```
 
+## Publisher config sync
+
+The public-snapshot config exists twice: `.local/public.local.toml` and `.local/redact_terms.local.json` in the dev clone, and `/opt/glassbox/publish/public.toml` and `terms.json` on the VM. Set `GLASSBOX_VM_EXEC` to the command prefix that runs a command on the VM, unquoted words only (e.g. `GLASSBOX_VM_EXEC='ssh <host> limactl shell <vm> --'`; quoting the inner part makes the remote shell treat it as one command name), then run `scripts/sync_publish.sh` (dry run: prints "same" or "differs (N lines)" per file, never contents; `--show-diff` adds a diff, which is private).
+`scripts/sync_publish.sh --apply` validates the local TOML and JSON, compares every file first, writes each differing or missing one through a temp file next to it that is 0640 from the start, installs it (root, group 10002, mode 0640) and re-fetches it to confirm. It touches no other file and restarts nothing: the publisher reads the files on every run.
+
 ## Restarting
 
 If the `tailscale` container is restarted or recreated by hand, restart the hub as well (`docker restart glassbox`): it is attached to the sidecar's network namespace, which is replaced. `depends_on ... restart: true` normally does this already (needs Compose 2.17 or newer).

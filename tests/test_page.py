@@ -252,6 +252,14 @@ class PageTest(unittest.TestCase):
                                        "diskTotal": 4e11, "uptimeSec": 3600})
         self.assertEqual(m["history"], [{"t": "2026-11-17T10:40:00+09:00", "cpuPct": 5.5, "memPct": 50.0, "diskPct": 25.0}])
 
+    def test_unmapped_beszel_systems_warn_with_a_count_only(self):
+        self.assertFalse([w for w in self.build()["warnings"] if w["kind"] == "machine-config"])
+        db.put(self.conn, "beszel.unmapped", "2")
+        (w,) = [w for w in self.build()["warnings"] if w["kind"] == "machine-config"]
+        self.assertEqual(w["detail"], "2 Beszel system(s) returned but not in [beszel.map]")
+        db.put(self.conn, "beszel.unmapped", "0")
+        self.assertFalse([w for w in self.build()["warnings"] if w["kind"] == "machine-config"])
+
     def test_machine_current_values_prefer_fresh_1m_record(self):
         c, t = self.conn, NOW.timestamp()
         for m in ("C", "N"):

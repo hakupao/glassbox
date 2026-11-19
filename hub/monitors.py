@@ -139,6 +139,7 @@ def beszel(conn, cfg):
         conn.execute("DELETE FROM container_stats")
         conn.executemany("INSERT OR REPLACE INTO container_stats VALUES(?,?,?,?)", containers)
         db.put(conn, "beszel.now", json.dumps(current))     # kv, not a table: no schema change
+        db.put(conn, "beszel.unmapped", str(unmapped))      # a count only: the page warns, never a name
     return {"systems": len(state), "unmapped": unmapped, "points": len(stats), "current": len(current),
             "containers": len(containers)}
 

@@ -42,3 +42,12 @@ On the VM's `/opt/glassbox/hub.toml` (edited by the user with sudoedit), make su
 docker exec glassbox glassbox-entrypoint collect monitors
 ```
 Expect `beszel` in the output to report a systems count including this machine, with no `error`.
+
+## New machine checklist
+
+Do these in order when a machine is added to Beszel later; skipping any step makes the hub drop the machine.
+
+1. In the Beszel (PocketBase) admin, open the `systems` record of the new system and add the hub's read-only account to its `users` field. Without this the hub never sees the system at all (no warning is possible).
+2. On the VM, add `"<BESZEL_SYSTEM_NAME>" = "<MACHINE_CODE>"` under `[beszel.map]` in `/opt/glassbox/hub.toml` (the user edits it with sudoedit). A system that the hub sees but that is not in the map is dropped, and the page shows a `machine-config` warning with a count.
+3. Restart the hub: `docker restart glassbox`.
+4. Check: `docker exec glassbox glassbox-entrypoint collect monitors` reports `unmapped` without this system, and the machine card shows current CPU, memory and disk values.

@@ -459,6 +459,10 @@ def build(conn, cfg, now=None):
     for t, m, kind, detail in conn.execute(
             "SELECT t, machine, kind, detail FROM warnings WHERE t >= ? ORDER BY t DESC LIMIT 50", (now_ts - 7 * 86400,)):
         warnings.append({"t": iso(t), "machine": m, "kind": kind, "detail": detail})
+    unmapped = int(db.get(conn, "beszel.unmapped") or 0)
+    if unmapped:    # a count, not names: warnings can reach the public export
+        warnings.append({"t": None, "machine": None, "kind": "machine-config",
+                         "detail": f"{unmapped} Beszel system(s) returned but not in [beszel.map]"})
 
     return {
         "schema": "glassbox.page/1", "view": "private",

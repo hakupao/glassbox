@@ -335,7 +335,7 @@ window.GLASSBOX_I18N = {
   "mach.nJobs": "{n} 任务",
   "mach.nSvc": "{n} 服务",
   "rt.state": "状态",
-  "rt.fresh": "正常",
+  "rt.fresh": "最新",
   "rt.staleShort": "过期",
   "rt.noRuntime": "无运行时",
   "micon.laptop": "笔记本",

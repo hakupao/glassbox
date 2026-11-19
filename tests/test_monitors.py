@@ -124,6 +124,7 @@ class MonitorsTest(unittest.TestCase):
     def test_collect_all(self):
         out = monitors.collect(self.conn, self.cfg)
         self.assertEqual(out["beszel"]["unmapped"], 1)
+        self.assertEqual(db.get(self.conn, "beszel.unmapped"), "1")
         self.assertEqual(sorted(r[0] for r in self.q("SELECT machine FROM machine_state")), ["C", "V"])
         self.assertEqual(self.q("SELECT cpu, mem_used FROM machine_stats WHERE machine='C'"), [(12.5, 8 * 1024 ** 3)])
         # the same container name on two machines stays two rows
