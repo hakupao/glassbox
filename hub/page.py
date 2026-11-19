@@ -88,6 +88,7 @@ class _Day:
         self.agent = defaultdict(_Acc)
         self.model = defaultdict(_Acc)       # (model, agent)
         self.project = defaultdict(_Acc)     # project key
+        self.machine = defaultdict(_Acc)     # machine code
         self.hourly = defaultdict(_Acc)      # local hour 0..23
 
 
@@ -103,19 +104,21 @@ def _usage(conn, tz, first_day):
         return local[hour]
 
     days = defaultdict(_Day)
-    for hour, agent, model, project, req, unp, i, o, cr, cw, rs, cost in conn.execute(
-            "SELECT hour, agent, model, project, requests, unpriced, input, output, cache_read, cache_write, "
+    for machine, hour, agent, model, project, req, unp, i, o, cr, cw, rs, cost in conn.execute(
+            "SELECT machine, hour, agent, model, project, requests, unpriced, input, output, cache_read, cache_write, "
             "reasoning, cost FROM usage WHERE hour >= ?", (lo,)):
         d, h = cut(hour)
         day, t = days[d], (i, o, cr, cw, rs)
-        for acc in (day.total, day.agent[agent], day.model[(model, agent)], day.project[project], day.hourly[h]):
+        for acc in (day.total, day.agent[agent], day.model[(model, agent)], day.project[project], day.machine[machine],
+                    day.hourly[h]):
             acc.add(req, unp, t, cost)
-    for hour, agent, project, n in conn.execute(
-            "SELECT hour, agent, project, count FROM sessions WHERE hour >= ?", (lo,)):
+    for machine, hour, agent, project, n in conn.execute(
+            "SELECT machine, hour, agent, project, count FROM sessions WHERE hour >= ?", (lo,)):
         day = days[cut(hour)[0]]
         day.total.sessions += n
         day.agent[agent].sessions += n
         day.project[project].sessions += n
+        day.machine[machine].sessions += n
     return days
 
 
@@ -152,6 +155,12 @@ def _projects_of(day, projects, detail=False):
     return out
 
 
+def _machines_of(day):
+    return [{"machine": m, "requests": acc.requests, "sessions": acc.sessions, "unpricedRequests": acc.unpriced,
+             "tokens": dict(acc.tokens), "costUsd": _r(acc.cost)}
+            for m, acc in sorted(day.machine.items(), key=lambda kv: (-kv[1].cost, -kv[1].requests, kv[0] or ""))]
+
+
 def _today(day, projects):
     t = day.total
     return {
@@ -173,7 +182,8 @@ def _usage_day(d, day, projects):
     t = day.total
     return {"date": d.isoformat(), "requests": t.requests, "sessions": t.sessions, "unpricedRequests": t.unpriced,
             "tokens": dict(t.tokens), "cacheHitRate": _hit(t.tokens), "costUsd": _r(t.cost),
-            "byAgent": _agents(day), "byModel": _models(day, True), "byProject": _projects_of(day, projects, True)}
+            "byAgent": _agents(day), "byModel": _models(day, True), "byProject": _projects_of(day, projects, True),
+            "byMachine": _machines_of(day)}
 
 
 # ------------------------------------------------------------------------------ quota

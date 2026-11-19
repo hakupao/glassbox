@@ -66,6 +66,23 @@ class PageTest(unittest.TestCase):
         self.assertEqual((d16["requests"], d16["sessions"]), (5, 2))
         self.assertEqual(t["cacheHitRate"], round(100 / (10 + 100 + 10), 4))
 
+    def test_usage_days_by_machine_sum_to_day_totals(self):
+        usage(self.conn, "2026-11-17T00:00:00Z", 4, cost=1.25, machine="A")
+        usage(self.conn, "2026-11-17T01:00:00Z", 2, agent="codex", model="gpt-6-astra", cost=None, machine="B")
+        usage(self.conn, "2026-11-17T01:00:00Z", 6, cost=0.5, machine="B")
+        self.conn.execute("INSERT INTO sessions VALUES('A', '2026-11-17T00:00:00Z', 'claude-code', 'p_pub', 1)")
+        self.conn.execute("INSERT INTO sessions VALUES('B', '2026-11-17T01:00:00Z', 'codex', 'p_pub', 3)")
+        d = self.build()["usageDays"][-1]
+        bm = d["byMachine"]
+        self.assertEqual([m["machine"] for m in bm], ["A", "B"])                  # cost desc
+        self.assertEqual((bm[1]["requests"], bm[1]["sessions"], bm[1]["unpricedRequests"]), (8, 3, 2))
+        for k in ("requests", "sessions", "unpricedRequests"):
+            self.assertEqual(sum(m[k] for m in bm), d[k], k)
+        self.assertAlmostEqual(sum(m["costUsd"] for m in bm), d["costUsd"])
+        for k in d["tokens"]:
+            self.assertEqual(sum(m["tokens"][k] for m in bm), d["tokens"][k], k)
+        self.assertEqual(self.build()["usageDays"][0]["byMachine"], [])
+
     def test_rejects_zone_without_whole_hour_offset(self):
         with self.assertRaises(ValueError):
             self.build({"tz": "Asia/Kolkata"})

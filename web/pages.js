@@ -307,7 +307,7 @@ function miniBars(w, dates, vals, color, fmt, NR = 8){
 const MODEL_COLORS = ['#6c97d6', '#dba843', '#a48ee0', '#79b98a', '#5fb7b0', '#e07a8a', '#c68fd0', '#e3894d'];
 function aggregate(days){
   const tot = {requests: 0, sessions: 0, unpriced: 0, cost: 0, tokens: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0}};
-  const ag = new Map(), mo = new Map(), pr = new Map();
+  const ag = new Map(), mo = new Map(), pr = new Map(), ma = new Map();
   for(const d of days){
     tot.requests += d.requests; tot.sessions += d.sessions; tot.unpriced += d.unpricedRequests; tot.cost += d.costUsd;
     for(const k in tot.tokens) tot.tokens[k] += d.tokens[k];
@@ -317,9 +317,11 @@ function aggregate(days){
       x.requests += m.requests; x.unpricedRequests += m.unpricedRequests; if(m.costUsd != null) x.costUsd = (x.costUsd || 0) + m.costUsd; for(const k in x.tokens) x.tokens[k] += m.tokens[k]; mo.set(key, x); }
     for(const p of d.byProject){ const key = G.Tkey(p.project), x = pr.get(key) || {project: p.project, public: p.public, requests: 0, sessions: 0, unpricedRequests: 0, costUsd: 0};
       x.requests += p.requests; x.sessions += p.sessions; x.unpricedRequests += p.unpricedRequests; x.costUsd += p.costUsd; pr.set(key, x); }
+    for(const m of d.byMachine){ const x = ma.get(m.machine) || {machine: m.machine, requests: 0, sessions: 0, unpricedRequests: 0, costUsd: 0, tokens: {input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0}};
+      x.requests += m.requests; x.sessions += m.sessions; x.unpricedRequests += m.unpricedRequests; x.costUsd += m.costUsd; for(const k in x.tokens) x.tokens[k] += m.tokens[k]; ma.set(m.machine, x); }
   }
   const byCost = (a, b) => (b.costUsd || 0) - (a.costUsd || 0) || b.requests - a.requests;
-  return {tot, agents: [...ag.values()].sort(byCost), models: [...mo.values()].sort(byCost), projects: [...pr.values()].sort(byCost)};
+  return {tot, agents: [...ag.values()].sort(byCost), models: [...mo.values()].sort(byCost), projects: [...pr.values()].sort(byCost), machines: [...ma.values()].sort(byCost)};
 }
 function seg(items, cur, mk){
   return `<span class="seg" role="group">${items.map(([v, label]) => `<a href="${mk(v)}" aria-current="${String(v) === String(cur)}">${label}</a>`).join('')}</span>`;
@@ -328,7 +330,7 @@ P.usage = params => {
   const full = D.usageDays && D.usageDays.length;
   const ranges = full ? [7, 30, 90] : [7, 30];
   let range = parseInt(params.get('range') || '30', 10); if(!ranges.includes(range)) range = 30;
-  const dims = full ? ['agent', 'model', 'project'] : ['agent'];
+  const dims = full ? ['agent', 'model', 'project', 'machine'] : ['agent'];
   let dim = params.get('by') || 'agent'; if(!dims.includes(dim)) dim = 'agent';
   const metric = full && params.get('m') === 'requests' ? 'requests' : 'cost';
   const link = o => G.href('usage', {range, by: dim, m: metric === 'cost' ? null : metric, ...o});
@@ -354,6 +356,12 @@ P.usage = params => {
     if(dim === 'agent'){
       series = [{key: 'codex', label: 'Codex', color: C.OR}, {key: 'claude-code', label: 'Claude Code', color: C.BLUE}];
       partOf = d => Object.fromEntries(d.byAgent.map(a => [a.agent, val(a)]));
+    }else if(dim === 'machine'){
+      const top = A.machines.slice(0, 7), keys = new Set(top.map(x => x.machine));
+      series = top.map(x => ({key: x.machine, label: x.machine, html: G.mc(x.machine), color: G.mhex(x.machine)}));
+      if(A.machines.length > top.length) series.push({key: '\u0000rest', label: t('usage.other'), color: C.DIM});
+      series.reverse();
+      partOf = d => { const o = {}; for(const x of d.byMachine){ const k = keys.has(x.machine) ? x.machine : '\u0000rest'; o[k] = (o[k] || 0) + val(x); } return o; };
     }else{
       const top = (dim === 'model' ? A.models : A.projects).slice(0, 7), keyOf = x => dim === 'model' ? x.model + '\u0000' + x.agent : G.Tkey(x.project);
       const keys = new Set(top.map(keyOf));
@@ -375,6 +383,7 @@ P.usage = params => {
       G.pn('u-tok', G.ph('u-tok', 'pie', 'vio', esc(t('usage.tokens')), esc(t('usage.days', {n: range})), '') + `<table class="tb">${tokenRows(tt.tokens)}</table>`) + `</div>`;
     h += `<div class="grid2 even">` + G.pn('u-model', G.ph('u-model', 'chip', 'fg', esc(t('usage.byModel')), esc(t('usage.nModels', {n: A.models.length})), esc(t('detail.hint'))) + `<table class="tb">${modelRows(A.models, true, days)}</table>`) +
       G.pn('u-proj', G.ph('u-proj', 'list', 'ok', esc(t('usage.byProject')), esc(t('usage.nProjects', {n: A.projects.length})), esc(t('detail.hint'))) + `<table class="tb">${projectRows(A.projects, true, days)}</table>`) + `</div>`;
+    h += G.pn('u-mach', G.ph('u-mach', 'server', 'ok', esc(t('usage.byMachine')), esc(t('usage.nMachines', {n: A.machines.length})), esc(t('detail.hint'))) + `<table class="tb">${machineRows(A.machines, tt.cost, days)}</table>`);
   }else{
     /* public snapshot: only the 30-day cost by agent and today's breakdown exist */
     const tr = D.trend.slice(-range);
@@ -426,11 +435,21 @@ function agentRows(list, totCost, days){
       <tr class="xd" id="xd-${key}" hidden><td colspan="5"><div class="box" data-slot></div></td></tr>`;
   }).join('');
 }
+function machineRows(list, totCost, days){
+  if(!list.length) return `<tr><td class="k">${esc(t('none'))}</td></tr>`;
+  if(!days) return list.map(m => `<tr><td class="n">${G.mc(m.machine)}</td><td class="bar">${G.bar(totCost ? m.costUsd / totCost : 0, G.mhex(m.machine))}</td><td class="v">${F.usd(m.costUsd)}</td><td class="p">${esc(t('req.n', {n: F.n(m.requests)}))}</td></tr>`).join('');
+  return `<tr><th>${esc(t('svc.machine'))}</th><th class="bar"></th><th class="v">${esc(t('kpi.cost'))}</th><th class="v hide-s">${esc(t('kpi.requests'))}</th><th class="v hide-s">${esc(t('kpi.sessions'))}</th></tr>` + list.map((m, i) => {
+    const key = 'mc' + i;
+    G.detail(key, w => seriesDetail(w, days, d => { const x = d.byMachine.find(y => y.machine === m.machine); return x ? x.costUsd : 0; }, G.mhex(m.machine), m.tokens, m.unpricedRequests, m.sessions));
+    return `<tr ${G.xattrs(key)}><td class="n"><span class="tw">▸</span>${G.mc(m.machine)}</td><td class="bar">${G.bar(totCost ? m.costUsd / totCost : 0, G.mhex(m.machine))}</td><td class="v">${F.usd(m.costUsd)}</td><td class="v hide-s">${F.n(m.requests)}</td><td class="v hide-s">${F.n(m.sessions)}</td></tr>
+      <tr class="xd" id="xd-${key}" hidden><td colspan="5"><div class="box" data-slot></div></td></tr>`;
+  }).join('');
+}
 function dayRows(days){
   const mx = max(days.map(d => d.costUsd)) || 1;
   return days.map((d, i) => {
     const key = 'd' + i, tot = G.totTok(d.tokens);
-    if(d.requests > 0) G.detail(key, () => `<div class="xd-grid grid"><div><div class="lab">${esc(t('usage.byModel'))}</div><table class="tb">${modelRows(d.byModel, false)}</table></div><div><div class="lab">${esc(t('usage.byProject'))}</div><table class="tb">${projectRows(d.byProject, false)}</table></div></div>`);
+    if(d.requests > 0) G.detail(key, () => `<div class="xd-grid grid"><div><div class="lab">${esc(t('usage.byModel'))}</div><table class="tb">${modelRows(d.byModel, false)}</table></div><div><div class="lab">${esc(t('usage.byProject'))}</div><table class="tb">${projectRows(d.byProject, false)}</table></div><div><div class="lab">${esc(t('usage.byMachine'))}</div><table class="tb">${machineRows(d.byMachine, d.costUsd, null)}</table></div></div>`);
     const attrs = d.requests > 0 ? G.xattrs(key) : '';
     return `<tr ${attrs}${d.requests ? '' : ' style="opacity:.45"'}><td class="k">${d.requests ? '<span class="tw">▸</span>' : '<span class="tw"></span>'}${esc(F.dfull(d.date))}</td><td class="v">${F.n(d.requests)}</td><td class="v hide-s">${F.n(d.sessions)}</td><td class="v hide-s">${F.tok(tot)}</td><td class="v hide-m">${d.requests ? F.pct1(d.cacheHitRate) : '—'}</td><td class="v">${F.usd(d.costUsd)}</td><td class="bar hide-s">${G.bar(d.costUsd / mx, 4)}</td></tr>` +
       (d.requests > 0 ? `<tr class="xd" id="xd-${key}" hidden><td colspan="7"><div class="box" data-slot></div></td></tr>` : '');

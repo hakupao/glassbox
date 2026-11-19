@@ -338,7 +338,8 @@ class ExportTest(unittest.TestCase):
         p["tailnet"][0]["lastSeen"] = None
         p["services"][0]["machine"] = None
         p["quota"].append(dict(p["quota"][0], account="a_1f2e3d4c"))         # no code configured: hash
-        p.update(usageDays=[{"date": "2026-11-17"}], code={"repos": []}, warnings=["probe B is late"])
+        p.update(usageDays=[{"date": "2026-11-17", "byMachine": [{"machine": "A", "requests": 1, "costUsd": 0.1}]}],
+                 code={"repos": []}, warnings=["probe B is late"])
         p["contributions"]["githubOfficialTotal"] = 7000
         cfg = ex.load_config(None)                                     # strictest; tailnet not hidden
         pub, ctx = self.run_export(cfg=cfg)

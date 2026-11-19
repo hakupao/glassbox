@@ -182,7 +182,8 @@
     "date", "requests", "sessions", "unpricedRequests", "tokens": {…}, "cacheHitRate", "costUsd",
     "byAgent":   [{"agent", "requests", "sessions", "tokens": {…}, "costUsd"}],
     "byModel":   [{"model", "agent", "requests", "unpricedRequests", "tokens": {…}, "costUsd"}],   // costUsd 规则同 today.byModel
-    "byProject": [{"project": Text, "public", "requests", "sessions", "unpricedRequests", "costUsd"}]
+    "byProject": [{"project": Text, "public", "requests", "sessions", "unpricedRequests", "costUsd"}],
+    "byMachine": [{"machine", "requests", "sessions", "unpricedRequests", "tokens": {…}, "costUsd"}]   // 机器代号；按 costUsd、requests 降序；各项之和等于当天合计
   }],
   "code": {
     "repos": [{"repo": Text,     /* 有远端时按远端归并，没有远端时按名字 */ "public", "sources": ["github"|"gitea"|"local"], "commits", "unpushed",
