@@ -24,7 +24,7 @@ def _key(text):
 def _git(args, cwd):
     try:
         r = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=5,
-                           stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
+                           encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout.strip() if r.returncode == 0 else None

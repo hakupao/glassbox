@@ -73,6 +73,9 @@ class WindowlessTest(unittest.TestCase):
         for k in seen:
             self.assertIs(k["stdin"], subprocess.DEVNULL)
             self.assertEqual(k["creationflags"], getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            # git prints paths in UTF-8; the locale codec (cp932 on a Japanese Windows) cannot decode them
+            self.assertEqual(k["encoding"], "utf-8")
+            self.assertEqual(k["errors"], "replace")
 
     def test_console_runs_are_unchanged(self):
         from probe.__main__ import windowless_log
