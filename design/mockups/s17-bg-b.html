@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>glassbox · background B</title>
+<style>
+/* tokens and shell classes are copied from web/styles.css (S17 tokens); only #art and .mk differ per version */
+:root{
+  --bg:#14171c; --panel:rgba(53,60,72,.75); --blur:3px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+  --fs-1:15px; --fs-2:13px; --fs-3:11.5px; --fw-1:600; --fw-2:400; --lh-1:1.4; --lh-2:1.55;
+  --tabbar-h:56px;
+  --sig-info:#6c97d6; --ink-1:#efeadd; --ink-2:#d8d3c4; --ink-3:#a6a297; --or:#dba843;
+  --sig-bad:#e0645a; --sig-ok:#79b98a; --sig-warn:#e3894d; --sig-vio:#a48ee0;
+  --line:rgba(216,211,196,.16); --line-soft:rgba(216,211,196,.09);
+  --sans:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei","Helvetica Neue",system-ui,sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;min-height:100vh;color:var(--ink-2);font:14px/var(--lh-2) var(--sans);overflow-x:hidden;background:var(--bg);-webkit-font-smoothing:antialiased}
+svg{display:block} a{color:inherit} button{font:inherit;color:inherit}
+.in{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:0 var(--s5)}
+@media (max-width:640px){.in{padding:0 var(--s4)}}
+#art{position:fixed;left:0;right:0;bottom:0;width:100%;z-index:0;pointer-events:none;height:62vh;-webkit-mask-image:linear-gradient(to top,#000 0%,#000 40%,transparent 100%);mask-image:linear-gradient(to top,#000 0%,#000 40%,transparent 100%)}@media (max-width:640px){#art{height:52vh}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.top{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px 22px;padding:var(--s4) 0 14px}
+.brand{font:700 19px var(--mono);color:var(--ink-1);letter-spacing:.02em;text-decoration:none}
+.nav{display:flex;gap:2px;min-width:0}
+.nav a{display:flex;align-items:baseline;gap:6px;padding:5px 10px;font:500 var(--fs-2) var(--sans);color:var(--ink-3);text-decoration:none;border:1px solid transparent;white-space:nowrap}
+.nav a[aria-current="page"]{color:var(--ink-1);border-color:var(--line);background:var(--panel)}
+.meta{display:flex;gap:var(--s2);align-items:center;font:12px var(--mono);color:var(--ink-3);flex-wrap:wrap;justify-content:flex-end}
+.chip{color:var(--bg);background:var(--sig-info);padding:2px var(--s2);font-weight:var(--fw-1);white-space:nowrap}
+.chip.line{background:none;color:var(--ink-3);border:1px solid var(--line);font-weight:var(--fw-2)}
+.pn{background:var(--panel);border:1px solid var(--line);padding:var(--s4) 18px 18px;margin-bottom:10px;-webkit-backdrop-filter:blur(var(--blur));backdrop-filter:blur(var(--blur));min-width:0}
+.ph{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);margin-bottom:14px}
+.ph h2{margin:0;font:var(--fw-1) var(--fs-1) var(--sans);color:var(--ink-1)}
+.ph .r{font:12px var(--mono);color:var(--ink-3)}
+.grid2{display:grid;grid-template-columns:7fr 5fr;gap:10px;margin-bottom:10px}
+.grid2>.pn{margin-bottom:0}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}.grid2>.pn{margin-bottom:0}}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr))}
+.kpis>div{padding:0 18px;border-left:1px solid var(--line-soft);min-width:0}
+.kpis>div:first-child{padding-left:0;border-left:0}
+.lab{font:var(--fs-3) var(--sans);color:var(--ink-3);margin-bottom:2px}
+.val{font:var(--fw-1) 28px/1.2 var(--mono);color:var(--ink-1);font-variant-numeric:tabular-nums;white-space:nowrap}
+.val.c{color:var(--sig-info)} .val.o{color:var(--or)} .val.g{color:var(--sig-ok)}
+.sub{font:12px var(--mono);color:var(--ink-3)}
+@media (max-width:560px){.kpis{grid-template-columns:1fr 1fr;row-gap:var(--s4)}.kpis>div{padding:0 0 0 14px}.kpis>div:nth-child(odd){padding-left:0;border-left:0}.val{font-size:20px}}
+.qh{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s2)}
+.qh b{font-weight:500;color:var(--ink-2)}
+.qh .val{font-size:22px}
+.qbar{margin:var(--s2) 0 6px;height:6px;background:var(--line-soft);position:relative}
+.qbar i{position:absolute;left:0;top:0;bottom:0}
+.qbar u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--ink-3)}
+.q{margin-bottom:var(--s3)} .q:last-child{margin-bottom:0}
+.bd{display:inline-flex;align-items:center;gap:5px;font:500 11px var(--mono);padding:0 6px;line-height:17px;border:1px solid color-mix(in srgb,currentColor 34%,transparent);background:color-mix(in srgb,currentColor 12%,transparent)}
+.row{display:flex;gap:var(--s3);align-items:baseline;padding:7px 0;border-top:1px solid var(--line-soft);font-size:13px}
+.row:first-of-type{border-top:0}
+.row .t{font:11.5px var(--mono);color:var(--ink-3);flex:none;width:44px}
+.row .m{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+.cap{display:flex;justify-content:space-between;gap:var(--s3);font:12px var(--mono);color:var(--ink-3);padding:6px 0 0}
+@media (max-width:640px){.cap{flex-direction:column;gap:2px}}
+.tail{height:34vh}
+.tabs{display:none}
+@media (max-width:640px){
+  .top .nav{display:none}
+  body{padding-bottom:calc(var(--tabbar-h) + var(--s2) + env(safe-area-inset-bottom))}
+  .tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:70;padding-bottom:env(safe-area-inset-bottom);
+    background:color-mix(in srgb,var(--bg) 94%,transparent);border-top:1px solid var(--line);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  .tabs a{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s1);min-width:0;height:var(--tabbar-h);color:var(--ink-3);text-decoration:none;font:var(--fs-3) var(--sans)}
+  .tabs a[aria-current="page"]{color:var(--ink-1)}
+  .tabs a[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:2px;background:var(--ink-1)}
+  .tabs svg{fill:currentColor}
+}
+/* mockup-only: motion switch */
+.mk{position:fixed;left:10px;bottom:10px;z-index:80;display:flex;gap:var(--s2);align-items:center;font:11px var(--mono);color:var(--ink-3);background:rgba(20,23,28,.88);border:1px solid var(--line);padding:4px 8px}
+.mk button{background:none;border:1px solid var(--line);color:var(--ink-1);padding:1px 8px;font:11px var(--mono);cursor:pointer}
+.mk button[aria-pressed="true"]{border-color:var(--sig-info);color:var(--sig-info)}
+.mk button:focus-visible{outline:1px solid var(--sig-info);outline-offset:1px}
+@media (max-width:640px){.mk{bottom:calc(var(--tabbar-h) + 8px + env(safe-area-inset-bottom))}}
+</style>
+</head>
+<body>
+<canvas id="art" role="img" aria-label="今日画作：30 根点阵竖柱，每根是一天的费用，最右是今天，柱顶化作光点"></canvas>
+<div class="in">
+  <header class="top">
+    <a class="brand" href="#">glassbox</a>
+    <nav class="nav" aria-label="main">
+      <a href="#" aria-current="page">总览</a><a href="#">用量</a><a href="#">代码</a><a href="#">机器</a><a href="#">服务</a>
+    </nav>
+    <div class="meta"><span class="chip">公开</span><span class="chip line">11-17 10:30</span><span id="clock">10:30:08</span></div>
+  </header>
+  <main id="view">
+    <section class="pn hero">
+      <div class="ph"><h2>今日</h2><span class="r">AI 用量 · 虚构数据</span></div>
+      <div class="kpis">
+        <div><div class="lab">Token</div><div class="val c">48.1M</div><div class="sub">缓存命中 91.2%</div></div>
+        <div><div class="lab">请求</div><div class="val">1,284</div><div class="sub">23 个会话</div></div>
+        <div><div class="lab">费用 (API 等价)</div><div class="val o">$48.7</div><div class="sub">本月 $812</div></div>
+        <div><div class="lab">Claude Code</div><div class="val c">80%</div><div class="sub">1,032 次</div></div>
+        <div><div class="lab">Codex</div><div class="val o">20%</div><div class="sub">252 次</div></div>
+      </div>
+    </section>
+    <div class="grid2">
+      <section class="pn"><div class="ph"><h2>近 30 天费用</h2><span class="r">$ / 天</span></div><div id="bars"></div></section>
+      <section class="pn"><div class="ph"><h2>额度</h2><span class="r">按时间进度</span></div><div id="quota"></div></section>
+    </div>
+    <section class="pn"><div class="ph"><h2>最近动态</h2><span class="r">推送与提交</span></div><div id="acts"></div></section>
+  </main>
+  <div class="cap"><span id="cap0"></span><span id="capMid"></span><span id="cap1"></span></div>
+  <div class="tail"></div>
+</div>
+<nav class="tabs" aria-label="main" id="tabs"></nav>
+<div class="mk"><span>mockup B</span><button id="mkMotion" aria-pressed="true">动效 开</button><span id="mkCost"></span></div>
+<script src="sample-data.js"></script>
+<script>
+const GB = window.GB, $ = id => document.getElementById(id);
+/* ---------- page shell content (fabricated) ---------- */
+(function(){
+  const T = GB.trend30d, X = GB.trend30dCodex, mx = Math.max(...T), W = 640, H = 84, n = T.length, bw = W / n;
+  $('bars').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="84" role="img" aria-label="近 30 天费用">` +
+    T.map((v, i) => { const h = v / mx * (H - 6), hx = X[i] / mx * (H - 6), x = i * bw + 1.5;
+      return `<rect x="${x}" y="${H - h}" width="${bw - 3}" height="${h - hx}" fill="#6c97d6" opacity="${i === n - 1 ? 1 : .62}"/><rect x="${x}" y="${H - hx}" width="${bw - 3}" height="${hx}" fill="#dba843" opacity="${i === n - 1 ? 1 : .7}"/>`; }).join('') + `</svg>`;
+  $('quota').innerHTML = GB.quota.slice(0, 2).map(q => { const el = q.pace, mark = Math.min(98, Math.max(2, q.usedPct / (1 + q.pace)));
+    const col = q.agent === 'Codex' ? 'var(--or)' : 'var(--sig-info)';
+    return `<div class="q"><div class="qh"><b>${q.agent} · ${q.window}</b><span class="val" style="color:${col}">${q.usedPct}%</span></div><div class="qbar"><i style="width:${q.usedPct}%;background:${col}"></i><u style="left:${mark}%"></u></div><div class="sub">${q.pace > 0 ? '快于时间进度 ' + Math.round(q.pace * 100) + '%' : '慢于时间进度 ' + Math.round(-q.pace * 100) + '%'}</div></div>`; }).join('');
+  $('acts').innerHTML = GB.activity.slice(0, 3).map(a => `<div class="row"><span class="t">${a.t.slice(11, 16)}</span><span class="bd" style="color:${a.public ? 'var(--sig-info)' : 'var(--ink-3)'}">${a.public ? a.repo : '私有项目'}</span><span class="m">${a.public ? a.title : '私有提交'}</span></div>`).join('');
+  const ic = '<svg width="20" height="20" viewBox="0 0 20 20"><rect x="3" y="3" width="6" height="6"/><rect x="11" y="3" width="6" height="6" opacity=".6"/><rect x="3" y="11" width="6" height="6" opacity=".6"/><rect x="11" y="11" width="6" height="6"/></svg>';
+  $('tabs').innerHTML = ['总览', '用量', '代码', '机器', '服务'].map((l, i) => `<a href="#"${i === 0 ? ' aria-current="page"' : ''}>${ic}<span>${l}</span></a>`).join('');
+})();
+/* ---------- art kit: shared by the three versions ---------- */
+const BLUE = [108, 151, 214], OR = [219, 168, 67], LV = 9, P = 5;
+const qs = new URLSearchParams(location.search);
+const FROZEN = qs.has('t') ? (parseFloat(qs.get('t')) || 0) : null;
+const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let x = Math.imul(a ^ a >>> 15, 1 | a); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
+const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+const sstep = (a, b, x) => smooth((x - a) / (b - a));
+const fmtN = n => Math.round(n).toLocaleString('en-US');
+/* today's numbers, same derivation as web/app.js art() */
+const TD = GB.today, tk = TD.tokens, totTok = tk.input + tk.output + tk.cacheRead + tk.cacheWrite + tk.reasoning;
+const seedDate = GB.generatedAt.slice(0, 10).replace(/-/g, ''), seed = parseInt(seedDate, 10);
+const ccReq = TD.byAgent[0].requests, shareCC = ccReq / TD.requests;
+const totals = GB.trend30d, cxs = GB.trend30dCodex, nT = totals.length, maxT = Math.max(...totals);
+const fmtTok = v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : fmtN(v);
+function setCaption(cap0, nParticles, legend){
+  $('cap0').textContent = cap0;
+  $('capMid').innerHTML = `<span style="color:rgb(${BLUE})">■</span> Claude Code ${Math.round(shareCC * 100)}%&emsp;<span style="color:rgb(${OR})">■</span> Codex ${Math.round((1 - shareCC) * 100)}%`;
+  $('cap1').textContent = legend.replace('{n}', fmtN(nParticles)).replace('{tok}', fmtTok(totTok));
+}
+/* one grid of 5px cells with 9 brightness levels and two colours; draw batches rects per (colour, level) */
+class Layer{
+  constructor(cols, rows){ this.cols = cols; this.rows = rows; const n = cols * rows; this.gb = new Float32Array(n); this.gc = new Uint8Array(n);
+    this.bk = Array.from({length: 2 * LV}, () => new Int32Array(n)); this.bc = new Int32Array(2 * LV); }
+  clear(){ this.gb.fill(0); }
+  put(x, y, b, c){ x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= this.cols || y >= this.rows) return; const k = x * this.rows + y; if(b > this.gb[k]){ this.gb[k] = Math.min(1, b); this.gc[k] = c; } }
+  draw(ax, gain, halo){
+    const {gb, gc, bk, bc, rows} = this; bc.fill(0);
+    for(let k = 0; k < gb.length; k++){ const a = gb[k]; if(a < .05) continue; const key = gc[k] * LV + Math.min(LV, Math.ceil(a * LV)) - 1; bk[key][bc[key]++] = k; }
+    for(let key = 0; key < 2 * LV; key++){
+      const n = bc[key]; if(!n) continue;
+      const col = key >= LV ? OR : BLUE, f = (key % LV + 1) / LV, s = P * (.3 + .6 * f), off = (P - s) / 2, a = bk[key];
+      if(halo && f > .85){   /* soft halo: one larger faint square per bright cell, no shadowBlur */
+        const hs = P * 2.2, ho = (P - hs) / 2; ax.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${(.1 * gain).toFixed(3)})`;
+        ax.beginPath(); for(let i = 0; i < n; i++){ const k = a[i]; ax.rect(((k / rows) | 0) * P + ho, (k % rows) * P + ho, hs, hs); } ax.fill(); }
+      ax.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${((.14 + .66 * f) * gain).toFixed(3)})`;
+      ax.beginPath(); for(let i = 0; i < n; i++){ const k = a[i]; ax.rect(((k / rows) | 0) * P + off, (k % rows) * P + off, s, s); } ax.fill();
+    }
+  }
+}
+/* mount: layout, 40ms frame cap, hidden-tab pause, motion switch, static frame for reduced motion and ?t=, draw-cost meter */
+function mount(factory){
+  const cv = $('art'), ax = cv.getContext('2d'); let env = null, draw = null, lastTm = 14, on = FROZEN === null && !REDUCE, ms = [];
+  function layout(){ const W = cv.clientWidth, H = cv.clientHeight; if(!W || !H){ draw = null; return; }
+    const dpr = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    env = {cv, ax, W, H, dpr, cols: Math.floor(W / P), rows: Math.floor(H / P), P, phone: W < 640}; draw = factory(env); }
+  function paint(tm){ if(!draw) layout(); if(!draw) return; lastTm = tm; const t0 = performance.now();
+    ax.setTransform(env.dpr, 0, 0, env.dpr, 0, 0); ax.clearRect(0, 0, env.W, env.H); draw(tm);
+    ms.push(performance.now() - t0); if(ms.length > 40) ms.shift(); }
+  let lastF = 0, lastShow = 0;
+  function frame(ts){ requestAnimationFrame(frame); if(!on || document.hidden || ts - lastF < 40) return; lastF = ts; paint((performance.now() - t00) / 1000 + 6);
+    if(ts - lastShow > 800){ lastShow = ts; $('mkCost').textContent = 'draw ' + (ms.reduce((a, b) => a + b, 0) / ms.length).toFixed(1) + ' ms'; } }
+  const t00 = performance.now(), btn = $('mkMotion');
+  if(FROZEN !== null || REDUCE){ paint(FROZEN !== null ? FROZEN + 6 : 14); btn.textContent = '静态帧'; btn.disabled = true; $('mkCost').textContent = FROZEN !== null ? '?t=' + FROZEN : 'reduced-motion'; }
+  else { paint(6); requestAnimationFrame(frame); }
+  btn.addEventListener('click', () => { if(btn.disabled) return; on = !on; btn.setAttribute('aria-pressed', on); btn.textContent = on ? '动效 开' : '动效 关'; if(on){ /* resume from where it froze */ } });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { layout(); paint(lastTm); }, 120); });
+  window.__artCost = () => ms.reduce((a, b) => a + b, 0) / Math.max(1, ms.length);
+  window.__paint = paint;
+}
+/* ---------- version B ---------- */
+
+/* B  horizon of 30 dot columns: one per day (height = cost, orange = Codex part, blue = Claude part), today wider and brighter,
+   column tops dissolve into particles that rise and fade. The columns are pre-rendered once; only particles are drawn per frame. */
+const nPartB = Math.round(totTok / 1e6 * 18), NB = nT;
+function factory(env){
+  const {cols, rows, W, H, dpr, ax, phone} = env, rnd = mulberry(seed ^ 0x51ed), pr = mulberry(seed ^ 0x7a11);
+  const m = Math.round(cols * .035), pitch = (cols - 2 * m) / NB, cw = pitch >= 5 ? 2 : 1, base = Math.round(rows * (phone ? .86 : .84)), maxH = Math.round(rows * (phone ? .62 : .58));
+  const colX = [], colH = [], colTop = [], share = [];
+  for(let i = 0; i < NB; i++){ const w = i === NB - 1 ? cw + (pitch >= 5 ? 1 : 0) : cw; colX.push(Math.round(m + i * pitch + (pitch - cw) / 2 - (i === NB - 1 ? (w - cw) : 0))); colH.push(Math.max(2, Math.round(totals[i] / maxT * maxH))); colTop.push(base - 1 - colH[i]); share.push(cxs[i] / totals[i]); }
+  const S = new Layer(cols, rows), D = new Layer(cols, rows);
+  for(let i = 0; i < NB; i++){ const h = colH[i], today = i === NB - 1, w = today ? cw + (pitch >= 5 ? 1 : 0) : cw;
+    for(let j = 0; j < h; j++){ const rel = j / h, isCx = j < h * share[i]; let p = 1; if(rel > .78) p = 1 - (rel - .78) / .22 * .9; if(!today && rnd() > p) continue; if(today && rnd() > Math.max(p, .55)) continue;
+      const b = (today ? .62 + .38 * rel : .4 + .4 * rel) * (isCx ? 1.05 : 1);
+      for(let x = 0; x < w; x++) S.put(colX[i] + x, base - 1 - j, x === 0 || x === w - 1 ? b : b * .8, isCx ? 1 : 0); }
+    /* reflection under the horizon, faint */
+    for(let j = 0; j < Math.min(7, h * .25); j++) S.put(colX[i], base + 1 + j, .13 * (1 - j / 7), j < h * share[i] ? 1 : 0); }
+  for(let x = m - 2; x < cols - m + 2; x++) S.put(x, base, .17, 0);                     /* the horizon line */
+  for(let i = NB - 1; i >= 0; i -= 7){ S.put(colX[i], base + 1, .5, 0); S.put(colX[i] + 1 > cols ? colX[i] : colX[i], base + 2, .3, 0); }   /* weekly ticks counted back from today */
+  const sc = document.createElement('canvas'); sc.width = Math.round(W * dpr); sc.height = Math.round(H * dpr); const sx = sc.getContext('2d'); sx.setTransform(dpr, 0, 0, dpr, 0, 0); S.draw(sx, 1, true);
+  /* particles: column picked by cost^1.5 (today x1.6), colour by that column's own Codex share */
+  const wgt = totals.map((v, i) => Math.pow(v / maxT, 1.5) * (i === NB - 1 ? 1.6 : 1)), tw = wgt.reduce((a, b) => a + b, 0), cdf = []; wgt.reduce((a, w, i) => (cdf[i] = a + w / tw, a + w / tw), 0);
+  const PN = phone ? Math.round(nPartB / 2) : nPartB;
+  const PB = Array.from({length: PN}, () => { const r = pr(); let i = cdf.findIndex(v => r <= v); if(i < 0) i = NB - 1;
+    return {i, ph: pr(), sp: .035 + .05 * pr(), rise: (8 + 26 * pr()) * (i === NB - 1 ? 1.35 : 1), dx: pr() * 2 - 1, cx: pr() < share[i] ? 1 : 0, ox: Math.floor(pr() * cw)}; });
+  return function draw(tm){
+    ax.drawImage(sc, 0, 0, W, H); D.clear();
+    for(let n = 0; n < PB.length; n++){ const p = PB[n], u = (p.ph + tm * p.sp) % 1, i = p.i;
+      const x = colX[i] + p.ox + Math.sin(tm * .3 + p.ph * 20) * u * 2.4 + p.dx * u * 4, y = colTop[i] - 1 - u * p.rise;
+      D.put(x, y, Math.pow(1 - u, .9) * .9 * (.8 + .2 * Math.sin(tm * .8 + p.ph * 40)), p.cx); }
+    const ti = NB - 1, pulse = .8 + .2 * Math.sin(tm * 1.6);   /* today's crown breathes */
+    for(let x = 0; x < cw + 1; x++){ D.put(colX[ti] + x, colTop[ti] + 1, pulse, 0); D.put(colX[ti] + x, colTop[ti], pulse * .7, 0); }
+    D.draw(ax, 1, true);
+  };
+}
+
+setCaption(`今日画作 #${seedDate} · 30 天地平线`, Math.round(totTok / 1e6 * 18), '光点 {n} = {tok} Token · 每柱 = 一天费用,最右 = 今天');
+mount(factory);
+</script>
+</body>
+</html>
