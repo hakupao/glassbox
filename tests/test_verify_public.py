@@ -134,30 +134,126 @@ class GateCliTest(unittest.TestCase):
         self.assertIn("gate error (ZeroDivisionError)", out)
         self.assertNotIn("Traceback", out)
 
-    def test_branch_fragments_that_are_page_code_words_do_not_count(self):
-        """S15: a private branch part such as "motion" (feat/reduced-motion-zorblax) also occurs in the
-        public page's own code (CSS prefers-reduced-motion), which made every real snapshot fail. Words
-        of the shipped web/ sources are exempt for branch fragments only; real names, terms and
-        unrelated fragments still count."""
+    def _gate_with_branch(self, branch, terms_extra=(), web=None, priv_edit=None):
+        """Gate over the red-team context plus one private commit on `branch`; `web`: a fixture web/ directory."""
         terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
         priv = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))
-        cfg = vp.load_toml(RT / "context" / "public.toml")
         priv["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "orchid-batch",
-                                 "public": False, "title": "fix: y", "branch": "feat/reduced-motion-zorblax",
-                                 "hash": "abc1234", "machine": "A"})
-        g = vp.Gate(terms, priv, cfg)
-        self.assertEqual(g.name_hits("@media (prefers-reduced-motion: reduce) { .x { animation: none } }"), set())
-        self.assertTrue(g.name_hits("shipping zorblax tonight"))            # not a page-code word: still private
-        self.assertTrue(g.name_hits("orchid-batch"))                        # real private names unaffected
-        # the same word as an explicit private term is never exempt
-        g2 = vp.Gate(dict(terms, terms=terms["terms"] + ["motion"]), priv, cfg)
-        self.assertTrue(g2.name_hits("prefers-reduced-motion"))
-        # a private commit's URL host is never exempt, even when it is a page-code word (security review L1)
-        priv2 = json.loads((RT / "context" / "private.json").read_text(encoding="utf-8"))
-        priv2["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "orchid-batch",
-                                  "public": False, "title": "fix: z", "branch": "main", "hash": "abc1234",
-                                  "url": "http://motion/o/r/commit/abc1234", "machine": "A"})
-        self.assertTrue(vp.Gate(terms, priv2, cfg).name_hits("prefers-reduced-motion"))
+                                 "public": False, "title": "fix: y", "branch": branch, "hash": "abc1234", "machine": "A"})
+        if priv_edit:
+            priv_edit(priv)
+        orig = vp.WEB_DIR
+        if web is not None:
+            vp.WEB_DIR = Path(web)
+        try:
+            return vp.Gate(dict(terms, terms=terms["terms"] + list(terms_extra)), priv, vp.load_toml(RT / "context" / "public.toml"))
+        finally:
+            vp.WEB_DIR = orig
+
+    def _page_problems(self, g, edit):
+        """check_file on pass-page.html after `edit(text)`; only the private-name problems."""
+        page = edit((RT / "samples" / "pass-page.html").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "index.html"
+            f.write_text(page, encoding="utf-8")
+            return [b for b in g.check_file(f) if "private name" in b]
+
+    def test_branch_fragments_are_exempt_only_inside_verbatim_web_code(self):
+        """S15 / R08: a private branch part such as "zorblax" or "motion" (feat/reduced-motion-zorblax) is a weak word.
+        It may appear only inside a <script> / <style> body that is byte-for-byte a web/ file as the bundler inlines it
+        (the public repository's own code, comments and licence headers included). Anywhere else (markup, attributes,
+        comments, <title>, <noscript>, another script, the data) it is refused; a script or style body that is not a
+        verbatim web/ file counts as markup (fail closed)."""
+        with tempfile.TemporaryDirectory() as w:
+            art = "/* THIRD-PARTY licence header; built from feat/zorblax */\nconst motion = 'prefers-reduced-motion';\n"
+            css = "@media (prefers-reduced-motion: reduce){.x{animation:none}}\n"
+            (Path(w) / "art.js").write_text(art, encoding="utf-8")
+            (Path(w) / "styles.css").write_text(css, encoding="utf-8")
+            (Path(w) / "index.html").write_text('<link rel="stylesheet" href="styles.css"><script src="art.js"></script>',
+                                                encoding="utf-8")
+            g = self._gate_with_branch("feat/reduced-motion-zorblax", web=w)
+            ok = lambda x: x
+            self.assertEqual(self._page_problems(g, ok), [])
+            self.assertEqual(self._page_problems(g, lambda x: x.replace("</head>", f"<style>\n{css}</style></head>", 1)
+                                                 .replace("</body>", f"<script>\n{art}</script></body>", 1)), [])
+            rows = {
+                "html comment": lambda x: x.replace("<main>", "<main><!-- built from feat/zorblax -->", 1),
+                "text node": lambda x: x.replace("<main>", "<main><p>zorblax</p>", 1),
+                "attribute": lambda x: x.replace("<main>", '<main><p title="zorblax">a</p>', 1),
+                "title": lambda x: x.replace("<title>glassbox</title>", "<title>glassbox zorblax</title>", 1),
+                "noscript": lambda x: x.replace("<main>", "<main><noscript>zorblax</noscript>", 1),
+                "other script": lambda x: x.replace("</body>", '<script>const b="zorblax"</script></body>', 1),
+                "window.X": lambda x: x.replace("</body>", '<script>window.X={"t":"zorblax"}</script></body>', 1),
+                "web file changed": lambda x: x.replace("</body>", f"<script>\n{art}const z = 1;\n</script></body>", 1),
+                "style not a web file": lambda x: x.replace("</head>", "<style>/* motion */</style></head>", 1),
+                "data: public title": lambda x: x.replace("handle empty mapping rule", "handle empty motion rule", 1),
+                "data: escaped": lambda x: x.replace("handle empty mapping rule", "handle empty z\\u006frblax rule", 1),
+            }
+            for name, edit in rows.items():
+                with self.subTest(name):
+                    self.assertTrue(self._page_problems(g, edit), name)
+        # the same word as an explicit private term is never weak: it counts inside web/ code too
+        g2 = self._gate_with_branch("feat/reduced-motion-zorblax", ["motion"])
+        self.assertTrue(g2.name_hits("prefers-reduced-motion", weak=False))
+        # a private commit's URL host is never weak (security review L1)
+        def host(priv):
+            priv["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "orchid-batch", "public": False,
+                                     "title": "fix: z", "branch": "main", "hash": "abc1234", "url": "http://motion/o/r/commit/abc1234", "machine": "A"})
+        self.assertTrue(self._gate_with_branch("main", priv_edit=host).name_hits("prefers-reduced-motion", weak=False))
+
+    def test_web_code_counts_only_when_referenced_and_never_through_a_link(self):
+        """Only files web/index.html references are web/ code; a symbolic link among them is a setup error (fail closed)."""
+        with tempfile.TemporaryDirectory() as w:
+            web = Path(w)
+            (web / "a.js").write_text("const a = 1;", encoding="utf-8")
+            (web / "stray.js").write_text("const zorblax = 1;", encoding="utf-8")
+            (web / "index.html").write_text('<script src="a.js"></script>', encoding="utf-8")
+            self.assertEqual(vp.web_bodies(web), {"\nconst a = 1;"})
+            (web / "secret.json").write_text('{"secret": "zorblax"}', encoding="utf-8")
+            (web / "a.js").unlink()
+            (web / "a.js").symlink_to(web / "secret.json")
+            with self.assertRaises(vp.SetupError):
+                vp.web_bodies(web)
+
+    def test_fragment_inside_a_stronger_word_is_never_weak(self):
+        """R08 review M1: "falcon" from feat/falcon-x is a component of the private term falcon-ledger, so it stays strong
+        and counts inside web/ code too; an unrelated fragment is weak."""
+        g = self._gate_with_branch("feat/falcon-x-motion")
+        self.assertTrue(g.name_hits("a falcon flies", weak=False))
+        self.assertEqual(g.name_hits("prefers-reduced-motion", weak=False), set())
+
+    def test_commit_ids_in_branch_names_stay_strong(self):
+        """R08 security review L1: a branch part that is also a private commit id (fix/deadbee1-x) is never weak."""
+        def commit(priv):
+            priv["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "orchid-batch",
+                                     "public": False, "title": "fix: q", "branch": "main", "hash": "deadbee1", "machine": "A"})
+        g = self._gate_with_branch("fix/deadbee1-x", priv_edit=commit)
+        self.assertTrue(g.name_hits("ref deadbee1", weak=False))
+
+    def test_vocabulary_parts_only_classify_branch_fragments(self):
+        """R08 security review M2: a branch claude/x gives the fragment "claude", a part of the page vocabulary
+        (agent claude-code): data with claude-code still publishes. A private repo named exactly "Claude" stays private."""
+        g = self._gate_with_branch("claude/zorblax-fix")
+        self.assertEqual(g.name_hits('"agent": "claude-code"'), set())
+        self.assertEqual(self._page_problems(g, lambda x: x), [])
+        def repo(priv):
+            priv["activity"].append({"t": "2026-11-17T09:50:00+09:00", "source": "local", "repo": "Claude",
+                                     "public": False, "title": "fix: c", "branch": "main", "hash": "c0ffee1", "machine": "A"})
+        self.assertIn("Claude", self._gate_with_branch("main", priv_edit=repo).names)
+
+    def test_shipped_page_code_holds_no_fixture_private_word(self):
+        """R08 review M1: a coincidence such as "q.x" (normalised "qx", a substring-mode red-team term) in web/ would
+        make every bundle fail the gate at publish time; catch it here instead. Every strong private word of the red-team
+        terms and of the private example pages, matched the gate's way, against every shipped web/ source (weak words,
+        branch fragments, are only searched in the page data)."""
+        terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))
+        cfg = vp.load_toml(RT / "context" / "public.toml")
+        for name, priv in (("redteam", RT / "context" / "private.json"), ("example", ROOT / "schema" / "examples" / "page.private.json")):
+            g = vp.Gate(terms, json.loads(priv.read_text(encoding="utf-8")), cfg)
+            for p in sorted((ROOT / "web").rglob("*")):
+                if p.is_file() and p.suffix in (".js", ".css", ".html"):
+                    hits = g.name_hits(p.read_text(encoding="utf-8"), weak=False)   # how the gate reads web/ code
+                    self.assertEqual(hits, set(), f"{name}: {p.name} holds private word(s) #{sorted(hits)}")
 
     def test_review2_generated_at_and_conflicts_in_results(self):
         terms = json.loads((RT / "context" / "terms.json").read_text(encoding="utf-8"))

@@ -15,7 +15,9 @@ Checks every path given: the publish directory, its index.html, or the page JSON
   and not Gitea; a name that is both allowlisted / shown and private is rejected.
 - name list (rule 6): terms from .local/redact_terms.local.json and the derived private names
   (repos, Text values, private commit ids and hosts, telling branch parts) must not occur
-  anywhere. Text is NFKC-normalised, format characters dropped and Cyrillic / Greek look-alikes
+  anywhere; telling branch parts (weak words) are exempt only inside a non-data <script> / <style>
+  body that is byte-for-byte a web/ .js / .css file as hub.page.bundle() inlines it (public code,
+  comments and licence headers included). Any other body counts as markup (fail closed). Text is NFKC-normalised, format characters dropped and Cyrillic / Greek look-alikes
   folded. Long terms (5+ letters or digits, or non-Latin): substring of the letters-and-digits
   stream. Short terms, commit ids, branch parts: whole words, with _ / camelCase / digit / script
   changes as boundaries. `"match": {term: "substring"|"word"}` overrides. Entities, \\uXXXX,
@@ -294,18 +296,37 @@ def vocabulary():
     return {norm(w) for w in words}
 
 
+def vocabulary_parts():
+    """vocabulary() plus the parts of hyphenated enum values ("claude" and "code" of claude-code). Used ONLY to
+    classify branch fragments (R08): a branch claude/x says nothing, but a repo or label named "Claude" stays private."""
+    words = set()
+    for typ in FIELDS.values():
+        kind, _, arg = typ.rstrip("?").partition(":")
+        if kind in ("enum", "const"):
+            words.update(w for v in arg.split("|") for w in re.split(r"[^A-Za-z0-9]+", v) if w)
+    return vocabulary() | {norm(w) for w in words}
+
+
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
-def page_code_words():
-    """Lower-cased words (letters only, 4+ characters) of the page sources in web/: the template and
-    code that every snapshot ships with. Read from the repository, not from the file being checked.
-    A missing web/ directory gives an empty set (nothing exempt: fail closed)."""
+def web_bodies(web=None):
+    """Script / style bodies exactly as hub.page.bundle() inlines them ("\n" + the file) for every .js / .css in web/.
+    A body equal to one of them is the public repository's own code. Missing web/: empty (nothing exempt).
+    Only the files web/index.html references (<script src> / <link href>, as the bundler inlines them) count, and a
+    symbolic link anywhere among them is a setup error (fail closed): a link could make private data look like web/ code."""
+    web = Path(web or WEB_DIR)
+    index = web / "index.html"
+    if not web.is_dir() or not index.is_file():
+        return set()
+    names = re.findall(r'<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"/:]+\.(?:js|css))"', index.read_text(encoding="utf-8"))
     out = set()
-    if WEB_DIR.is_dir():
-        for p in sorted(WEB_DIR.rglob("*")):
-            if p.is_file() and p.suffix in (".js", ".css", ".html"):
-                out.update(w.casefold() for w in re.findall(r"[A-Za-z]{4,}", p.read_text(encoding="utf-8", errors="replace")))
+    for n in names:
+        f = web / n
+        if f.is_symlink() or index.is_symlink() or web.is_symlink():
+            raise SetupError("web/: symbolic links are not allowed in the shipped page code")
+        if f.is_file():
+            out.add("\n" + f.read_text(encoding="utf-8"))
     return out
 
 
@@ -374,8 +395,10 @@ def derive(private, private_projects, with_frags=False, codes=()):
     # A branch part that spells a public repo name (e.g. the owner's profile repo) reveals nothing;
     # keeping it would make that repo both public and private and stop every publish.
     frags = {f for f in frags if norm(f) not in {norm(p) for p in public}}
+    vparts = vocabulary_parts()
+    frags = {f for f in frags if norm(f) not in vparts}                  # claude of claude/x: a page word (R08)
     out = (public, names | hashes | frags, branches, (hashes | frags) - names)
-    return out + (frags - names,) if with_frags else out
+    return out + (frags - names - hashes,) if with_frags else out      # commit ids and hosts are always strong (R08 L1)
 
 
 class Gate:
@@ -394,15 +417,17 @@ class Gate:
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
         public, derived, branches, whole_words, frag_words = derive(private or {}, self.private_projects, with_frags=True,
                                                                 codes=set(config.get("codes", [])))
-        # Branch fragments (never hashes or URL hosts of private commits) that are words of the page's own shipped code
-        # (web/ in this repository, never the file under check) reveal nothing: "motion" from a
-        # private branch "feat/reduced-motion" also sits in the public CSS (prefers-reduced-motion).
-        # Only fragments are exempt; terms, keywords, private projects and real names never are.
+        # Weak words (R08): branch fragments only. They are searched in the window.GB data script, the decoded data values and the
+        # rest of an index.html too, except inside script/style bodies that equal a web/ file byte for byte (web_bodies():
+        # the public repository's own code, e.g. a comment in art.js). A fragment that is a component of a stronger word (falcon of falcon-ledger) or a substring
+        # of a substring-mode one stays strong and is searched everywhere. Terms, keywords, private projects, real names,
+        # private commit ids and URL hosts are always strong.
         strong = ({t.casefold() for t in terms.get("terms", [])} | {k.casefold() for k in config.get("keywords", [])}
-                  | {p.casefold() for p in self.private_projects})
-        code_words = page_code_words()
-        exempt = {w for w in frag_words if w.casefold() in code_words and w.casefold() not in strong}
-        derived, whole_words = derived - exempt, whole_words - exempt
+                  | {p.casefold() for p in self.private_projects} | {n.casefold() for n in derived - whole_words})
+        parts = {x for w in strong for x in re.split(r"[/\-_.\s]+", w) if x}
+        sub_terms = [norm(w) for w in strong if len(norm(w)) >= 5 or self.modes.get(w) == "substring"]
+        weak = {w for w in frag_words if w.casefold() not in strong and w.casefold() not in parts
+                and not any(norm(w) in t for t in sub_terms)}
         # Review 2: the snapshot must come from this private page: same generatedAt (copied as is).
         self.private_generated = None if private is None else (private.get("generatedAt") or "(missing)")
         self.public_repos = public
@@ -435,6 +460,8 @@ class Gate:
             if n.casefold() not in stronger:
                 self.modes.setdefault(n.casefold(), "word")
         self.matchers = self._compile(self.names)
+        self.weak = {i for i, n in enumerate(self.names, 1) if n in weak}
+        self.web_bodies = web_bodies()
         # A name both public and private is a contradiction the exporter must not have resolved
         # towards public (review H1): allowlists or visibility flags disagree.
         private_keys = {norm(n) for n in set(words) | set(derived) | set(self.keywords) | self.private_projects}
@@ -454,10 +481,13 @@ class Gate:
 
     # --- text checks --------------------------------------------------------------------------
 
-    def name_hits(self, text):
-        """Ordinals of the private words found (never the words themselves)."""
+    def name_hits(self, text, weak=True):
+        """Ordinals of the private words found (never the words themselves). weak=False: strong words only
+        (the code part of an index.html); weak=True: every word (page data, CNAME, titles)."""
         flat, ws, hits = norm(text), None, set()
         for i, mode, pat in self.matchers:
+            if not weak and i in self.weak:
+                continue
             if mode == "sub":
                 if pat in flat:
                     hits.add(i)
@@ -468,13 +498,13 @@ class Gate:
                     hits.add(i)
         return hits
 
-    def check_text(self, text, where, is_html=False):
+    def check_text(self, text, where, is_html=False, weak=True):
         bad = []
         variants = {"raw": text}
         variants.update((f"decoded x{i}", t) for i, t in enumerate(decodings(text), 1))
         seen = set()
         for how, t in variants.items():
-            for h in sorted(self.name_hits(t)):
+            for h in sorted(self.name_hits(t, weak)):
                 if ("name", h) not in seen:
                     seen.add(("name", h))
                     bad.append(f"{where}: private name #{h} ({how})")
@@ -742,6 +772,21 @@ class Gate:
                 bad.append(f"{where}: window.GB is not valid JSON ({'duplicate key' if isinstance(e, DuplicateKey) else 'syntax'})")
         return bad, page
 
+    def _without_web_code(self, text):
+        """The document with every non-data <script> / <style> body that is byte-for-byte a web/ file (as the bundler
+        inlines it) blanked out. Everything else stays: markup, attributes, comments, <title>, the data script, and
+        any script or style body that is not a verbatim web/ file (treated like markup: fail closed). None if unparsable."""
+        p = _Parse()
+        try:
+            p.feed(text.removeprefix("\ufeff"))
+            p.close()
+        except Exception:                             # noqa: BLE001 — structure check reports it
+            return None
+        for _, body in p.scripts + p.styles:
+            if body in self.web_bodies:
+                text = text.replace(body, "\n", 1)
+        return text
+
     def check_file(self, path):
         """Problems with a publish directory, its index.html or the page JSON; [] means clean.
         Name conflicts (review 2) and a private page from another run are reported here too."""
@@ -760,10 +805,19 @@ class Gate:
         if suffix not in (".json", ".html", ".htm"):
             return [f"{p.name}: only the publish directory, index.html or the page JSON can be checked; "
                     "a snapshot has no other files"]
-        bad = self.check_text(text, p.name, is_html)
+        bad = self.check_text(text, p.name, is_html, weak=not is_html)
         if is_html:
             more, page = self.check_html_structure(text, p.name)
             bad += more
+            rest = self._without_web_code(text)
+            if rest is None:                       # unparsable: every word everywhere (fail closed)
+                rest = text
+            if self.weak:                          # weak words (branch fragments): everything but verbatim web/ code
+                seen = set()
+                for how, t in [("raw", rest)] + [(f"decoded x{i}", t) for i, t in enumerate(decodings(rest), 1)]:
+                    for h in sorted((self.name_hits(t) & self.weak) - seen):
+                        seen.add(h)
+                        bad.append(f"{p.name}: private name #{h} ({how}, outside web/ code)")
             if page is None:
                 return bad
         else:
