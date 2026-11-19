@@ -123,11 +123,12 @@ function filesBlock(a, key){
     <button class="fmore" type="button" aria-expanded="false" aria-controls="cf-${key}" data-n="${rest.length}">${esc(t('commit.moreFiles', {n: F.n(rest.length)}))}</button>` : '');
 }
 function commitCard(a, i, fx){
-  const key = 'cm' + (commitN++), n = nFiles(a), url = G.safeLink(a.url), hm = a.t ? F.hm(a.t) : '\u2014';
+  const key = 'cm' + (commitN++), n = nFiles(a), url = G.safeLink(a.url), cut = PUBLIC && !a.public && a.t,   /* export cuts private commit times to the hour: show the hour only */
+    hm = !a.t ? '\u2014' : cut ? t('time.hourOnly', {h: F.hm(a.t).split(':')[0].replace(/^24$/, '00')}) : F.hm(a.t);
   const hue = a.public && typeof a.repo === 'string' ? G.hue(a.repo) : 'var(--ink-3)';
   const facts = [a.author && ['commit.author', esc(a.author), 'tx'], a.branch && ['commit.branch', esc(a.branch)], a.hash && ['commit.hash', esc(a.hash)],
     ['commit.source', srcBadge(a.source), 'vis'], a.machine && ['commit.machine', G.mc(a.machine), 'vis']].filter(Boolean);
-  return `<li class="cm${a.pushed ? '' : ' un'}${fx ? ' enter' : ''}" style="--c:${hue};--i:${i}"><time class="tm" datetime="${esc(a.t || '')}" title="${esc(F.full(a.t))}">${esc(hm)}</time><span class="ring" aria-hidden="true"></span>
+  return `<li class="cm${a.pushed ? '' : ' un'}${fx ? ' enter' : ''}" style="--c:${hue};--i:${i}"><time class="tm" datetime="${esc(a.t || '')}" title="${esc(cut ? F.md(a.t) + ' ' + hm : F.full(a.t))}">${esc(hm)}</time><span class="ring" aria-hidden="true"></span>
     <article class="card"><button class="hd" type="button" aria-expanded="false" aria-controls="cd-${key}">
       <span class="ttl">${G.ttl(a.title)}</span>
       <span class="cm-m">${G.repoTag(a.repo)}${a.pushed ? '' : bd(esc(t('commit.unpushed')), 'c-warn')}${a.hash ? `<span class="hash">${esc(a.hash.slice(0, 7))}</span>` : ''}<span class="tt">${esc(hm)}</span></span>
