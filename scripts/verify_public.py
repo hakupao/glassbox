@@ -329,7 +329,7 @@ SITES = [("activity", "repo"), ("today.byProject", "project"), ("code.commits", 
 TEXT_PATHS = [p for p, t in FIELDS.items() if t.rstrip("?") == "text" and p != "activity[].branch"]
 
 
-def derive(private, private_projects, with_frags=False):
+def derive(private, private_projects, with_frags=False, codes=()):
     """Visibility and private names, read from the PRIVATE page itself — not from the exporter.
     A name is public only when every occurrence is public:true and not Gitea (review H1)."""
     seen = {}
@@ -350,6 +350,9 @@ def derive(private, private_projects, with_frags=False):
         head, _, key = path.rpartition(".")
         for e in walk_items(private, head.removesuffix("[]")) if head.endswith("[]") else [private.get(head) or {}]:
             v = e.get(key) if isinstance(e, dict) else None
+            if (path == "machines[].label" and isinstance(v, str) and v == e.get("id")
+                    and (re.fullmatch(r"[A-Z]", v) or v in codes)):
+                continue                     # unlabelled machine shows its own public code (A3)
             if isinstance(v, str) and norm(v) not in {norm(p) for p in public}:
                 names.add(v)
     branches, hashes, frags = set(), set(), set()
@@ -368,6 +371,9 @@ def derive(private, private_projects, with_frags=False):
                     host = re.sub(r"^\w+://([^/]+).*", r"\1", e["url"]).lower()
                     if host not in ("github.com", "www.github.com"):
                         hashes.add(host)
+    # A branch part that spells a public repo name (e.g. the owner's profile repo) reveals nothing;
+    # keeping it would make that repo both public and private and stop every publish.
+    frags = {f for f in frags if norm(f) not in {norm(p) for p in public}}
     out = (public, names | hashes | frags, branches, (hashes | frags) - names)
     return out + (frags - names,) if with_frags else out
 
@@ -386,7 +392,8 @@ class Gate:
         self.private_titles = config.get("privateTitles", "prefix-only")      # default: owner's decision 2026-11-17
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
-        public, derived, branches, whole_words, frag_words = derive(private or {}, self.private_projects, with_frags=True)
+        public, derived, branches, whole_words, frag_words = derive(private or {}, self.private_projects, with_frags=True,
+                                                                codes=set(config.get("codes", [])))
         # Branch fragments (never hashes or URL hosts of private commits) that are words of the page's own shipped code
         # (web/ in this repository, never the file under check) reveal nothing: "motion" from a
         # private branch "feat/reduced-motion" also sits in the public CSS (prefers-reduced-motion).

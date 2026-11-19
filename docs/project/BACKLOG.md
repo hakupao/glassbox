@@ -6,9 +6,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| A1 | Machine online count disagrees with itself: summary card says "4 / 5" with "all online", the panel title says "5 / 5 online" | Machines page | Find which count excludes what (probe vs Beszel online rule, CONTRACT §2) |
-| A2 | Overview "Requests" total is smaller than its per-agent line (e.g. 623 vs Claude 818) | Overview, today's usage | Likely the public merge of private projects or a different time window between the two numbers |
-| A3 | A machine without a `label` makes the public export fail ("code equals a private name"), so publishing stops | hub/export.py, scripts/verify_public.py | A label that equals its code reveals nothing; exempt it in both, keep the clash check for real names |
+| A4 | A private branch that contains a word of a hyphenated public repo name (`IT-Passport-Learning/...` gives `Passport`, `Learning`) still makes the gate reject the page, so publishing stops | scripts/verify_public.py derive(), hub/export.py | Owner to decide: also compare branch parts with the words of public repo names. Cost: a private word that happens to equal such a word would pass |
 
 ## B. UI
 
@@ -46,3 +44,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 ## Done
 
 - C7 (2026-11-18): Windows task runs `pythonw.exe`; no console window (no conhost child), `LastTaskResult` 0, `probe.log` shows `(no console)` and `pushed: {"ok": true ...}`.
+- A1, A2 (2026-11-19): not data bugs. The README screenshots `machines.png` and `overview.png` were taken while the KPI numbers were still rolling up (0.9 s); the live page settles on the same value as the panel title and the per-agent line ("205 req/session" in the same shot is 818 / 4). Fix: retake the screenshots after the roll.
+- A3 (2026-11-19): a machine whose label equals its own public code is exempt from the private-name list (exporter and gate, judged per machine; a non-code id stays private); the code clash check compares normalised names on both sides.
+- Publisher stop (2026-11-19, 12:10 to deploy): the owner's profile repo (public, no separators) also appeared as a part of a private branch, so the gate saw one name as both public and private. A branch part that spells a public repo name, in any case, is no longer a private name (exporter and gate).

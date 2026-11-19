@@ -188,6 +188,56 @@ class ExportTest(unittest.TestCase):
         forged["activity"][5]["title"] = "feat: kestrel"
         self.assertTrue(self.gate(forged))
 
+    def rename_repo(self, old, new):
+        code = self.page.get("code") or {}
+        for e in self.page["activity"] + (code.get("repos") or []) + (code.get("commits") or []):
+            if e.get("repo") == old:
+                e["repo"] = new
+
+    def test_public_repo_name_as_private_branch_part_is_not_a_conflict(self):
+        """A private branch "shuttle/fix" names a public repo "shuttle" (e.g. the owner's profile repo):
+        the part reveals nothing, so the gate must not see that repo as both public and private
+        (the publisher stopped on this 2026-11-19)."""
+        self.rename_repo("shuttle-path", "shuttle")
+        self.page["activity"][4]["branch"] = "shuttle/fix-ledger"
+        pub, ctx = self.run_export()
+        self.assertNotIn("shuttle", ctx["privateNames"])
+        self.assertIn("ledger", ctx["privateNames"])  # the branch's other parts stay private
+        self.assertIn("shuttle", [a.get("repo") for a in pub["activity"]])
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_name_private_in_one_spelling_keeps_its_branch_part(self):
+        """Public as "Shuttle" but private as "shuttle" elsewhere: private everywhere, so the branch
+        part stays a private name and a forged title carrying it is refused."""
+        self.rename_repo("shuttle-path", "Shuttle")
+        self.page["activity"][3]["repo"] = "shuttle"           # a private occurrence (local, public:false)
+        self.page["activity"][4]["branch"] = "Shuttle/secret-tuning"
+        self.page["activity"][0]["title"] = "docs: shuttle notes"
+        pub, ctx = self.run_export()
+        self.assertTrue({"Shuttle", "shuttle"} & set(ctx["privateNames"]))
+        self.assertNotIn("shuttle", json.dumps(pub["activity"][0]).lower())
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["title"] = "docs: shuttle notes"
+        self.assertTrue(self.gate(forged))
+
+    def test_allowlisted_word_of_another_field_does_not_exempt_a_branch_part(self):
+        """Only public repo names exempt a branch part in any case; a service name allowlisted as
+        "Grafana" does not, so the exporter scrubs "grafana" from titles like the gate expects."""
+        cfg = write_cfg(self.tmp.name, CFG_TEXT.replace("example-owner", "hakupao")
+                        .replace('"services[].name" = ["gitea", "status-page"]', '"services[].name" = ["gitea", "status-page", "Grafana"]'))
+        self.page["activity"][4]["branch"] = "feat/grafana-tuning"
+        self.page["activity"][0]["title"] = "fix: bump grafana"
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertNotIn("grafana", json.dumps(pub["activity"]).lower())
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_public_repo_name_as_branch_part_any_case(self):
+        self.rename_repo("shuttle-path", "shuttle")
+        self.page["activity"][4]["branch"] = "Shuttle/fix"
+        pub, ctx = self.run_export()
+        self.assertNotIn("Shuttle", ctx["privateNames"])
+        self.assertEqual(self.gate(pub, ctx), [])
+
     def test_branch_part_does_not_weaken_a_name(self):
         """A private repo and a private branch part with the same spelling: substring match stays."""
         self.page["activity"][3].update(repo="kestrel", branch="feat/kestrel")
@@ -374,6 +424,64 @@ class ExportTest(unittest.TestCase):
         self.assertFalse({"A", "B", "C", "D", "V"} & set(ctx["privateNames"]))
         self.assertTrue(all(m["label"] == {"masked": True} for m in pub["machines"]))
         self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_multi_char_code_as_label_does_not_stop_export(self):
+        # Backlog A3: real codes are names like "vm-box"; a machine without a label shows its code.
+        cfg = write_cfg(self.tmp.name, 'codes = ["vm-box"]\n' + CFG_TEXT.replace("example-owner", "hakupao"))
+        m = next(m for m in self.page["machines"] if m["id"] == "V")
+        m["id"] = m["label"] = "vm-box"
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertNotIn("vm-box", ctx["privateNames"])
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_code_still_clashes_with_a_real_private_name(self):
+        # Only a label equal to its own machine code is exempt; a code that equals a repo name is not.
+        cfg = write_cfg(self.tmp.name, 'codes = ["falcon-ledger"]\n' + CFG_TEXT.replace("example-owner", "hakupao"))
+        m = next(m for m in self.page["machines"] if m["id"] == "V")
+        m["id"] = m["label"] = "falcon-ledger"         # the exemption path must not swallow the clash
+        with self.assertRaises(ex.ExportError):
+            self.run_export(cfg=cfg)
+        self.last_input = self.page                   # the gate refuses the same config on its own
+        with self.assertRaises(vp.SetupError):
+            self.gate({})
+
+    def test_label_equal_to_a_non_code_id_stays_private(self):
+        # Review of A3: only a PUBLIC code is exempt. A private host name used as id and label, with
+        # the machine block hidden, must still be scrubbed from titles and caught by the gate.
+        cfg = write_cfg(self.tmp.name, CFG_TEXT.replace("example-owner", "hakupao")
+                        .replace('hidden = ["tailnet"]', 'hidden = ["tailnet", "machines", "runtimes", "jobs"]'))
+        m = next(m for m in self.page["machines"] if m["id"] == "V")
+        m["id"] = m["label"] = "secret-host"
+        self.page["activity"][0]["title"] = "fix: deploy to secret-host"
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertIn("secret-host", ctx["privateNames"])
+        self.assertNotIn("secret-host", json.dumps(pub))
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["title"] = "fix: deploy to secret-host"
+        self.assertTrue(self.gate(forged))
+
+    def test_code_label_on_another_machine_is_judged_per_machine(self):
+        # Machine V shows its own code "vm-box"; machine D is labelled "vm-box" too: that label is
+        # not D's code, so both exporter and gate refuse (same verdict on both sides).
+        cfg = write_cfg(self.tmp.name, 'codes = ["vm-box"]\n' + CFG_TEXT.replace("example-owner", "hakupao"))
+        v = next(m for m in self.page["machines"] if m["id"] == "V")
+        v["id"] = v["label"] = "vm-box"
+        next(m for m in self.page["machines"] if m["id"] == "D")["label"] = "vm-box"
+        with self.assertRaises(ex.ExportError):
+            self.run_export(cfg=cfg)
+        self.last_input = self.page
+        with self.assertRaises(vp.SetupError):
+            self.gate({})
+
+    def test_code_clash_ignores_case_on_both_sides(self):
+        cfg = write_cfg(self.tmp.name, 'codes = ["vm-box"]\n' + CFG_TEXT.replace("example-owner", "hakupao"))
+        v = next(m for m in self.page["machines"] if m["id"] == "V")
+        v["id"], v["label"] = "vm-box", "VM-Box"
+        with self.assertRaises(ex.ExportError):
+            self.run_export(cfg=cfg)
+        self.last_input = self.page
+        with self.assertRaises(vp.SetupError):
+            self.gate({})
 
     def test_local_commit_of_public_repo_loses_branch_keeps_hash(self):
         pub, ctx = self.run_export()

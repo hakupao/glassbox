@@ -34,6 +34,7 @@ Config format: docs/public.example.toml. A missing config file is an error; --no
 examples only) means the strictest settings.
 """
 import argparse
+import collections
 import copy
 import html
 import json
@@ -473,16 +474,29 @@ def export(page, cfg, terms):
     allow_all = set().union(*cfg["allow"].values()) | public_repos
 
     # Private names: every text value that will not be shown, and private repos / projects.
+    # A machine without a configured label carries its own code as label (hub default); when that
+    # code is public it reveals nothing (backlog A3). Judged per machine: the exemption needs the
+    # label of that same machine to equal its id, and the id to be a public code.
+    own_code = collections.Counter(m["label"] for m in src.get("machines") or [] if isinstance(m, dict)
+                                   and isinstance(m.get("label"), str) and m["label"] == m.get("id")
+                                   and is_code(m["label"], cfg))
     texts = []
     _walk_text(src, "", texts)
+    kept = []
+    for g, v in texts:                    # drop exactly one machines[].label per exempt machine
+        if g == "machines[].label" and own_code[v] > 0:
+            own_code[v] -= 1
+        else:
+            kept.append((g, v))
+    texts = kept
     names = {v for g, v in texts if g not in NAME_FIELDS_SKIP and v not in cfg["allow"].get(g, ())
              and not (g in ("activity[].repo", "today.byProject[].project") and v in public_repos)}
     names |= {e[k] for e, k in visibility_sites(src) if isinstance(e.get(k), str) and not is_public(e, k)}
     private_keys = {k for k, v in verdict.items() if not v}
     allow_all = {a for a in allow_all if norm(a) not in private_keys}
-    # Codes (A, K, ...) are public by design; a label that equals its code reveals nothing.
+    # Codes (A, K, ...) are public by design.
     hashes, hosts, frags = set(), set(), set()
-    clash = {c for c in cfg["codes"] if c in names}
+    clash = {c for c in cfg["codes"] if norm(c) in {norm(n) for n in names}}
     if clash:
         raise ExportError(f"config codes: {len(clash)} code(s) equal a private name")
     names = {n for n in names if norm(n) and norm(n) not in VOCAB and n not in allow_all and not is_code(n, cfg)}
@@ -498,7 +512,11 @@ def export(page, cfg, terms):
                 frags.update(f for f in re.split(r"[-/_]+", e["branch"])
                              if len(f) >= 4 and f.lower() not in GENERIC_BRANCH)
     hosts.discard("")
-    frags = {f for f in frags if norm(f) not in VOCAB and f not in allow_all and not is_code(f, cfg)}
+    # A part spelling a public repo name, in any case, reveals nothing (same rule as the gate);
+    # other allowlisted values are per field and keep the exact match.
+    shown = {norm(r) for r in public_repos if norm(r) not in private_keys}
+    frags = {f for f in frags if norm(f) not in VOCAB and f not in allow_all and norm(f) not in shown
+             and not is_code(f, cfg)}
     modes = dict(terms["match"])
     # Commit ids and branch parts: whole tokens. The stricter substring match of a real name,
     # term or keyword with the same spelling, and explicit match entries, are kept.
