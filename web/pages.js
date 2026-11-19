@@ -150,7 +150,7 @@ const svcSort = (a, b) => (STATUS_ORDER[a.status] ?? 4) - (STATUS_ORDER[b.status
 function runtimeRows(list, withMachine = true){
   if(!list.length) return `<tr><td class="k">${esc(t('none'))}</td></tr>`;
   return `<tr>${withMachine ? `<th>${esc(t('rt.machine'))}</th>` : ''}<th>${esc(t('rt.agent'))}</th><th class="v">${esc(t('rt.version'))}</th><th class="v">${esc(t('rt.processes'))}</th><th class="v">${esc(t('rt.active'))}</th></tr>` +
-    list.map(r => `<tr${r.stale ? ' style="opacity:.45" title="' + esc(t('rt.stale')) + '"' : ''}>${withMachine ? `<td class="k">${G.mc(r.machine)}</td>` : ''}<td class="n">${G.agTag(r.agent)}</td><td class="v">${bd('v' + esc(r.version || '?'), 'c-dim')}</td><td class="v">${F.n(r.processes)}</td><td class="v ${r.activeSessions ? 'c-ok' : ''}">${r.activeSessions && !r.stale ? '<span class="st live" style="width:6px;height:6px;background:var(--ok);margin-right:6px"></span>' : ''}${F.n(r.activeSessions)}</td></tr>`).join('');
+    list.map(r => `<tr${r.stale ? ' style="opacity:.45" title="' + esc(t('rt.stale')) + '"' : ''}>${withMachine ? `<td class="k">${G.mc(r.machine)}</td>` : ''}<td class="n">${G.agTag(r.agent)}</td><td class="v">${bd('v' + esc(r.version || '?'), 'c-dim')}</td><td class="v">${F.n(r.processes)}</td><td class="v ${r.activeSessions ? 'c-ok' : ''}">${r.activeSessions && !r.stale ? '<span class="st live" style="width:6px;height:6px;background:var(--sig-ok);margin-right:6px"></span>' : ''}${F.n(r.activeSessions)}</td></tr>`).join('');
 }
 function jobRows(list, full, withMachine = true){
   if(!list.length) return `<tr><td class="k">${esc(t('none'))}</td></tr>`;
@@ -591,7 +591,7 @@ function agentSection(m, f){
     (today ? `<th class="v hide-s">${esc(t('mach.todayReq'))}</th><th class="v hide-s">${esc(t('mach.todaySes'))}</th><th class="v">${esc(t('mach.todayCost'))}</th>` : '') + `</tr>` +
     rows.map(({agent, rt, today: a}) => `<tr${rt && rt.stale ? ' style="opacity:.55"' : ''}><td class="n">${G.agTag(agent)}</td>
       <td class="v hide-s">${rt ? bd('v' + esc(rt.version || '?'), 'c-dim') : dash}</td><td class="v">${rt ? F.n(rt.processes) : dash}</td>
-      <td class="v ${rt && rt.activeSessions && !rt.stale ? 'c-ok' : ''}">${rt ? (rt.activeSessions && !rt.stale ? '<span class="st live" style="width:6px;height:6px;background:var(--ok);margin-right:6px"></span>' : '') + F.n(rt.activeSessions) : dash}</td>
+      <td class="v ${rt && rt.activeSessions && !rt.stale ? 'c-ok' : ''}">${rt ? (rt.activeSessions && !rt.stale ? '<span class="st live" style="width:6px;height:6px;background:var(--sig-ok);margin-right:6px"></span>' : '') + F.n(rt.activeSessions) : dash}</td>
       <td>${rt ? `<span${rt.stale ? ` title="${esc(t('rt.stale'))}"` : ''}>${bd(esc(t(rt.stale ? 'rt.staleShort' : 'rt.fresh')), rt.stale ? 'c-warn' : 'c-ok', true)}</span>` : bd(esc(t('rt.noRuntime')), 'c-dim')}</td>` +
       (today ? `<td class="v hide-s">${a ? F.n(a.requests) : dash}</td><td class="v hide-s">${a ? F.n(a.sessions) : dash}</td><td class="v">${a ? F.usd(a.costUsd) + (a.unpricedRequests ? ` <span class="c-warn" title="${esc(t('today.unpriced', {n: F.n(a.unpricedRequests)}))}">*</span>` : '') : dash}</td>` : '') + `</tr>`).join('') + `</table></div>`;
 }
