@@ -103,9 +103,14 @@ const defIcon = (role, os) => role === 'dev' || role === 'work' ? (os === 'macos
   : role === 'deploy' ? ({macos: 'mini', linux: 'vm'}[os] || 'server') : role === 'gitea' ? (os === 'macos' ? 'nas' : 'server') : 'server';
 const defColor = code => MCOLORS[[...String(code)].reduce((a, c) => a + c.charCodeAt(0), 0) % MCOLORS.length];
 const text = v => (v && typeof v === 'object') ? (v.masked ? v : null) : (v === undefined || v === null ? null : String(v));
+const nonEmpty = xs => xs.length ? xs : null;
 function normCommit(a){
   return {t: str(a.t), source: str(a.source) || 'local', repo: text(a.repo), public: a.public === true, title: str(a.title) || '',
-    branch: str(a.branch), hash: str(a.hash), url: str(a.url), machine: str(a.machine), pushed: a.pushed !== false};
+    branch: str(a.branch), hash: str(a.hash), url: str(a.url), machine: str(a.machine), pushed: a.pushed !== false,
+    /* optional (S17 R09): author, files [{s: M|A|R|D, p: path}] or a bare count nFiles; null when absent */
+    author: str(a.author) || null,
+    files: Array.isArray(a.files) ? nonEmpty(arr(a.files).filter(f => typeof f.s === 'string' && f.s.length === 1 && 'MARD'.includes(f.s) && typeof f.p === 'string' && f.p).map(f => ({s: f.s, p: f.p}))) : null,
+    nFiles: Number.isInteger(a.nFiles) && a.nFiles >= 0 ? a.nFiles : null};
 }
 function normDay(u){
   return {date: str(u.date) || '', requests: num(u.requests), sessions: num(u.sessions), unpricedRequests: num(u.unpricedRequests),
@@ -265,8 +270,11 @@ G.C = {BLUE, HI, OR, BAD, OK, WARN, VIO, DIM};
 const COL = G.COL = [BLUE, HI, OR, BAD, OK, WARN, VIO, DIM];
 G.lvlCls = f => f >= 0.9 ? 'c-bad' : f >= 0.75 ? 'c-warn' : 'c-ok';
 G.lvlIdx = f => f >= 0.9 ? 3 : f >= 0.75 ? 5 : 4;
+/* repo tag colours: :root --tag-1..8 for CSS (inline style); SVG fill attributes need the hex, same order */
 const TAGS = ['#e07a8a', '#7fa8e8', '#79b98a', '#d9a441', '#a48ee0', '#5fb7b0', '#e3894d', '#c68fd0'];
-G.hue = s => { let h = 0; for(const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return TAGS[h % TAGS.length]; };
+const tagI = s => { let h = 0; for(const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % TAGS.length; };
+G.hue = s => `var(--tag-${tagI(s) + 1})`;
+G.hueHex = s => TAGS[tagI(s)];
 const bd = G.bd = (txt, cls = '', dot = false, style = '', live = false) => `<span class="bd ${cls}${dot ? ' dot' : ''}${live ? ' live' : ''}"${style ? ` style="${style}"` : ''}>${txt}</span>`;
 G.repoTag = r => typeof r === 'string' ? bd(esc(r), '', true, `color:${G.hue(r)}`)
   : (r && r.group === 'private' ? `<span class="grp">${esc(t('text.private'))}</span>` : bd(`<span class="mask" role="img" aria-label="${esc(t('text.masked'))}">${MASK_NEXT()}</span>`, 'c-dim', true));
@@ -299,6 +307,11 @@ const GLYPH = {bolt: ['00110', '01100', '11111', '00110', '01100'], gauge: ['011
 const ICOLOR = {fg: BLUE, or: OR, ok: OK, vio: VIO, bad: BAD, warn: WARN, hi: HI};
 G.ic = (g, c) => { const rows = GLYPH[g] || GLYPH.box, col = ICOLOR[c] || HI;
   return `<i class="ic" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 15 15">${rows.flatMap((row, r) => [...row].map((v, k) => v === '1' ? `<rect x="${k * 3}" y="${r * 3}" width="2.4" height="2.4" fill="${col}"/>` : '')).join('')}</svg></i>`; };
+/* phone tab bar icons (S17 activity B): 5x5 cells, drawn in currentColor so the active tab lights up */
+const TABGLYPH = {overview: '1101111011000001101111011', usage: '0000100101101011010111111', code: '0101010100101000010101010',
+  machines: '1111110001100011111100100', services: '1111100000111110000011111'};
+const tabIcons = () => document.querySelectorAll('[data-tab-ic]').forEach(el => { const g = TABGLYPH[el.dataset.tabIc] || '';
+  el.innerHTML = `<svg width="20" height="20" viewBox="0 0 25 25" fill="currentColor" aria-hidden="true">${[...g].map((v, i) => v === '1' ? `<rect x="${i % 5 * 5}" y="${Math.floor(i / 5) * 5}" width="4" height="4"/>` : '').join('')}</svg>`; });
 G.cnt = s => `<span class="cnt">${s}</span>`;
 G.more = (href, key = 'more.all') => `<a class="more" href="${href}">${esc(t(key))}</a>`;
 /* panel header: icon, title, count badge, right side */
@@ -491,8 +504,7 @@ let lastRoute = null;
 G.render = (keep) => {
   const r = G.route(), view = $('view');
   fits = []; afters = []; details.clear(); G.resetPanels();
-  document.querySelectorAll('#nav a').forEach(a => a.toggleAttribute('aria-current', false));
-  const cur = document.querySelector(`#nav a[data-route="${r.name}"]`); if(cur) cur.setAttribute('aria-current', 'page');
+  document.querySelectorAll('#nav a, #tabs a').forEach(a => { if(a.dataset.route === r.name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   header();
   if(G.capText) G.capText();
   if(!D.ok){ view.innerHTML = `<div class="nogb">${esc(t('nodata'))}</div>`; return; }
@@ -508,7 +520,7 @@ G.render = (keep) => {
 };
 let start = performance.now();
 G.boot = () => {
-  applyStatic();
+  applyStatic(); tabIcons();
   const A = D.ok ? art() : null;
   if(!G.STATIC) document.body.classList.add('anim');
   G.render();

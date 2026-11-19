@@ -3,7 +3,7 @@
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
 <link rel="icon" href="data:,">
 <title data-i18n="app.title"></title>
@@ -30,6 +30,13 @@
   <div class="cap"><span id="cap0"></span><span id="capMid"></span><span id="cap1"></span></div>
   <div class="tail"></div>
 </div>
+<nav class="tabs" id="tabs" data-i18n-aria="nav.aria">
+  <a href="#/" data-route="overview"><i data-tab-ic="overview"></i><span data-i18n="nav.overview"></span></a>
+  <a href="#/usage" data-route="usage"><i data-tab-ic="usage"></i><span data-i18n="nav.usage"></span></a>
+  <a href="#/code" data-route="code"><i data-tab-ic="code"></i><span data-i18n="nav.code"></span></a>
+  <a href="#/machines" data-route="machines"><i data-tab-ic="machines"></i><span data-i18n="nav.machines"></span></a>
+  <a href="#/services" data-route="services"><i data-tab-ic="services"></i><span data-i18n="nav.services"></span></a>
+</nav>
 <div id="tip" role="tooltip"></div>
 <script id="gb-data"></script>
 <script src="i18n.js"></script>

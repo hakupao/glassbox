@@ -102,27 +102,71 @@ function streaks(days){
   return {active: counts.filter(v => v > 0).length, cur, best, peak: max(counts)};
 }
 
-/* commits / activity items */
+/* commits / activity: compact timeline cards (S17 activity design B), shared by #/ and #/code. Collapsed: title,
+   repo tag, unpushed badge, short hash, file count; the card head opens a drawer with author, branch, hash, source,
+   machine, files and the diff link. author / files / nFiles are optional (S17 R09) and only drawn when present. */
 const SRC = {github: ['src.github', 'c-dim'], gitea: ['src.gitea', 'c-vio'], local: ['src.local', 'c-fg']};
 function srcBadge(s){ const [k, c] = SRC[s] || [null, 'c-dim']; return bd(k ? esc(t(k)) : esc(s), c); }
-let commitN = 0;
-function commitItem(a){
-  const key = 'c' + (commitN++);
-  const tags = [G.repoTag(a.repo), srcBadge(a.source), a.pushed === false ? bd(esc(t('commit.unpushed')), 'c-warn', true) : '',
-    a.machine ? G.mc(a.machine) : '', a.branch ? `<span class="rel">${esc(a.branch)}${a.hash ? ' · ' + esc(a.hash.slice(0, 7)) : ''}</span>` : ''].join(' ');
-  G.detail(key, () => commitDetail(a));
-  return `<li ${G.xattrs(key)}><time>${esc(F.when(a.t))}</time><span class="p bds">${tags}</span><span class="d"><span><span class="tw">▸</span>${G.ttl(a.title)}</span><span class="rel">${esc(F.ago(a.t))}</span></span></li>
-    <li class="xd" id="xd-${key}" hidden><div class="box" data-slot></div></li>`;
+let commitN = 0, fxNext = false, fxTimer = 0;
+const nFiles = a => a.nFiles ?? (a.files ? a.files.length : null);   /* nFiles wins: the list may be truncated */
+const nCommits = n => t(n === 1 ? 'code.oneCommit' : 'code.nCommits', {n: F.n(n)});
+/* a path never wraps: the directory gives way first (ellipsis in the middle), the file name stays */
+function filePath(p){ const i = p.lastIndexOf('/');
+  return `<span class="fp" title="${esc(p)}"><span class="dir">${esc(p.slice(0, i + 1))}</span><span class="base">${esc(p.slice(i + 1))}</span></span>`; }
+const fileRow = f => `<li><span class="fs fs-${f.s}" title="${esc(t('commit.fs.' + f.s))}">${f.s}</span>${filePath(f.p)}</li>`;
+function filesBlock(a, key){
+  const n = nFiles(a); if(n == null) return '';
+  /* paths only for a public, pushed repo (BACKLOG B4); otherwise the count alone */
+  if(!a.files || !a.files.length || !a.public || !a.pushed) return `<div class="nf">${esc(t(n === 1 ? 'commit.oneFile' : 'commit.nFiles', {n: F.n(n)}))}</div>`;
+  const rest = a.files.slice(3);
+  return `<ul class="files">${a.files.slice(0, 3).map(fileRow).join('')}</ul>` + (rest.length ? `<div class="fold" id="cf-${key}"><div><ul class="files">${rest.map(fileRow).join('')}</ul></div></div>
+    <button class="fmore" type="button" aria-expanded="false" aria-controls="cf-${key}" data-n="${rest.length}">${esc(t('commit.moreFiles', {n: F.n(rest.length)}))}</button>` : '');
 }
-function commitDetail(a){
-  const url = G.safeLink(a.url);
-  const rows = [['commit.title', G.ttl(a.title)], ['commit.repo', T(a.repo)], ['commit.source', srcBadge(a.source)],
-    ['commit.time', esc(F.full(a.t))], ['commit.branch', a.branch ? esc(a.branch) : '—'], ['commit.hash', a.hash ? `<span class="m">${esc(a.hash)}</span>` : '—'],
-    ['commit.machine', a.machine ? G.mc(a.machine) : '—'], ['commit.pushed', esc(t(a.pushed ? 'yes' : 'no'))],
-    ['commit.visibility', esc(t(a.public ? 'commit.public' : 'commit.private'))]];
-  if(url) rows.push(['commit.link', `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(t('commit.open'))}</a>`]);
-  return `<dl class="facts">${rows.map(([k, v]) => `<dt>${esc(t(k))}</dt><dd>${v}</dd>`).join('')}</dl>`;
+function commitCard(a, i, fx){
+  const key = 'cm' + (commitN++), n = nFiles(a), url = G.safeLink(a.url), hm = a.t ? F.hm(a.t) : '\u2014';
+  const hue = a.public && typeof a.repo === 'string' ? G.hue(a.repo) : 'var(--ink-3)';
+  const facts = [a.author && ['commit.author', esc(a.author), 'tx'], a.branch && ['commit.branch', esc(a.branch)], a.hash && ['commit.hash', esc(a.hash)],
+    ['commit.source', srcBadge(a.source), 'vis'], a.machine && ['commit.machine', G.mc(a.machine), 'vis']].filter(Boolean);
+  return `<li class="cm${a.pushed ? '' : ' un'}${fx ? ' enter' : ''}" style="--c:${hue};--i:${i}"><time class="tm" datetime="${esc(a.t || '')}" title="${esc(F.full(a.t))}">${esc(hm)}</time><span class="ring" aria-hidden="true"></span>
+    <article class="card"><button class="hd" type="button" aria-expanded="false" aria-controls="cd-${key}">
+      <span class="ttl">${G.ttl(a.title)}</span>
+      <span class="cm-m">${G.repoTag(a.repo)}${a.pushed ? '' : bd(esc(t('commit.unpushed')), 'c-warn')}${a.hash ? `<span class="hash">${esc(a.hash.slice(0, 7))}</span>` : ''}<span class="tt">${esc(hm)}</span></span>
+      <span class="side">${n != null ? `<span class="nf">${esc(t(n === 1 ? 'commit.oneFile' : 'commit.nFiles', {n: F.n(n)}))}</span>` : ''}<i class="chev" aria-hidden="true"></i></span>
+    </button><div class="dr" id="cd-${key}"><div><div class="dri">
+      <dl class="facts">${facts.map(([k, v, c]) => `<dt>${esc(t(k))}</dt><dd${c ? ` class="${c}"` : ''}>${v}</dd>`).join('')}</dl>
+      ${n != null ? `<div>${filesBlock(a, key)}</div>` : ''}${url ? `<div><a class="ext dl" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(t('commit.diff'))}</a></div>` : ''}
+    </div></div></div></article></li>`;
 }
+/* day groups: "Today · 6 commits"; dayCounts come from the whole filtered list, so a paged list still shows the day total */
+function timeline(shown, all, id){
+  const fx = fxNext; fxNext = false;
+  const dayOf = c => c.t ? F.localDate(c.t) : '', per = new Map();
+  all.forEach(c => { const d = dayOf(c); per.set(d, (per.get(d) || 0) + 1); });
+  const today = F.localDate(D.generatedAt), yest = D.generatedAt ? F.localDate(new Date(D.T0 - 864e5).toISOString()) : '';
+  let h = '', last = null, i = 0;
+  for(const c of shown){ const d = dayOf(c);
+    if(d !== last){ last = d;
+      const lab = !d ? '\u2014' : d === today ? t('code.today') : d === yest ? t('code.yesterday') : F.dfull(d);
+      h += `<li class="day${fx ? ' enter' : ''}" style="--i:${i++}"><h3${d ? ` title="${esc(F.dfull(d))}"` : ''}>${esc(lab)} <span class="dn">\u00b7 ${esc(nCommits(per.get(d)))}</span></h3></li>`; }
+    h += commitCard(c, i++, fx); }
+  return `<ol class="tl"${id ? ` id="${id}"` : ''}>${h}</ol>`;
+}
+document.addEventListener('click', e => {
+  const el = e.target.closest && e.target.closest('.cm .hd, .fmore, .segb a');
+  if(!el) return;
+  if(el.matches('.hd')){ const card = el.parentElement, open = !card.classList.contains('open');
+    card.classList.toggle('open', open); el.setAttribute('aria-expanded', String(open)); return; }
+  if(el.matches('.fmore')){ const f = G.$(el.getAttribute('aria-controls')); if(!f) return; const open = !f.classList.contains('open');
+    f.classList.toggle('open', open); el.setAttribute('aria-expanded', String(open));
+    el.textContent = t(open ? 'commit.fold' : 'commit.moreFiles', {n: F.n(+el.dataset.n)}); return; }
+  /* filter switch: fade the list out, then render the new filter with a staggered rise; static mode just follows the link */
+  const tl = G.$('c-tl');
+  if(G.STATIC || !tl || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault(); const href = el.getAttribute('href'), from = location.hash; tl.classList.add('out');
+  /* one pending switch at a time: a second click replaces the first, and a navigation in between cancels it */
+  clearTimeout(fxTimer);
+  fxTimer = setTimeout(() => { if(location.hash !== from || !G.$('c-tl')) return; history.pushState(null, '', href); fxNext = true; G.render(true); fxNext = false; }, 110);
+});
 
 /* service rows */
 const ST_CLS = {up: 'c-ok', down: 'c-bad', pending: 'c-warn', maintenance: 'c-vio', paused: 'c-warn', unknown: 'c-dim'};
@@ -216,7 +260,7 @@ P.overview = () => {
   const ACT = D.activity.slice(0, 12);
   h += G.pn('h-act', G.ph('h-act', 'branch', 'bad', esc(t('act.title')), esc(t('act.count', {n: D.activity.length})),
       bd(esc(t('act.private', {n: D.activity.filter(a => !a.public).length})), 'c-dim') + ' ' + bd(esc(t('act.unpushed', {n: D.activity.filter(a => !a.pushed).length})), 'c-warn') + ' ' + G.more('#/code')) +
-    (ACT.length ? `<ul class="act">${ACT.map(commitItem).join('')}</ul>` : G.empty()));
+    (ACT.length ? timeline(ACT, D.activity) : G.empty()));
 
   h += G.grpH('04', 'grp.spend');
   h += `<div class="grid2">` + G.pn('h-trend', G.ph('h-trend', 'bars', 'or', esc(t('trend.title', {n: D.trend.length})), '',
@@ -323,8 +367,8 @@ function aggregate(days){
   const byCost = (a, b) => (b.costUsd || 0) - (a.costUsd || 0) || b.requests - a.requests;
   return {tot, agents: [...ag.values()].sort(byCost), models: [...mo.values()].sort(byCost), projects: [...pr.values()].sort(byCost), machines: [...ma.values()].sort(byCost)};
 }
-function seg(items, cur, mk){
-  return `<span class="seg" role="group">${items.map(([v, label]) => `<a href="${mk(v)}" aria-current="${String(v) === String(cur)}">${label}</a>`).join('')}</span>`;
+function seg(items, cur, mk, cls = ''){
+  return `<span class="seg${cls ? ' ' + cls : ''}" role="group">${items.map(([v, label]) => `<a href="${mk(v)}" aria-current="${String(v) === String(cur)}">${label}</a>`).join('')}</span>`;
 }
 P.usage = params => {
   const full = D.usageDays && D.usageDays.length;
@@ -365,7 +409,7 @@ P.usage = params => {
     }else{
       const top = (dim === 'model' ? A.models : A.projects).slice(0, 7), keyOf = x => dim === 'model' ? x.model + '\u0000' + x.agent : G.Tkey(x.project);
       const keys = new Set(top.map(keyOf));
-      series = top.map((x, i) => ({key: keyOf(x), label: dim === 'model' ? x.model : G.Tplain(x.project), html: dim === 'model' ? esc(x.model) : T(x.project), color: dim === 'model' ? MODEL_COLORS[i % MODEL_COLORS.length] : (typeof x.project === 'string' ? G.hue(x.project) : C.DIM)}));
+      series = top.map((x, i) => ({key: keyOf(x), label: dim === 'model' ? x.model : G.Tplain(x.project), html: dim === 'model' ? esc(x.model) : T(x.project), color: dim === 'model' ? MODEL_COLORS[i % MODEL_COLORS.length] : (typeof x.project === 'string' ? G.hueHex(x.project) : C.DIM)}));
       const rest = (dim === 'model' ? A.models : A.projects).length > top.length;
       if(rest) series.push({key: '\u0000rest', label: t('usage.other'), color: C.DIM});
       series.reverse();
@@ -489,7 +533,7 @@ function quotaChart(w, q){
 
 /* ================================================================== #/code */
 P.code = params => {
-  commitN = 0;
+  commitN = 0; clearTimeout(fxTimer);
   const days = D.contributions.days, st = streaks(days);
   const commits = D.commits || D.activity, repos = D.repos;
   const unpushed = repos ? sum(repos.map(r => r.unpushed)) : commits.filter(c => !c.pushed).length;
@@ -506,7 +550,7 @@ P.code = params => {
   /* rhythm: weekday (year) and hour of day (commit list) */
   const hours = Array(24).fill(0); commits.forEach(c => { const hh = c.t ? F.localHour(c.t) : null; if(hh !== null) hours[hh]++; });
   h += `<div class="grid2 even">` + G.pn('c-wk', G.ph('c-wk', 'bars', 'or', esc(t('code.byWeekday')), esc(t('code.yearAvg')), '') + G.fit('c-wkc', w => weekdayCount(w, days))) +
-    G.pn('c-hr', G.ph('c-hr', 'clock', 'fg', esc(t('code.byHour')), esc(t('code.nCommits', {n: F.n(commits.length)})), '') + G.fit('c-hrc', w => hourCount(w, hours)) + `<div class="xl flat">${[0, 6, 12, 18, 23].map(x => `<span>${String(x).padStart(2, '0')}</span>`).join('')}</div>`) + `</div>`;
+    G.pn('c-hr', G.ph('c-hr', 'clock', 'fg', esc(t('code.byHour')), esc(nCommits(commits.length)), '') + G.fit('c-hrc', w => hourCount(w, hours)) + `<div class="xl flat">${[0, 6, 12, 18, 23].map(x => `<span>${String(x).padStart(2, '0')}</span>`).join('')}</div>`) + `</div>`;
 
   /* repos */
   const repoF = params.get('repo');
@@ -526,27 +570,23 @@ P.code = params => {
       }).join('')}</table></div>` : G.empty()));
   }
 
-  /* commit list with filters */
-  const SRCS = ['all', 'github', 'gitea', 'local', 'unpushed'];
-  let src = params.get('src') || 'all'; if(!SRCS.includes(src)) src = 'all';
+  /* commit list with filters: all / pushed / unpushed / public / private (src=; older values such as github count as all) */
+  const FILT = {all: () => true, pushed: c => c.pushed, unpushed: c => !c.pushed, public: c => c.public, private: c => !c.public};
+  let src = params.get('src') || 'all'; if(!Object.hasOwn(FILT, src)) src = 'all';
   const q = (params.get('q') || '').toLowerCase();
-  const counts = {all: commits.length, github: 0, gitea: 0, local: 0, unpushed: 0};
-  commits.forEach(c => { if(counts[c.source] != null) counts[c.source]++; if(!c.pushed) counts.unpushed++; });
-  let list = commits.filter(c => src === 'all' || (src === 'unpushed' ? !c.pushed : c.source === src));
-  if(repoF) list = list.filter(c => c.repo === repoF);
-  if(q) list = list.filter(c => (c.title + ' ' + (typeof c.repo === 'string' ? c.repo : '') + ' ' + (c.branch || '') + ' ' + (c.hash || '')).toLowerCase().includes(q));
+  let base = commits;
+  if(repoF) base = base.filter(c => c.repo === repoF);
+  if(q) base = base.filter(c => (c.title + ' ' + (typeof c.repo === 'string' ? c.repo : '') + ' ' + (c.branch || '') + ' ' + (c.hash || '')).toLowerCase().includes(q));
+  const counts = Object.fromEntries(Object.keys(FILT).map(k => [k, base.filter(FILT[k]).length]));
+  const list = base.filter(FILT[src]);
   const lk = o => G.href('code', {src: src === 'all' ? null : src, repo: repoF, q: q || null, n: null, ...o});
   h += G.grpH(repos ? '03' : '02', 'code.grpCommits');
   const LIMIT = Math.max(50, Math.min(500, parseInt(params.get('n') || '50', 10) || 50)), shown = list.slice(0, LIMIT);
-  let lastDay = '', body = '';
-  for(const c of shown){ const d = c.t ? F.localDate(c.t) : ''; if(d !== lastDay){ lastDay = d; const nDay = list.filter(x => x.t && F.localDate(x.t) === d).length;
-    body += `<li class="dayh"><span><b>${esc(d ? F.dfull(d) : '—')}</b></span><span>${esc(t('code.nCommits', {n: F.n(nDay)}))}</span></li>`; }
-    body += commitItem(c); }
-  h += G.pn('c-list', G.ph('c-list', 'branch', 'bad', esc(t(D.commits ? 'code.commitList' : 'act.title')), esc(t('code.nCommits', {n: F.n(list.length)})), D.commits ? esc(t('code.listRange')) : '') +
-    `<div class="bar-f">${seg(SRCS.filter(s => s === 'all' || counts[s]).map(s => [s, esc(t('code.f.' + s)) + `<small>${F.n(counts[s])}</small>`]), src, v => lk({src: v === 'all' ? null : v}))}
+  h += G.pn('c-list', G.ph('c-list', 'branch', 'bad', esc(t(D.commits ? 'code.commitList' : 'act.title')), esc(nCommits(list.length)), D.commits ? esc(t('code.listRange')) : '') +
+    `<div class="bar-f">${seg(Object.keys(FILT).map(s => [s, `<span class="sl">${esc(t('code.f.' + s))}</span><small>${F.n(counts[s])}</small>`]), src, v => lk({src: v === 'all' ? null : v}), 'segb')}
       <input class="search" id="c-q" type="search" value="${esc(params.get('q') || '')}" placeholder="${esc(t('code.search'))}" aria-label="${esc(t('code.search'))}">
       ${repoF ? `<span class="bds">${G.repoTag(repoF)} <a class="clear" href="${lk({repo: null})}">${esc(t('filter.clear'))}</a></span>` : ''}</div>` +
-    (shown.length ? `<ul class="act">${body}</ul>` + (list.length > LIMIT ? `<div class="hfoot"><span>${esc(t('code.limited', {n: F.n(LIMIT), m: F.n(list.length)}))}</span><a class="more" href="${lk({n: LIMIT + 100})}">${esc(t('code.showMore'))}</a></div>` : '') : G.empty('filter.none')));
+    (shown.length ? timeline(shown, list, 'c-tl') + (list.length > LIMIT ? `<div class="hfoot"><span>${esc(t('code.limited', {n: F.n(LIMIT), m: F.n(list.length)}))}</span><a class="more" href="${lk({n: LIMIT + 100})}">${esc(t('code.showMore'))}</a></div>` : '') : G.empty('filter.none')));
   G.after(() => { const el = G.$('c-q'); if(!el) return; let tm;
     el.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => { const pos = el.selectionStart; history.replaceState(null, '', lk({q: el.value || null})); G.render(true); const n2 = G.$('c-q'); if(n2){ n2.focus(); try{ n2.setSelectionRange(pos, pos); }catch(e){} } }, 250); }); });
   return h;
@@ -563,7 +603,7 @@ function hourCount(w, hours){
   const p = 5, per = Math.max(1, Math.floor(w / p / 24)), nc = per * 24, NR = 10, mx = max(hours) || 1;
   return G.cells(nc, NR, (c, r) => { const d = Math.floor(c / per); if(per >= 3 && c % per === per - 1) return null; const f = hours[d] / mx * NR, rb = NR - 1 - r;
     return rb + 0.5 <= f && hours[d] ? [0.45 + 0.5 * rb / NR, d < 7 || d >= 22 ? 6 : 0] : [0.05, 0]; }, {pitch: p, px: 4,
-    overlay: (pp, W, H) => hours.map((v, i) => `<rect class="ov" x="${i * per * pp}" y="0" width="${per * pp}" height="${H}" data-tip="${esc(String(i).padStart(2, '0') + ':00  ' + t('code.nCommits', {n: F.n(v)}))}"/>`).join('')});
+    overlay: (pp, W, H) => hours.map((v, i) => `<rect class="ov" x="${i * per * pp}" y="0" width="${per * pp}" height="${H}" data-tip="${esc(String(i).padStart(2, '0') + ':00  ' + nCommits(v))}"/>`).join('')});
 }
 
 /* ================================================================== #/machines */
