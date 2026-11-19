@@ -106,4 +106,4 @@ tests/     unit tests and red-team samples
 
 ## 许可证
 
-[MIT](LICENSE)
+[MIT](LICENSE)。背景画作模板 10-20 改编自 [ascii.rest](https://github.com/bas3line/ascii)（MIT，© 2026 bas3line），详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

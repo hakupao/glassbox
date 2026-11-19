@@ -106,4 +106,4 @@ Inspired by [iamcheyan/svc-dashboard](https://github.com/iamcheyan/svc-dashboard
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Background templates 10-20 are adapted from [ascii.rest](https://github.com/bas3line/ascii) (MIT, © 2026 bas3line); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

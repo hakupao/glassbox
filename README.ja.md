@@ -106,4 +106,4 @@ tests/     unit tests and red-team samples
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE)。背景の作品テンプレート 10-20 は [ascii.rest](https://github.com/bas3line/ascii)（MIT、© 2026 bas3line）を翻案したものです。詳しくは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。

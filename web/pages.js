@@ -66,15 +66,43 @@ function machineLine(m, i){
     <div class="id"><div class="mh">${G.mc(m.id)}<b>${T(m.label)}</b></div>
       <div class="bds">${bd(esc(t(m.online ? 'mach.online' : 'mach.offline')), m.online ? 'c-ok' : 'c-bad', true, '', m.online)}${m.os ? bd(G.OS(m.os), 'c-dim') : ''}${m.role ? bd(G.lbl('role.', m.role), 'c-vio') : ''}</div></div>
     ${met.length ? met.map(metricHtml).join('') : `<div class="nodata" style="grid-column:span 3">${esc(t('mach.noSystem'))}</div>`}
-    <div class="spark" title="${esc(t('mach.cpu24'))}">${G.fit('sp-' + i, w => spark(m.history.map(h => h.cpuPct), w))}</div>
+    <div class="spark" title="${esc(t('mach.cpu24'))}">${G.fit('sp-' + i, (w, el) => spark(m.history.map(h => h.cpuPct), w, +(el.dataset.k || 0)))}<span class="rp" title="${esc(t('mach.replayTip'))}" hidden>${esc(t('mach.replay'))}</span></div>
     <div class="side"><span>${side}</span><div class="bds" style="justify-content:flex-end">${probeBadge(m)}${ag ? ' ' + ag : ''}</div></div>
   </div>`;
 }
-function spark(vals, w){
+function spark(vals, w, k = 0){
   vals = vals.filter(v => v != null); const n = vals.length;
   if(!n) return `<span class="nodata">${esc(t('mach.noHistory'))}</span>`;
-  const per = Math.max(1, Math.floor(w / 3 / n)), nc = Math.min(Math.floor(w / 3), per * n), NR = 9, mx = Math.max(20, ...vals);
-  return G.cells(nc, NR, (c, r) => { const d = Math.min(n - 1, Math.floor(c / per)), v = vals[d] / mx * NR, rb = NR - 1 - r; return rb + 0.5 <= v ? [0.5 + 0.45 * rb / NR, 0] : [0.06, 0]; }, {pitch: 3, px: 2.4});
+  const NR = 9, mx = Math.max(20, ...vals), full = Math.min(Math.floor(w / 3), Math.max(1, Math.floor(w / 3 / n)) * n);   /* scale and width of the full chart */
+  const win = k ? replayWindow(n, k) : {start: 0, len: n}, per = Math.max(1, Math.floor(full / win.len)), nc = Math.min(Math.floor(w / 3), per * win.len);
+  return G.cells(nc, NR, (c, r) => { const d = win.start + Math.min(win.len - 1, Math.floor(c / per)), v = vals[d] / mx * NR, rb = NR - 1 - r; return rb + 0.5 <= v ? [0.5 + 0.45 * rb / NR, 0] : [0.06, 0]; }, {pitch: 3, px: 2.4});
+}
+
+/* replay of the 24h CPU sparks (B2). Step 0 is the full chart: the default, the static frame (?t=, reduced motion) and what the tooltip
+   describes. While a spark is on screen, steps 1.. show a window of half the history that slides one sample per second from the oldest
+   start to the newest end, holds the newest window for PAUSE seconds, then starts over. Off screen it returns to step 0. The "replay" mark
+   shows only while replaying. One timer; it stops itself when a render replaces the list. */
+const PAUSE = 2;
+function replayWindow(n, k){ const len = Math.max(2, Math.floor(n / 2)), last = n - len; return {start: Math.min(k - 1, last), len}; }
+const replaySteps = n => n - Math.max(2, Math.floor(n / 2)) + 1 + PAUSE;      /* steps per cycle, k = 1 .. replaySteps */
+let rpTimer = 0, rpObs = null;
+function replaySparks(){
+  clearInterval(rpTimer); if(rpObs) rpObs.disconnect(); rpObs = null;
+  const els = [...document.querySelectorAll('.mline .spark')].map(el => ({el, f: el.querySelector('[id^="sp-"]'), rp: el.querySelector('.rp')}))
+    .filter(x => x.f && x.f.querySelector('svg'));
+  if(G.STATIC || !els.length || !('IntersectionObserver' in window)) return;
+  const byEl = new Map(els.map(x => [x.el, x])), seen = new Set();
+  const vals = x => { const m = D.machines[+x.f.id.slice(3)]; return m ? m.history.map(h => h.cpuPct) : []; };
+  const show = (x, k) => { const w = x.f.clientWidth; if(!w) return false; x.f.dataset.k = k; x.f.innerHTML = spark(vals(x), w, k); if(x.rp) x.rp.hidden = !k; return true; };
+  rpObs = new IntersectionObserver(es => es.forEach(e => { const x = byEl.get(e.target); if(e.isIntersecting) seen.add(e.target);
+    else { seen.delete(e.target); if(x && +x.f.dataset.k) show(x, 0); } }));
+  els.forEach(x => rpObs.observe(x.el));
+  rpTimer = setInterval(() => {
+    if(!els[0].el.isConnected){ clearInterval(rpTimer); if(rpObs) rpObs.disconnect(); rpObs = null; return; }
+    if(document.hidden) return;
+    els.forEach(x => { if(!seen.has(x.el)) return; const n = vals(x).filter(v => v != null).length; if(n < 4) return;
+      show(x, (+x.f.dataset.k || 0) % replaySteps(n) + 1); });
+  }, 1000);
 }
 
 /* commit heatmap */
@@ -252,6 +280,7 @@ P.overview = () => {
   const online = D.machines.filter(m => m.online).length;
   h += G.pn('h-mach', G.ph('h-mach', 'server', 'ok', esc(t('mach.title')), esc(t('mach.onlineN', {a: online, b: D.machines.length})), esc(t('mach.src')) + ' ' + G.more('#/machines')) +
     (D.machines.length ? `<div class="mlist">${D.machines.map(machineLine).join('')}</div>` : G.empty()));
+  G.after(replaySparks);
 
   h += G.grpH('03', 'grp.code');
   const st = streaks(D.contributions.days);

@@ -405,79 +405,27 @@ G.pace = (q, now) => {
 };
 G.multiAcct = () => new Set(D.quota.map(q => q.agent + '\u0000' + q.account)).size > new Set(D.quota.map(q => q.agent)).size;
 
-/* ------------------------------------------------------------------ background: today's piece */
+/* ------------------------------------------------------------------ background: today's piece (web/art.js) */
+/* Inputs: today's tokens, the Claude Code share of Claude Code + Codex requests, the 30-day cost trend, the cache hit rate.
+   The template rotates by the local date of generatedAt in the page zone, so a snapshot always shows the same piece; ?art=N previews one. */
 function art(){
-  const cv = $('art'), ax = cv.getContext && cv.getContext('2d'); if(!ax) return () => {};
-  const TD = D.today, totTok = G.totTok(TD.tokens);
-  const totals = D.trend.map(d => d.cc + d.cx), nT = Math.max(1, totals.length), maxT = G.max(totals) || 1;
-  const seedDate = (D.generatedAt || '2026-01-01').slice(0, 10).replace(/-/g, ''), seed = parseInt(seedDate, 10) || 1;
-  const ccReq = (TD.byAgent.find(a => a.agent === 'claude-code') || {}).requests || 0;
-  const shareCC = TD.requests ? ccReq / TD.requests : 1;
-  const nParticles = Math.min(4000, Math.round(totTok / 1e6 * 38));
+  const lib = window.GLASSBOX_ART, cv = $('art'); if(!lib || !cv) return null;
+  const TD = D.today, totTok = G.totTok(TD.tokens), req = a => (TD.byAgent.find(x => x.agent === a) || {}).requests || 0;
+  const cc = req('claude-code'), cx = req('codex'), share = cc + cx ? cc / (cc + cx) : 1;
+  const date = F.localDate(D.generatedAt) || (/^\d{4}-\d{2}-\d{2}/.test(D.generatedAt || '') ? D.generatedAt.slice(0, 10) : '');
+  const qa = Q.get('art'), pick = /^\d{1,2}$/.test(qa || '') && lib.ENABLED.includes(+qa) ? +qa : null;
+  const A = lib.create(cv, {tok: totTok, share, trend: D.trend.map(d => d.cc + d.cx), cache: totTok > 0 ? TD.cacheHitRate : 1}, {date, art: pick});
+  if(!A) return null;
+  const nn = String(A.id).padStart(2, '0');
   G.capText = () => {
-    $('cap0').textContent = t('art.cap', {n: seedDate});
-    $('capMid').innerHTML = `<span style="color:${BLUE}">■</span> Claude Code ${F.pct(shareCC)}&emsp;<span style="color:${OR}">■</span> Codex ${F.pct(1 - shareCC)}`;
-    $('cap1').textContent = t('art.legend', {n: F.n(nParticles), tok: F.tok(totTok)});
+    const name = t('art.name.' + nn);
+    $('cap0').textContent = t('art.cap', {n: A.ymd, id: nn, name}) + (A.src ? ' · ' + t('art.credit', {src: A.src}) : '') + (A.id !== A.auto ? ' · ' + t('art.preview') : '');
+    $('capMid').innerHTML = `<span style="color:${BLUE}">■</span> Claude Code ${F.pct(share)}&emsp;<span style="color:${OR}">■</span> Codex ${F.pct(1 - share)}`;
+    $('cap1').textContent = t('art.legend.' + nn, {n: F.n(A.n), tok: F.tok(totTok)});
+    cv.setAttribute('aria-label', t('art.aria', {name, enc: t('art.enc.' + nn)}));
   };
-  function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let x = Math.imul(a ^ a >>> 15, 1 | a); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; }; }
-  const rnd0 = mulberry(seed ^ 0x9e3779b9), perm = new Float32Array(65536); for(let i = 0; i < perm.length; i++) perm[i] = rnd0();
-  function noise(x, y){ const s_ = v => v * v * (3 - 2 * v);
-    const xi = Math.floor(x), yi = Math.floor(y), xf = s_(x - xi), yf = s_(y - yi), x0 = xi & 255, x1 = (xi + 1) & 255, y0 = (yi & 255) << 8, y1 = ((yi + 1) & 255) << 8;
-    const a = perm[y0 | x0], b = perm[y0 | x1], c = perm[y1 | x0], d = perm[y1 | x1]; return (a + (b - a) * xf) * (1 - yf) + (c + (d - c) * xf) * yf; }
-  const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
-  const sstep = (a, b, x) => smooth((x - a) / (b - a));
-  const trMean = G.sum(totals) / nT;
-  function ridge(xn){ if(totals.length < 2) return (totals[0] || 0) / maxT; const f = (xn * .5 + .5) * (nT - 1), i = Math.max(0, Math.min(nT - 2, Math.floor(f))), u = f - i, s = (1 - Math.cos(u * Math.PI)) / 2; return (totals[i] + (totals[i + 1] - totals[i]) * s) / maxT; }
-  const prnd = mulberry(seed);
-  const PART = Array.from({length: nParticles}, () => ({bx: prnd() * 2 - 1, by: prnd(), bz: prnd(), ph: prnd() * 6.283, cx: prnd() > shareCC}));
-  const LV = 9, ART = [[108, 151, 214], [219, 168, 67]], jitter = (1 - TD.cacheHitRate) * 4;
-  const NZ = 120, zs = Array.from({length: NZ}, (_, i) => 1.1 * Math.pow(15 / 1.1, i / (NZ - 1)));
-  let L = null, Gr = null;
-  function layout(){ const W = cv.clientWidth, H = cv.clientHeight; if(!W || !H){ L = null; return; }
-    const dpr = Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    L = {W, H, dpr, p: 5, cols: Math.floor(W / 5), rows: Math.floor(H / 5)}; }
-  function draw(tm){
-    if(!L) layout(); if(!L) return;
-    const {W, H, dpr, cols, rows} = L, P = L.p;
-    if(!Gr || Gr.n !== cols * rows) Gr = {n: cols * rows, gb: new Float32Array(cols * rows), gc: new Uint8Array(cols * rows), bk: Array.from({length: 2 * LV}, () => new Int32Array(cols * rows)), bc: new Int32Array(2 * LV)};
-    const {gb, gc, bk, bc} = Gr, PN = W < 640 ? Math.round(PART.length * .5) : PART.length;
-    gb.fill(0);
-    const hy = rows * .42, focal = rows * .95, kx = .62 * cols / rows;
-    const A = 2.2 + .5 * Math.sin(tm * .33), camH = 2.0 + .08 * Math.sin(tm * .21), trav = tm * .16, ymin = new Float32Array(cols).fill(rows);
-    for(let c = 0; c < cols; c++){
-      const xn = (c + .5) / cols * 2 - 1;
-      for(let i = 0; i < NZ; i++){
-        const z = zs[i], wx = xn * z * kx, zz = z + trav, far = sstep(5, 13, z), amp = A * (.3 + .7 * sstep(2, 8, z));
-        const Hf = (x, q) => (noise(x * .42 + 7, q * .42) - .5) * amp + (noise(x * 1.15 + 31, q * 1.15 + 5) - .5) * jitter * .55;
-        const hc = Hf(wx, zz), ys = hy + (camH - (hc + (ridge(xn) - trMean / maxT) * far * 3.2 + .3)) / z * focal;
-        if(ys >= ymin[c]) continue;
-        const slope = -(Hf(wx, zz + .3) - hc) / .3 * .6 + (Hf(wx + .3, zz) - hc) / .3 * .35, fog = Math.exp(-(z - 1.1) * .12);
-        const b = Math.max(.2, Math.min(1, .26 + slope * 2.6)) * (.4 + .6 * fog) * .95;
-        for(let y = Math.max(0, Math.ceil(ys)), y1 = Math.min(rows, Math.ceil(ymin[c])); y < y1; y++){ const k = c * rows + y; gb[k] = Math.min(1, b + (y === Math.ceil(ys) ? .12 * fog : 0)); gc[k] = 0; }
-        ymin[c] = ys;
-      }
-    }
-    for(let n = 0; n < PN; n++){
-      const p = PART[n], u = (p.bz + tm * .011) % 1, z = 2.2 + u * 12, life = Math.sin(u * Math.PI);
-      const wx = p.bx * z * kx + Math.sin(tm * .22 + p.ph) * .5 + Math.sin(tm * .13 + p.by * 5) * .4, wy = .9 + p.by * 3.6 + Math.sin(tm * .3 + p.bx * 4 + p.ph) * .3 + Math.sin(tm * .17 + z) * .2;
-      const sx = ((wx / (z * kx)) * .5 + .5) * cols, sy = hy + (camH - wy) / z * focal, cx = sx | 0, cy = sy | 0;
-      if(cx < 0 || cx >= cols || cy < 0 || cy >= rows || sy >= ymin[cx] - 1) continue;
-      const b = life * (.35 + .65 * Math.exp(-(z - 2) * .12)) * (.75 + .25 * Math.sin(tm * .7 + p.ph)) * .95, k = cx * rows + cy;
-      if(b > gb[k]){ gb[k] = b; gc[k] = p.cx ? 1 : 0; }
-    }
-    bc.fill(0);
-    for(let k = 0; k < gb.length; k++){ const a = gb[k]; if(a < .05) continue; const key = gc[k] * LV + Math.min(LV, Math.ceil(a * LV)) - 1; bk[key][bc[key]++] = k; }
-    ax.setTransform(dpr, 0, 0, dpr, 0, 0); ax.clearRect(0, 0, W, H);
-    for(let key = 0; key < 2 * LV; key++){
-      const n = bc[key]; if(!n) continue;
-      const ci = (key / LV) | 0, f = (key % LV + 1) / LV, col = ART[ci], s = P * (.3 + .6 * f), off = (P - s) / 2, a = bk[key];
-      ax.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${(.14 + .66 * f).toFixed(3)})`;
-      if(f > 0.85){ ax.shadowColor = `rgba(${col[0]},${col[1]},${col[2]},.7)`; ax.shadowBlur = 6; } else ax.shadowBlur = 0;
-      ax.beginPath(); for(let i = 0; i < n; i++){ const k = a[i]; ax.rect(((k / rows) | 0) * P + off, (k % rows) * P + off, s, s); } ax.fill();
-    }
-    ax.shadowBlur = 0;
-  }
-  return {draw, relayout: () => { L = null; }};
+  G.art = A;
+  return A;
 }
 
 /* ------------------------------------------------------------------ header, clock, router */
@@ -522,6 +470,7 @@ let start = performance.now();
 G.boot = () => {
   applyStatic(); tabIcons();
   const A = D.ok ? art() : null;
+  if(!A) $('art').setAttribute('aria-hidden', 'true');
   if(!G.STATIC) document.body.classList.add('anim');
   G.render();
   addEventListener('hashchange', () => G.render());
