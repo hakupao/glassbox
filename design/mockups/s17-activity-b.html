@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>glassbox · activity B</title>
+<style>
+/* ==========================================================================
+   S17 activity: design tokens (the deliverable for web/styles.css)
+   Spacing scale, type scale, color roles. Everything below uses only these.
+   ========================================================================== */
+:root{
+  /* spacing: one scale for gaps between and inside cards */
+  --s1:4px;  --s2:8px;  --s3:12px;  --s4:16px;  --s5:24px;
+
+  /* type scale: 3 sizes, 2 weights. mono = data only (hash, path, time, count) */
+  --fs-1:15px;   /* level 1: card title, day heading                  */
+  --fs-2:13px;   /* level 2: body text, filter labels, nav            */
+  --fs-3:11.5px; /* level 3: data and badges (mono), meta line        */
+  --fw-1:600; --fw-2:400;
+  --lh-1:1.4; --lh-2:1.55;
+
+  /* color roles, grays first */
+  --bg:#14171c;                       /* page */
+  --surface:rgba(53,60,72,.5);        /* card */
+  --surface-hi:rgba(53,60,72,.78);    /* selected, hover */
+  --line:rgba(216,211,196,.16);       /* borders, rail */
+  --line-soft:rgba(216,211,196,.09);  /* dividers inside a card */
+  --ink-1:#efeadd;  /* titles, active */
+  --ink-2:#d8d3c4;  /* body */
+  --ink-3:#a6a297;  /* meta, data, inactive */
+  /* signal colors: only to tell things apart */
+  --sig-ok:#79b98a;    /* file A, pushed ok */
+  --sig-warn:#e3894d;  /* file M, unpushed */
+  --sig-bad:#e0645a;   /* file D */
+  --sig-vio:#a48ee0;   /* file R */
+  --sig-info:#6c97d6;  /* links, focus */
+  --pale:12%; --pale-line:34%;  /* badge: pale fill, thin border, same hue */
+  /* repo tag palette (hashed per repo name, as web/app.js TAGS) */
+  --tag-1:#e07a8a; --tag-2:#7fa8e8; --tag-3:#79b98a; --tag-4:#d9a441; --tag-5:#a48ee0; --tag-6:#5fb7b0;
+  /* shape and motion */
+  --rail-x:7px;          /* rail centre inside the rail column */
+  --dot:8px;             /* timeline dot, square like the pixel cells */
+  --ease:cubic-bezier(.2,.7,.2,1); --dur-1:.18s; --dur-2:.32s;
+  --sans:"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei","Helvetica Neue",system-ui,sans-serif;
+  --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;min-height:100vh;color:var(--ink-2);font:var(--fw-2) var(--fs-2)/var(--lh-2) var(--sans);background:var(--bg);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}button{font:inherit;color:inherit}
+.in{max-width:1000px;margin:0 auto;padding:0 var(--s5)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:1px solid var(--sig-info);outline-offset:2px}
+
+/* top nav (desktop) */
+.top{display:flex;align-items:center;gap:var(--s5);padding:var(--s4) 0}
+.brand{font:700 19px var(--mono);color:var(--ink-1);letter-spacing:.02em;text-decoration:none}
+.nav{display:flex;gap:2px;flex:1}
+.nav a{padding:var(--s1) var(--s3);font-size:var(--fs-2);color:var(--ink-3);text-decoration:none;border:1px solid transparent;transition:color var(--dur-1),background var(--dur-1)}
+.nav a:hover{color:var(--ink-1)}
+.nav a[aria-current="page"]{color:var(--ink-1);border-color:var(--line);background:var(--surface)}
+.top .stamp{font:var(--fs-3) var(--mono);color:var(--ink-3)}
+
+/* panel head */
+.ph{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);margin:var(--s5) 0 var(--s3)}
+.ph h1{margin:0;font-size:var(--fs-1);font-weight:var(--fw-1);color:var(--ink-1)}
+.ph .r{font:var(--fs-3) var(--mono);color:var(--ink-3)}
+
+/* filter: segmented switch, counts inside */
+.seg{display:inline-flex;border:1px solid var(--line);background:var(--surface)}
+.seg button{display:inline-flex;align-items:baseline;gap:var(--s2);padding:var(--s1) var(--s3);background:none;border:0;border-left:1px solid var(--line-soft);cursor:pointer;color:var(--ink-3);font-size:var(--fs-2);transition:color var(--dur-1),background var(--dur-1)}
+.seg button:first-child{border-left:0}
+.seg button small{font:var(--fs-3) var(--mono);color:var(--ink-3)}
+.seg button:hover{color:var(--ink-1)}
+.seg button[aria-pressed="true"]{color:var(--ink-1);background:var(--surface-hi);box-shadow:inset 0 -2px 0 var(--ink-1)}
+.seg button[aria-pressed="true"] small{color:var(--ink-2)}
+.bar{display:flex;gap:var(--s3);align-items:center;margin-bottom:var(--s4)}
+
+/* badges: small, pale fill, one hue */
+.bd{display:inline-flex;align-items:center;gap:var(--s1);font:var(--fw-2) var(--fs-3)/17px var(--mono);padding:0 6px;max-width:100%;white-space:nowrap;color:var(--ink-3);
+  border:1px solid color-mix(in srgb,currentColor var(--pale-line),transparent);background:color-mix(in srgb,currentColor var(--pale),transparent)}
+.bd.dot::before{content:"";width:6px;height:6px;background:currentColor;flex:none}
+.bd.warn{color:var(--sig-warn)} .bd.ghost{background:none;border-color:var(--line)}
+.hash{font:var(--fs-3) var(--mono);color:var(--ink-3)}
+.mt{display:inline-flex;align-items:center;gap:var(--s1);font:var(--fs-3)/17px var(--mono);color:var(--ink-3)}
+.mt i{width:8px;height:8px;border-radius:2px;background:var(--mc)}
+/* masked repo name: pixel matrix, same as web .mask */
+.mask{display:inline-block;line-height:0;color:var(--ink-3);vertical-align:middle;user-select:none}
+.mask svg{display:block;fill:currentColor}
+.mask.redact{margin:0 2px;vertical-align:baseline}
+
+/* file rows: status badge + path. Path never wraps: directory ellipsis in the middle, file name stays whole */
+.files{list-style:none;margin:0;padding:0}
+.files li{display:flex;align-items:center;gap:var(--s2);min-width:0;padding:2px 0;font:var(--fs-3)/1.7 var(--mono);color:var(--ink-2)}
+.st{flex:none;width:16px;text-align:center;font:var(--fw-1) 10.5px/16px var(--mono);
+  color:var(--c);border:1px solid color-mix(in srgb,var(--c) var(--pale-line),transparent);background:color-mix(in srgb,var(--c) var(--pale),transparent)}
+.st.M{--c:var(--sig-warn)} .st.A{--c:var(--sig-ok)} .st.R{--c:var(--sig-vio)} .st.D{--c:var(--sig-bad)}
+.p{display:flex;min-width:0;flex:1}
+.p .dir{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-3)}
+.p .base{flex:none;white-space:nowrap;color:var(--ink-2)}
+.cnt{font:var(--fs-3) var(--mono);color:var(--ink-3)}
+/* folded list: extra rows live in a 0fr -> 1fr grid so height animates */
+.fold{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows var(--dur-2) var(--ease),visibility 0s var(--dur-2)}
+.fold>div{overflow:hidden;min-height:0}
+.fold.open{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows var(--dur-2) var(--ease),visibility 0s}
+.lm{margin-top:var(--s1);padding:2px 0;background:none;border:0;cursor:pointer;font:var(--fs-3) var(--mono);color:var(--sig-info)}
+.lm:hover{text-decoration:underline}
+.act-a{font:var(--fs-3) var(--mono);color:var(--sig-info);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--sig-info) 40%,transparent)}
+.act-a:hover{border-bottom-color:var(--sig-info)}
+.act-a::after{content:" \2197"}
+
+/* filter-switch animation */
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.enter{animation:rise var(--dur-2) var(--ease) both;animation-delay:calc(var(--i,0) * 28ms)}
+.empty{font:var(--fs-3) var(--mono);color:var(--ink-3);padding:var(--s5) 0}
+
+/* bottom tab bar (phone) */
+.tabs{display:none}
+@media (max-width:640px){
+  .in{padding:0 var(--s4)}
+  .nav,.top .stamp{display:none}
+  .top{padding:var(--s3) 0}
+  .bar{display:block}
+  .seg{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));width:100%}
+  .seg button{flex-direction:column;align-items:center;gap:0;padding:var(--s2) 0;font-size:var(--fs-3)}
+  .seg button small{font-size:var(--fs-3)}
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .tabs{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;padding-bottom:env(safe-area-inset-bottom);
+    background:rgba(20,23,28,.94);border-top:1px solid var(--line);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  .tabs a{display:flex;flex-direction:column;align-items:center;gap:var(--s1);padding:var(--s2) 0 var(--s2);color:var(--ink-3);text-decoration:none;font-size:var(--fs-3);position:relative}
+  .tabs a svg{fill:currentColor}
+  .tabs a[aria-current="page"]{color:var(--ink-1)}
+  .tabs a[aria-current="page"]::before{content:"";position:absolute;top:-1px;left:30%;right:30%;height:2px;background:var(--ink-1)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-delay:0s!important;transition-duration:.001ms!important;transition-delay:0s!important}
+}
+/* ---------- Version B: compact card + expandable drawer, time gutter, hollow-ring rail ---------- */
+.tl{list-style:none;margin:0;padding:0;transition:opacity .12s}
+.tl.out{opacity:0}
+.tl>li{position:relative;display:grid;grid-template-columns:48px 20px minmax(0,1fr);column-gap:var(--s2)}
+.tl>li::before{content:"";position:absolute;left:calc(48px + var(--s2) + 9px);top:0;bottom:0;border-left:1px dashed var(--line)}
+.tl>li.cm:last-child::before{bottom:calc(100% - 20px)}
+.tl>li.day{padding:var(--s4) 0 var(--s2)}
+.tl>li.day:first-child{padding-top:0}
+.tl>li.day::before{top:calc(var(--s4) + 14px)}
+.tl>li.day:first-child::before{top:14px}
+.day h2{grid-column:2/4;margin:0;font-size:var(--fs-1);font-weight:var(--fw-1);color:var(--ink-1);line-height:var(--lh-1);background:var(--bg);position:relative;z-index:1;width:max-content;max-width:100%;padding-right:var(--s2);margin-left:0}
+.day .dn{font-weight:var(--fw-2);color:var(--ink-3);font-size:var(--fs-2)}
+.tm{grid-column:1;font:var(--fs-3)/22px var(--mono);color:var(--ink-3);text-align:right;padding-top:var(--s2)}
+.ring{grid-column:2;position:relative;z-index:1}
+.ring::after{content:"";position:absolute;left:3px;top:calc(var(--s2) + 6px);width:13px;height:13px;border-radius:50%;background:var(--bg);border:2px solid var(--c)}
+.cm.un .ring::after{border-style:dashed}
+.ring::before{content:"";position:absolute;left:8px;top:calc(var(--s2) + 11px);width:3px;height:3px;background:var(--c);z-index:1;border-radius:50%}
+.cm.un .ring::before{display:none}
+.card{grid-column:3;margin-bottom:var(--s2);border:1px solid var(--line);background:var(--surface);min-width:0;transition:background var(--dur-1),border-color var(--dur-1)}
+.card:hover{background:var(--surface-hi)}
+.card.open{border-color:color-mix(in srgb,var(--ink-3) 55%,transparent);background:var(--surface-hi)}
+.hd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s1) var(--s3);width:100%;text-align:left;background:none;border:0;cursor:pointer;padding:var(--s3) var(--s4)}
+.hd .ttl{display:block;font-size:var(--fs-1);font-weight:var(--fw-1);line-height:var(--lh-1);color:var(--ink-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.card.open .hd .ttl{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.hd .meta{grid-column:1;display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center;min-width:0}
+.hd .tt{display:none;font:var(--fs-3) var(--mono);color:var(--ink-3)}
+.hd .side{grid-column:2;grid-row:1/3;display:flex;align-items:center;gap:var(--s3)}
+.chev{width:7px;height:7px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg) translate(-1px,-1px);transition:transform var(--dur-2) var(--ease)}
+.card.open .chev{transform:rotate(-135deg) translate(-1px,-1px)}
+.dr{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows var(--dur-2) var(--ease),visibility 0s var(--dur-2)}
+.dr>div{overflow:hidden;min-height:0}
+.card.open .dr{grid-template-rows:1fr;visibility:visible;transition:grid-template-rows var(--dur-2) var(--ease),visibility 0s}
+.dr .in2{border-top:1px solid var(--line-soft);margin:0 var(--s4);padding:var(--s3) 0 var(--s4);display:flex;flex-direction:column;gap:var(--s3)}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s1) var(--s4);margin:0;font-size:var(--fs-3)}
+.facts dt{color:var(--ink-3)}
+.facts dd{margin:0;color:var(--ink-2);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.acts{display:flex}
+@media (max-width:640px){
+  .tl>li{grid-template-columns:18px minmax(0,1fr);column-gap:var(--s1)}
+  .tl>li::before{left:8px}
+  .tm{display:none}
+  .ring{grid-column:1}.card{grid-column:2}
+  .day h2{grid-column:2;margin-left:0}
+  .hd{padding:var(--s3)}
+  .hd .tt{display:inline}
+  .dr .in2{margin:0 var(--s3)}
+  .hd .side .cnt{display:none}
+}
+
+</style>
+</head>
+<body>
+<div class="in">
+  <header class="top"><a class="brand" href="#">glassbox</a><nav class="nav" id="nav" aria-label="main"></nav><span class="stamp">2026-11-19 15:40</span></header>
+  <main>
+    <div class="ph"><h1>Code · activity</h1><span class="r" id="sub"></span></div>
+    <div class="bar"><div class="seg" id="seg" role="group" aria-label="filter"></div></div>
+    <ol class="tl" id="tl"></ol>
+  </main>
+</div>
+<nav class="tabs" id="tabs" aria-label="main"></nav>
+<script>
+/* fabricated data, same fields as schema/public_fields.json activity[]: t, source, repo, public, title, branch, hash, url, machine, pushed (+ files, count: mockup-only) */
+const NOW = new Date('2026-11-19T15:40:00+09:00');
+const MASKROWS=[['3213012320312302','1302321031203213'],['2031203213021320','3120312023130231'],['1230321302312031','2302130231203123'],['3021320312031230','1320230121302312']];
+const OP=[.12,.38,.62,.9];
+const mask=(n,w16,cls='')=>`<span class="mask ${cls}" role="img" aria-label="hidden"><svg width="${w16?63:31}" height="7" viewBox="0 0 ${w16?63:31} 7" aria-hidden="true">${MASKROWS[n%4].map((r,y)=>[...(w16?r:r.slice(0,8))].map((v,x)=>`<rect x="${x*4}" y="${y*4}" width="3" height="3" opacity="${OP[+v]}"/>`).join('')).join('')}</svg></span>`;
+const MC={mb:'#6c97d6',mm:'#79b98a',vm:'#dba843'};
+const TAGS=['#e07a8a','#7fa8e8','#79b98a','#d9a441','#a48ee0','#5fb7b0'];
+const hue=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return TAGS[h%TAGS.length]};
+const P='private';
+const C=[
+ {t:'2026-11-19T15:12',source:'github',repo:'glassbox',public:true,pushed:true,machine:'mb',branch:'main',hash:'3f9a2c1e07',title:'export: scrub machine paths before the privacy gate',files:[['M','hub/export.py'],['M','tests/test_export.py'],['A','schema/scrub_rules.json'],['M','docs/project/BACKLOG.md'],['R','web/components/activity/timeline/CommitCardFileListItem.module.css'],['D','scripts/old_scrub.sh']]},
+ {t:'2026-11-19T14:41',source:'gitea',repo:P,public:false,pushed:true,machine:'vm',branch:'main',hash:'a81d44b9c2',title:'fix ****** token refresh on expiry',n:3},
+ {t:'2026-11-19T13:58',source:'local',repo:'glassbox',public:true,pushed:false,machine:'mb',branch:'feat/b4-activity',hash:'c07be5d311',title:'activity: day-grouped timeline cards with file status badges',n:4},
+ {t:'2026-11-19T11:20',source:'github',repo:P,public:false,pushed:true,machine:'mm',branch:'main',hash:'e5120aa8f4',title:'migrate queue worker to the new scheduler',n:12},
+ {t:'2026-11-19T10:05',source:'gitea',repo:'homelab-notes',public:true,pushed:true,machine:'vm',branch:'main',hash:'7bd90e6a13',title:'runbook: restore the VM from a snapshot',files:[['M','README.md'],['A','runbooks/vm-restore.md']]},
+ {t:'2026-11-19T09:12',source:'local',repo:P,public:false,pushed:false,machine:'mm',branch:'wip/parser',hash:'1c6f03d7aa',title:'wip: parser edge cases',n:1},
+ {t:'2026-11-18T22:30',source:'github',repo:'glassbox',public:true,pushed:true,machine:'mb',branch:'main',hash:'9a4e1b72d5',title:'usage: per-machine breakdown (private view)',files:[['M','web/pages.js'],['M','web/styles.css'],['A','web/usage-machines.js'],['M','tests/test_usage.py'],['M','docs/project/progress.json'],['M','web/i18n.js'],['D','web/usage-old.js']]},
+ {t:'2026-11-18T19:02',source:'github',repo:P,public:false,pushed:true,machine:'mm',branch:'main',hash:'0d73c9e1b8',title:'add retry to the sync job',n:2},
+ {t:'2026-11-18T16:48',source:'gitea',repo:'homelab-notes',public:true,pushed:true,machine:'vm',branch:'main',hash:'b2e8f5a09c',title:'network: document the tailnet ACL layout',files:[['A','network/tailnet-acl.md'],['M','README.md'],['M','network/dns.md']]},
+ {t:'2026-11-18T13:15',source:'local',repo:'glassbox',public:true,pushed:false,machine:'mb',branch:'feat/b4-activity',hash:'64a0d2f7e3',title:'design: activity mockup tokens',n:2},
+ {t:'2026-11-18T09:40',source:'github',repo:P,public:false,pushed:true,machine:'mm',branch:'main',hash:'f1b37c8d60',title:'chore: bump dependencies',n:5},
+ {t:'2026-11-17T21:10',source:'github',repo:'glassbox',public:true,pushed:true,machine:'mb',branch:'main',hash:'5e0c8a39b1',title:'probe: decode git output as UTF-8',files:[['M','scripts/probe_git.py'],['M','tests/test_probe.py']]},
+ {t:'2026-11-17T15:55',source:'gitea',repo:P,public:false,pushed:true,machine:'vm',branch:'main',hash:'d94a7e20c5',title:'drop the legacy ****** endpoint',n:8},
+ {t:'2026-11-17T08:30',source:'local',repo:P,public:false,pushed:false,machine:'mb',branch:'wip/cache',hash:'28f6b1d4e9',title:'wip: cache layer',n:3},
+];
+const FILTERS=[['all','all',()=>true],['pushed','pushed',c=>c.pushed],['unpushed','unpushed',c=>!c.pushed],['public','public',c=>c.public],['private','private',c=>!c.public]];
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+let mi=0;
+const title=s=>esc(s).replace(/\*{6}/g,()=>mask(mi++,false,'redact'));
+const hhmm=t=>t.slice(11,16);
+const ago=t=>{const m=Math.round((NOW-new Date(t+'+09:00'))/6e4);return m<60?m+' min ago':m<1440?Math.round(m/60)+' h ago':Math.round(m/1440)+' d ago'};
+const dayKey=t=>t.slice(0,10);
+const dayLabel=k=>k==='2026-11-19'?'Today':k==='2026-11-18'?'Yesterday':'Nov '+(+k.slice(8));
+const showPaths=c=>c.public&&c.pushed&&c.files;           /* owner rule: public repo AND pushed */
+const nFiles=c=>c.files?c.files.length:c.n;
+const hasDiff=c=>c.public&&c.pushed;
+const repoTag=c=>c.public?`<span class="bd dot" style="color:${hue(c.repo)}">${esc(c.repo)}</span>`:`<span class="bd dot">${mask(c.hash.charCodeAt(0)%4,true)}</span>`;
+const srcBd=c=>`<span class="bd ghost">${c.source}</span>`;
+const unp=c=>c.pushed?'':'<span class="bd warn">unpushed</span>';
+const mach=c=>`<span class="mt" title="machine ${c.machine}"><i style="--mc:${MC[c.machine]}"></i>${c.machine}</span>`;
+const pathHtml=p=>{const i=p.lastIndexOf('/');return `<span class="p" title="${esc(p)}"><span class="dir">${i<0?'':esc(p.slice(0,i+1))}</span><span class="base">${esc(p.slice(i+1))}</span></span>`};
+const fileRow=([s,p])=>`<li><span class="st ${s}" title="${{M:'modified',A:'added',R:'renamed',D:'deleted'}[s]}">${s}</span>${pathHtml(p)}</li>`;
+let fid=0;
+/* files block: public+pushed -> 3 paths + "load more (n)"; otherwise a count only */
+const filesBlock=c=>{
+  if(!showPaths(c)) return `<div class="cnt">${nFiles(c)} file${nFiles(c)>1?'s':''}</div>`;
+  const f=c.files,id='f'+(fid++),rest=f.slice(3);
+  return `<ul class="files">${f.slice(0,3).map(fileRow).join('')}</ul>`+(rest.length?`<div class="fold" id="${id}"><div><ul class="files">${rest.map(fileRow).join('')}</ul></div></div><button class="lm" aria-expanded="false" aria-controls="${id}" data-n="${rest.length}">load more (${rest.length})</button>`:'');
+};
+const dayGroups=list=>{const g=[];for(const c of list){const k=dayKey(c.t);let x=g[g.length-1];if(!x||x.k!==k)g.push(x={k,items:[]});x.items.push(c)}return g};
+const dayHead=(k,n)=>`${dayLabel(k)} <span class="dn">· ${n} change${n>1?'s':''}</span>`;
+/* wire: filter switch, load more, tab icons */
+const ICON={overview:'1101111011000001101111011',usage:'0000100101101011010111111',code:'0101010100101000010101010',machines:'1111110001100011111100100',services:'1111100000111110000011111'};
+const tabIcon=k=>`<svg width="20" height="20" viewBox="0 0 25 25" aria-hidden="true">${[...ICON[k]].map((v,i)=>v==='1'?`<rect x="${(i%5)*5}" y="${Math.floor(i/5)*5}" width="4" height="4"/>`:'').join('')}</svg>`;
+const TABS=[['overview','Overview'],['usage','Usage'],['code','Code'],['machines','Machines'],['services','Services']];
+const navHtml=TABS.map(([k,l])=>`<a href="#${k}"${k==='code'?' aria-current="page"':''}>${l}</a>`).join('');
+const tabsHtml=TABS.map(([k,l])=>`<a href="#${k}"${k==='code'?' aria-current="page"':''}>${tabIcon(k)}<span>${l}</span></a>`).join('');
+document.getElementById('nav').innerHTML=navHtml;
+document.getElementById('tabs').innerHTML=tabsHtml;
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.lm'); if(!b) return;
+  const f=document.getElementById(b.getAttribute('aria-controls')),o=!f.classList.contains('open');
+  f.classList.toggle('open',o);b.setAttribute('aria-expanded',o);b.textContent=o?'fold':`load more (${b.dataset.n})`;
+});
+let cid=0;
+const cardB=(c,i)=>{const id='d'+(cid++),n=nFiles(c);
+ return `<li class="cm enter${c.pushed?'':' un'}" style="--c:${c.public?hue(c.repo):'var(--ink-3)'};--i:${i}">
+ <time class="tm" datetime="${c.t}">${hhmm(c.t)}</time><span class="ring"></span>
+ <article class="card${i===1?' open':''}">
+  <button class="hd" type="button" aria-expanded="${i===1}" aria-controls="${id}">
+   <span class="ttl">${title(c.title)}</span>
+   <span class="meta">${repoTag(c)}${unp(c)}<span class="hash">${c.hash.slice(0,7)}</span><span class="tt">${hhmm(c.t)}</span></span>
+   <span class="side"><span class="cnt">${n} file${n>1?'s':''}</span><i class="chev"></i></span>
+  </button>
+  <div class="dr" id="${id}"><div><div class="in2">
+   <dl class="facts"><dt>author</dt><dd style="font-family:var(--sans)">hakupao · ${ago(c.t)}</dd><dt>branch</dt><dd>${esc(c.branch)}</dd><dt>commit</dt><dd>${c.hash}</dd><dt>source</dt><dd>${c.source}</dd><dt>machine</dt><dd>${mach(c)}</dd></dl>
+   <div>${filesBlock(c)}</div>
+   ${hasDiff(c)?`<div class="acts"><a class="act-a" href="#diff-${c.hash.slice(0,7)}">diff</a></div>`:''}
+  </div></div></div>
+ </article></li>`};
+function render(key){
+  const list=C.filter(FILTERS.find(f=>f[0]===key)[2]);let i=0;
+  const html=dayGroups(list).map(g=>`<li class="day enter" style="--i:${i++}"><h2>${dayHead(g.k,g.items.length)}</h2></li>`+g.items.map(c=>cardB(c,i++)).join('')).join('');
+  document.getElementById('tl').innerHTML=html||'<li class="empty" style="display:block">no commits in this filter</li>';
+  document.getElementById('sub').textContent=list.length+' commits';
+}
+const seg=document.getElementById('seg');
+seg.innerHTML=FILTERS.map(([k,l,f])=>`<button type="button" aria-pressed="${k==='all'}" data-k="${k}">${l}<small>${C.filter(f).length}</small></button>`).join('');
+seg.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  seg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  const tl=document.getElementById('tl');tl.classList.add('out');setTimeout(()=>{render(b.dataset.k);tl.classList.remove('out')},110)});
+document.addEventListener('click',e=>{const h=e.target.closest('.hd');if(!h)return;const card=h.parentElement,o=!card.classList.contains('open');card.classList.toggle('open',o);h.setAttribute('aria-expanded',o)});
+render('all');
+
+</script>
+</body>
+</html>
