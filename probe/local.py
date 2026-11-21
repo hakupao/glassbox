@@ -2,7 +2,9 @@
 
 git: each repository directly under the configured `git_roots` (and the roots themselves if
 they are repositories). Only commits by the configured author e-mails are reported, as a
-snapshot of the last `git_days` days; the e-mails themselves are never reported.
+snapshot of the last `git_days` days; the e-mails themselves are never reported. Each commit
+carries `nFiles`, a file count from one `git log --numstat` per repository; file names never
+leave the machine (CONTRACT §1.2). If that call fails, commits are reported without counts.
 """
 import platform
 import re
@@ -47,6 +49,29 @@ def _repos(roots):
                 yield c
 
 
+RS = "\x1e"
+
+
+def _file_counts(repo, days, emails):
+    """hash -> number of files the commit changed, for the configured authors' commits in the window,
+    from ONE git call (no process per commit). Merge commits show no diff and count 0. None if the
+    call fails or times out. --numstat is used, not --shortstat, whose summary line is translated.
+    The e-mails are matched as fixed strings (-F, so "+" or "." are literal), ignoring case."""
+    out = _run(["git", "-C", str(repo), "-c", "core.quotepath=true", "log", "--all", f"--since={days}.days",
+                "--no-color", "--fixed-strings", "--regexp-ignore-case", *(f"--author={e}" for e in emails),
+                "--numstat", f"--format={RS}%H"])
+    if out is None:
+        return None
+    counts, cur = {}, None
+    for line in out.split("\n"):                  # not splitlines(): it also splits on \x1e
+        if line.startswith(RS):
+            cur = line[1:].strip()
+            counts[cur] = 0
+        elif cur and "\t" in line:
+            counts[cur] += 1
+    return counts
+
+
 def git_activity(conn, cfg):
     emails = [e.lower() for e in cfg.get("author_emails", [])]
     if not emails:
@@ -60,6 +85,7 @@ def git_activity(conn, cfg):
         if not log:
             continue
         unpushed = set((_run(["git", "-C", str(repo), "rev-list", "--all", "--not", "--remotes"]) or "").split())
+        counts = _file_counts(repo, days, emails) or {}
         commits = []
         for line in log.splitlines():
             parts = line.split(SEP)
@@ -69,6 +95,8 @@ def git_activity(conn, cfg):
             branch = re.sub(r"^refs/(heads|remotes/[^/]+|tags)/", "", src) if src else None
             commits.append({"t": _zulu_from_iso(t), "hash": h, "branch": branch or None,
                             "title": scrub(title)[:300], "pushed": h not in unpushed})
+            if h in counts:
+                commits[-1]["nFiles"] = counts[h]
         if not commits:
             continue
         key, name, remote = projects.resolve(conn, str(repo), cfg["machine"], cfg.get("ssh_aliases"))

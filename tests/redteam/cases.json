@@ -15,7 +15,7 @@
   "file": "block-unknown-nested-key.json",
   "expect": "block",
   "reason": "field not in public_fields.json",
-  "why": "rule 1: author on a commit"
+  "why": "rule 1: reviewer on a commit (author is public since S17 R09)"
  },
  {
   "file": "block-hourly.json",
@@ -394,6 +394,246 @@
   "expect": "pass",
   "reason": null,
   "why": "term 'nightjar' set to word mode: 'nightjars' passes"
+ },
+ {
+  "file": "pass-files-author.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "public pushed GitHub commit: configured author, paths, count; private commit keeps a count only; the author is also a listed branch fragment (branchFragments), so it is not a private name"
+ },
+ {
+  "file": "pass-nfiles-zero.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "merge commit: nFiles 0, no list; nulls on every new field"
+ },
+ {
+  "file": "block-files-private-name.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path carries a private repo name"
+ },
+ {
+  "file": "block-files-private-camel.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path carries a private name in camelCase"
+ },
+ {
+  "file": "block-files-short-term.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path carries a short private word as a directory"
+ },
+ {
+  "file": "block-files-private-hash.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path carries a private commit id"
+ },
+ {
+  "file": "block-files-branch-fragment.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path carries an unlisted private branch fragment"
+ },
+ {
+  "file": "block-files-keyword.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 5/6: a path carries a blocked keyword"
+ },
+ {
+  "file": "block-files-email.json",
+  "expect": "block",
+  "reason": "email",
+  "why": "pattern: a path that reads as an e-mail"
+ },
+ {
+  "file": "block-files-ip.json",
+  "expect": "block",
+  "reason": "ipv4",
+  "why": "pattern: a path that reads as an IP address"
+ },
+ {
+  "file": "block-files-join-key.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path joined to the key before it spells a private project"
+ },
+ {
+  "file": "block-files-join-next.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a path joined to the next file entry spells a private project"
+ },
+ {
+  "file": "block-files-on-private.json",
+  "expect": "block",
+  "reason": "file paths on a commit that is not public",
+  "why": "files on a private commit"
+ },
+ {
+  "file": "block-files-unpushed.json",
+  "expect": "block",
+  "reason": "file paths on a commit that is not public",
+  "why": "files on an unpushed commit of a public repo"
+ },
+ {
+  "file": "block-files-local.json",
+  "expect": "block",
+  "reason": "file paths on a commit that is not public",
+  "why": "files on a local commit of a public repo (pushed alone is not enough: any remote)"
+ },
+ {
+  "file": "block-files-gitea.json",
+  "expect": "block",
+  "reason": "file paths on a commit that is not public",
+  "why": "files on a Gitea commit"
+ },
+ {
+  "file": "block-files-too-many.json",
+  "expect": "block",
+  "reason": "more than 50 files",
+  "why": "more than 50 paths"
+ },
+ {
+  "file": "block-files-nfiles-short.json",
+  "expect": "block",
+  "reason": "nFiles is missing or smaller",
+  "why": "nFiles smaller than the list"
+ },
+ {
+  "file": "block-files-nfiles-missing.json",
+  "expect": "block",
+  "reason": "nFiles is missing or smaller",
+  "why": "list without nFiles"
+ },
+ {
+  "file": "block-files-null.json",
+  "expect": "block",
+  "reason": "must be a list",
+  "why": "files: null (the exporter drops the key instead)"
+ },
+ {
+  "file": "block-nfiles-string.json",
+  "expect": "block",
+  "reason": "is not number",
+  "why": "rule 3: nFiles as a string"
+ },
+ {
+  "file": "block-nfiles-negative.json",
+  "expect": "block",
+  "reason": "nFiles must be a whole count",
+  "why": "nFiles below zero"
+ },
+ {
+  "file": "block-nfiles-fraction.json",
+  "expect": "block",
+  "reason": "nFiles must be a whole count",
+  "why": "nFiles not whole"
+ },
+ {
+  "file": "block-path-absolute.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: absolute"
+ },
+ {
+  "file": "block-path-dotdot.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: dotdot"
+ },
+ {
+  "file": "block-path-dot.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: dot"
+ },
+ {
+  "file": "block-path-backslash.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: backslash"
+ },
+ {
+  "file": "block-path-drive.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: drive"
+ },
+ {
+  "file": "block-path-control.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: control"
+ },
+ {
+  "file": "block-path-zero-width.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: zero-width"
+ },
+ {
+  "file": "block-path-blank-segment.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: blank-segment"
+ },
+ {
+  "file": "block-path-empty-segment.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: empty-segment"
+ },
+ {
+  "file": "block-path-long.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: long"
+ },
+ {
+  "file": "block-path-empty.json",
+  "expect": "block",
+  "reason": "is not path",
+  "why": "type path: empty"
+ },
+ {
+  "file": "block-files-status.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "file status off the closed list"
+ },
+ {
+  "file": "block-files-status-word.json",
+  "expect": "block",
+  "reason": "is not enum",
+  "why": "GitHub's status word instead of the letter"
+ },
+ {
+  "file": "block-files-extra-key.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "a file entry with a key outside the table"
+ },
+ {
+  "file": "block-author-private.json",
+  "expect": "block",
+  "reason": "private commit keeps author",
+  "why": "rule 4: a private commit keeps the author"
+ },
+ {
+  "file": "block-author-free-text.json",
+  "expect": "block",
+  "reason": "is not author",
+  "why": "author must be a configured login, not free text"
+ },
+ {
+  "file": "block-author-masked.json",
+  "expect": "block",
+  "reason": "where author? is expected",
+  "why": "author is not a Text field: a placeholder is refused"
  },
  {
   "file": "pass-page.html",

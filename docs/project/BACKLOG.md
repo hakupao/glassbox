@@ -6,7 +6,8 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| A4 | A private branch that contains a word of a hyphenated public repo name (`IT-Passport-Learning/...` gives `Passport`, `Learning`) still makes the gate reject the page, so publishing stops | scripts/verify_public.py derive(), hub/export.py | Owner to decide: also compare branch parts with the words of public repo names. Cost: a private word that happens to equal such a word would pass |
+| A4 | (Resolved in S17 R09, owner's decision D4: words listed in `branchFragments` in public.toml are exempt, and so is a word that spells a public repo name. A listed word that is also part of a private name stays private) | scripts/verify_public.py, hub/export.py | Move to Done once deployed |
+| A5 | Two older ways the gate can still refuse the whole page with nothing leaking (found in the R09 security review): (1) a public commit title joined to the next JSON key spells a private name (`docs: note` + `branch`); (2) the exporter checks the page without the `<` → `\u003c` escaping that the HTML bundle adds, so a title can spell a private hash only in index.html | hub/export.py `_no_joined_names`, `_serial` | Same fix as for files: cut that one title to its prefix when it adds a hit, and check the escaped form too |
 
 ## B. UI
 

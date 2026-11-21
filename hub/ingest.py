@@ -138,17 +138,24 @@ def apply(conn, machine, rep, now=None):
                 if not known(key):
                     raise Rejected(f"git references undeclared project {key}")
                 name, remote = conn.execute("SELECT name, remote FROM projects WHERE key=?", (key,)).fetchone()
-                rows = []
+                rows, counts = [], []
                 for c in _list(g.get("commits", []), "commits"):
                     c = _dict(c, "commit")
                     rows.append((_str(c["hash"], "hash", 40), _zulu(c["t"], "t"), name, remote, key,
                                  _str(c.get("branch"), "branch", 200, True), _str(c.get("title", ""), "title", 500),
                                  machine, 1 if c.get("pushed") is True else 0))
+                    if c.get("nFiles") is not None:          # optional (S17 R09): older probes do not send it
+                        counts.append((rows[-1][0], _int(c["nFiles"], "nFiles")))
                 conn.execute("DELETE FROM commits WHERE source='local' AND machine=? AND project=?", (machine, key))
                 conn.executemany(
                     "INSERT OR REPLACE INTO commits(source, hash, machine, t, repo, remote, project, branch, title, url, pushed, private) "
                     "VALUES('local',?,?,?,?,?,?,?,?,NULL,?,NULL)",
                     [(h, mach, t, n, r, k, b, ti, p) for h, t, n, r, k, b, ti, mach, p in rows])
+                # Without a GitHub list the probe's count is the count; with one, the larger of the two
+                # (the list may be cut at its first page), whichever arrived first (CONTRACT §2.1).
+                conn.executemany("INSERT INTO commit_files(hash, n) VALUES(?,?) ON CONFLICT(hash) DO UPDATE SET "
+                                 "n = CASE WHEN commit_files.files IS NULL THEN excluded.n "
+                                 "ELSE MAX(excluded.n, COALESCE(commit_files.n, 0)) END", counts)
             conn.execute("INSERT INTO machines(id, last_report, probe_version) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET "
                          "last_report=excluded.last_report, probe_version=excluded.probe_version",
                          (machine, time.time(), _str(rep.get("probeVersion"), "probeVersion", 40, True)))

@@ -33,6 +33,22 @@ class WebTest(unittest.TestCase):
     def test_repository_web_is_clean(self):
         self.assertEqual(check_web.check(), [])
 
+    @unittest.skipUnless(shutil.which("node"), "node is not installed")
+    def test_file_row_draws_a_status_badge_only_for_m_a_r_d(self):
+        """Review R09: an unexpected status letter is not put into a class name or text; the path still shows."""
+        import re
+        import subprocess
+        src = (ROOT / "web" / "pages.js").read_text(encoding="utf-8")
+        code = "\n".join(re.search(rx, src, re.M).group(0) for rx in (r"^function filePath\(p\)\{.*\n.*$", r"^const fileRow = .*$"))
+        js = ("const esc = s => String(s).replace(/[&<>\"']/g, c => '&#' + c.charCodeAt(0) + ';'), t = k => k;\n" + code
+              + "\nfor (const s of ['M', 'A', 'R', 'D', 'X', 'MM', 'x onclick=1', undefined]) console.log(JSON.stringify(fileRow({s, p: 'a/b.md'})));")
+        out = [json.loads(x) for x in subprocess.run(["node", "-e", js], capture_output=True, text=True, check=True).stdout.splitlines()]
+        for row, s in zip(out, "MARD"):
+            self.assertIn(f'class="fs fs-{s}"', row)
+        for row in out[4:]:
+            self.assertNotIn('class="fs', row)
+            self.assertIn("b.md", row)
+
     def test_three_languages_same_keys(self):
         d = check_web.load_dict()
         self.assertEqual(set(d), {"zh", "ja", "en"})

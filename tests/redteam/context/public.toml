@@ -3,7 +3,10 @@ privateTitles = "redacted"
 hidden = ["tailnet"]
 keywords = ["project-nightjar"]
 githubOwners = ["example-owner"]
-privateProjects = ["dotfiles-sandbox"]
+# S17 R09 / R10: the login shown as commit author, and branch parts that may be public.
+authors = ["example-owner"]
+branchFragments = ["example-owner"]
+privateProjects = ["dotfiles-sandbox", "pixel-forge", "field-notes"]   # the last two: R09 join samples
 
 [allow]
 "services[].name" = ["gitea", "status-page"]

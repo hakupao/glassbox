@@ -144,6 +144,32 @@ class PageTest(unittest.TestCase):
         self.assertEqual((repos["demo"]["commits"], repos["demo"]["unpushed"], repos["demo"]["sources"]), (3, 1, ["github", "local"]))
         self.assertEqual(len(p["code"]["commits"]), 5)
 
+    def test_author_count_and_files_only_for_public_github(self):
+        """S17 R09: author (the hub's GitHub login) on every entry of the private view; nFiles from
+        commit_files for any source; file paths only when the winner is GitHub and public now."""
+        c = self.conn
+        pub_gh, priv_gh, loc, old = "1" * 40, "2" * 40, "3" * 40, "4" * 40
+        commit(c, "github", pub_gh, "2026-11-16T01:00:00Z")
+        commit(c, "github", priv_gh, "2026-11-16T02:00:00Z", repo="secret", remote="github.com/me/secret", private=1)
+        commit(c, "local", loc, "2026-11-16T03:00:00Z", machine="A", project="p_pub", pushed=0)
+        commit(c, "local", old, "2026-11-16T04:00:00Z", machine="A", project="p_pub")
+        lst = json.dumps([{"s": "M", "p": "docs/a.md"}])
+        for h in (pub_gh, priv_gh, loc):
+            c.execute("INSERT INTO commit_files VALUES(?, 1, ?, 1.0)", (h, lst))
+        p = self.build()
+        top = {a["hash"]: a for a in p["activity"]}
+        self.assertTrue(all(a["author"] is None for a in p["activity"]))               # no login stored yet
+        self.assertEqual(top[pub_gh]["files"], [{"s": "M", "p": "docs/a.md"}])
+        self.assertEqual([top[h]["files"] for h in (priv_gh, loc, old)], [None, None, None])
+        self.assertEqual([top[h]["nFiles"] for h in (pub_gh, priv_gh, loc, old)], [1, 1, 1, None])
+        self.assertEqual(p["code"]["commits"][-1]["files"], [{"s": "M", "p": "docs/a.md"}])
+        db.put(c, "github.login", "example-owner")
+        from hub import sources
+        sources.set_visibility(c, "github.com/me/demo", "private")                   # the repo turned private
+        p = self.build()
+        self.assertTrue(all(a["author"] == "example-owner" for a in p["activity"]))
+        self.assertTrue(all(a["files"] is None for a in p["activity"]))
+
     def test_activity_is_capped_newest_first(self):
         for i in range(60):
             commit(self.conn, "github", f"{i:040x}", f"2026-11-{1 + i // 10:02d}T{i % 10:02d}:00:00Z")

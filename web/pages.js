@@ -141,11 +141,11 @@ const nCommits = n => t(n === 1 ? 'code.oneCommit' : 'code.nCommits', {n: F.n(n)
 /* a path never wraps: the directory gives way first (ellipsis in the middle), the file name stays */
 function filePath(p){ const i = p.lastIndexOf('/');
   return `<span class="fp" title="${esc(p)}"><span class="dir">${esc(p.slice(0, i + 1))}</span><span class="base">${esc(p.slice(i + 1))}</span></span>`; }
-const fileRow = f => `<li><span class="fs fs-${f.s}" title="${esc(t('commit.fs.' + f.s))}">${f.s}</span>${filePath(f.p)}</li>`;
+const fileRow = f => `<li>${/^[MARD]$/.test(f.s) ? `<span class="fs fs-${f.s}" title="${esc(t('commit.fs.' + f.s))}">${f.s}</span>` : ''}${filePath(f.p)}</li>`;
 function filesBlock(a, key){
   const n = nFiles(a); if(n == null) return '';
-  /* paths only for a public, pushed repo (BACKLOG B4); otherwise the count alone */
-  if(!a.files || !a.files.length || !a.public || !a.pushed) return `<div class="nf">${esc(t(n === 1 ? 'commit.oneFile' : 'commit.nFiles', {n: F.n(n)}))}</div>`;
+  /* paths only for a public, pushed GitHub commit (BACKLOG B4, S17 R09); otherwise the count alone */
+  if(!a.files || !a.files.length || !a.public || !a.pushed || a.source !== 'github') return `<div class="nf">${esc(t(n === 1 ? 'commit.oneFile' : 'commit.nFiles', {n: F.n(n)}))}</div>`;
   const rest = a.files.slice(3);
   return `<ul class="files">${a.files.slice(0, 3).map(fileRow).join('')}</ul>` + (rest.length ? `<div class="fold" id="cf-${key}"><div><ul class="files">${rest.map(fileRow).join('')}</ul></div></div>
     <button class="fmore" type="button" aria-expanded="false" aria-controls="cf-${key}" data-n="${rest.length}">${esc(t('commit.moreFiles', {n: F.n(rest.length)}))}</button>` : '');

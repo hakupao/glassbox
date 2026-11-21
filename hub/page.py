@@ -215,8 +215,13 @@ def _quota(conn, cfg, iso, warnings):
 def _commits(conn, since_utc):
     """Commits deduplicated by hash across sources (CONTRACT §2.1): github > gitea > local. A local
     commit counts even when it was pushed but no collector has it (private repo, other branch, no
-    token): the local fallback. A winner from github / gitea borrows the machine of a local copy."""
+    token): the local fallback. A winner from github / gitea borrows the machine of a local copy.
+    Every commit carries author (the hub's GitHub login) and nFiles (probe count or GitHub, may be
+    null); files (paths) only when the winner is GitHub and the repo is public now (S17 R09)."""
     vis = dict(conn.execute("SELECT key, visibility FROM projects"))
+    author = db.get(conn, "github.login") or None
+    cached = {h: (n, files) for h, n, files in conn.execute(
+        "SELECT hash, n, files FROM commit_files WHERE hash IN (SELECT hash FROM commits WHERE t >= ?)", (since_utc,))}
     by_hash = defaultdict(list)
     for row in conn.execute(
             "SELECT source, hash, machine, t, repo, remote, project, branch, title, url, pushed, private "
@@ -232,16 +237,23 @@ def _commits(conn, since_utc):
         else:
             public = src == "github" and private == 0
             mach = machines[0] if machines else None
+        n, files = cached.get(h, (None, None))
+        try:
+            files = json.loads(files) if files and src == "github" and public else None
+        except ValueError:
+            files = None
         out.append({"t": t, "source": src, "repo": repo, "remote": remote, "public": public, "title": title or "",
                     "branch": branch, "hash": h, "url": url if src != "local" else None, "machine": mach or None,
-                    "pushed": bool(pushed) if src == "local" else True})
+                    "pushed": bool(pushed) if src == "local" else True,
+                    "author": author, "files": files if isinstance(files, list) and files else None, "nFiles": n})
     out.sort(key=lambda c: (c["t"], c["hash"]), reverse=True)
     return out
 
 
 def _activity_item(c, iso):
     return {"t": iso(c["t"]), "source": c["source"], "repo": c["repo"], "public": c["public"], "title": c["title"],
-            "branch": c["branch"], "hash": c["hash"], "url": c["url"], "machine": c["machine"], "pushed": c["pushed"]}
+            "branch": c["branch"], "hash": c["hash"], "url": c["url"], "machine": c["machine"], "pushed": c["pushed"],
+            "author": c["author"], "files": c["files"], "nFiles": c["nFiles"]}
 
 
 def _repos(commits, iso):

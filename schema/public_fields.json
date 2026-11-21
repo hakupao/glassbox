@@ -1,5 +1,5 @@
 {
- "_note": "Fields allowed into the public snapshot and the type each value must have (CONTRACT §3 rules 1-3). [] stands for every list element. Types: number, bool, null, iso, date, hash, semver, enum:a|b, const:x, code, model, url:public-repo, title, text. A trailing ? also allows null. Anything not listed is dropped by the exporter and rejected by the gate.",
+ "_note": "Fields allowed into the public snapshot and the type each value must have (CONTRACT §3 rules 1-3). [] stands for every list element. Types: number, bool, null, iso, date, hash, semver, enum:a|b, const:x, code, model, url:public-repo, title, text, path (repo-relative file path), author (a login listed in the config's authors). A trailing ? also allows null. Anything not listed is dropped by the exporter and rejected by the gate.",
  "paths": {
   "schema": "const:glassbox.page/1",
   "view": "const:public",
@@ -32,6 +32,8 @@
   "activity[].t": "iso", "activity[].source": "enum:github|gitea|local", "activity[].repo": "text",
   "activity[].public": "bool", "activity[].title": "title", "activity[].branch": "text?",
   "activity[].hash": "hash?", "activity[].url": "url:public-repo?", "activity[].machine": "code?", "activity[].pushed": "bool",
+  "activity[].author": "author?", "activity[].nFiles": "number?",
+  "activity[].files[].s": "enum:M|A|R|D", "activity[].files[].p": "path",
 
   "machines[].id": "code", "machines[].label": "text", "machines[].role": "enum:dev|deploy|work|gitea?",
   "machines[].os": "enum:macos|linux|windows?", "machines[].online": "bool", "machines[].lastSeen": "iso?",

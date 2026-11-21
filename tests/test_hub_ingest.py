@@ -90,6 +90,26 @@ class IngestTest(unittest.TestCase):
         self.assertEqual([r[0] for r in self.conn.execute("SELECT hash FROM commits")], ["c" * 40])
 
 
+    def test_file_counts_are_optional_and_a_github_list_wins(self):
+        """S17 R09: nFiles from a probe lands in commit_files; an old probe without it still works;
+        a list fetched from GitHub is not overwritten by a later probe count."""
+        g = lambda commits: {"git": [{"project": "p_x", "remote": False, "commits": commits}]}
+        c = lambda h, **kw: {"t": "2026-11-16T00:00:00Z", "hash": h, "branch": "main", "title": "t", "pushed": True, **kw}
+        ingest.apply(self.conn, "A", report([], **g([c("a" * 40, nFiles=3), c("b" * 40), c("d" * 40, nFiles=0)])), NOW)
+        self.assertEqual(dict(self.conn.execute("SELECT hash, n FROM commit_files")), {"a" * 40: 3, "d" * 40: 0})
+        self.conn.execute("UPDATE commit_files SET n=9, files='[{\"s\": \"M\", \"p\": \"x.md\"}]', fetched=1 WHERE hash=?", ("a" * 40,))
+        ingest.apply(self.conn, "A", report([], **g([c("a" * 40, nFiles=4), c("d" * 40, nFiles=2)])), NOW)
+        self.assertEqual(dict(self.conn.execute("SELECT hash, n FROM commit_files")), {"a" * 40: 9, "d" * 40: 2})
+        ingest.apply(self.conn, "A", report([], **g([c("a" * 40, nFiles=12)])), NOW)      # larger than the list: raises n
+        self.assertEqual(self.conn.execute("SELECT n FROM commit_files WHERE hash=?", ("a" * 40,)).fetchone()[0], 12)
+        for bad in (-1, "3", 2.5, True):
+            with self.subTest(bad), self.assertRaises(ingest.Rejected):
+                ingest.apply(self.conn, "A", report([], **g([c("e" * 40, nFiles=bad)])), NOW)
+        ingest.apply(self.conn, "A", report([], **g([c("f" * 40, nFiles=None, files=["a.md"], extra=1)])), NOW)   # unknown keys ignored
+        self.assertIsNone(self.conn.execute("SELECT n FROM commit_files WHERE hash=?", ("f" * 40,)).fetchone())
+
+
+
 class HardeningTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

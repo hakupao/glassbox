@@ -31,6 +31,8 @@ def write_cfg(d, text):
 
 
 CFG_TEXT = (RT / "public.toml").read_text(encoding="utf-8") + '"jobs[].name" = ["nightly-backup"]\n'
+UNLISTED = CFG_TEXT.replace('branchFragments = ["example-owner"]\n', "")         # R10: no branch part listed
+assert UNLISTED != CFG_TEXT
 
 
 class ExportTest(unittest.TestCase):
@@ -103,12 +105,12 @@ class ExportTest(unittest.TestCase):
 
     def test_unknown_fields_never_copied(self):
         self.page["today"]["secretNote"] = "x"
-        self.page["activity"][0]["author"] = "someone"
+        self.page["activity"][0]["reviewer"] = "someone"          # (author is a public field since S17 R09)
         self.page["extraBlock"] = [{"a": 1}]
         pub, _ = self.run_export()
         self.assertNotIn("secretNote", pub["today"])
         self.assertNotIn("hourly", pub["today"])
-        self.assertNotIn("author", pub["activity"][0])
+        self.assertNotIn("reviewer", pub["activity"][0])
         self.assertNotIn("extraBlock", pub)
         self.assertEqual(pub["view"], "public")
 
@@ -490,6 +492,264 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(self.gate(pub, ctx), [])
         a["branch"] = "main"
         self.assertTrue(any("local commit keeps branch" in b for b in self.gate(pub, ctx)))
+
+    # --- S17 R09: author, file count, file paths; R10: listed branch fragments --------------------
+
+    def files_on(self, i, paths, n=None):
+        a = self.page["activity"][i]
+        a["files"] = [{"s": "M", "p": x} for x in paths]
+        a["nFiles"] = len(paths) if n is None else n
+        return a
+
+    def test_files_only_on_public_pushed_github_commits(self):
+        """files non-empty => public, pushed, source github. Every other commit keeps its count only:
+        a local commit of a public repo, an unpushed one, a Gitea one (pushed to a private remote),
+        a private one, and a public GitHub repo blacklisted in privateProjects."""
+        self.rename_repo("shuttle-path", "dotfiles-sandbox")                      # privateProjects in the config
+        for i in range(len(self.page["activity"])):
+            self.files_on(i, ["docs/readme.md", "src/main.py"], n=5)
+        self.page["activity"][2]["pushed"] = True                                  # GitHub, public
+        pub, ctx = self.run_export()
+        kept = [(a["source"], a["public"], a["pushed"]) for a in pub["activity"] if a.get("files")]
+        self.assertEqual(kept, [("github", True, True), ("github", True, True)])
+        self.assertTrue(all(a["nFiles"] == 5 for a in pub["activity"]))           # the count everywhere
+        self.assertTrue(all("files" not in a for a in pub["activity"] if not a.get("files")))   # dropped, not null
+        self.assertEqual(self.gate(pub, ctx), [])
+        self.assertEqual(self.gate(pub, ctx, html=True), [])
+        # The gate enforces the same invariant on its own.
+        for i, put in ((1, {}), (3, {}), (4, {}), (0, {"pushed": False}), (0, {"source": "local", "branch": None, "url": None})):
+            forged = copy.deepcopy(pub)
+            forged["activity"][i].update(files=[{"s": "M", "p": "docs/readme.md"}], nFiles=5, **put)
+            with self.subTest(i=i, put=put):
+                self.assertTrue(any("file paths on a commit that is not public" in b for b in self.gate(forged, ctx)))
+
+    def test_files_follow_the_exporters_own_visibility_verdict(self):
+        """A commit flagged public but private elsewhere (H1) loses its paths with its name."""
+        self.page["today"]["byProject"].append({"project": "IT-Passport-Learning", "public": False, "requests": 1, "costUsd": 0.1})
+        pub, ctx = self.run_export()
+        a = pub["activity"][0]
+        self.assertEqual((a["public"], a.get("files"), a["nFiles"], a["author"]), (False, None, 4, None))
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_a_bad_path_degrades_that_commit_only(self):
+        """A path with a private name, term, commit id, branch part, keyword or a pattern the gate flags
+        drops that commit's list (count kept); other commits keep theirs and the gate passes. The same
+        paths in a hand-made snapshot are refused by the gate (tests/redteam block-files-*)."""
+        self.page["activity"][3]["branch"] = "wip/marmotte"                       # a private branch part
+        bad = ["src/falcon_ledger/rules.py", "lib/OrchidBatch.ts", "x/owl/config.py", "notes/e1f2a3b.md",
+               "docs/marmotte.md", "plans/Project_Nightjar.md", "docs/team@example.com", "img/logo" + "@" + "2x.png", "releases/203.0.113.7/n.md",
+               "ops/box.tail1a2b.ts.net.md", "web/" + "home" + "/x.js", "docs/a%2Fb.md", "docs/a&amp;b.md", "docs/it's.md",
+               "docs/a:b.md", "x/~/y.md", "keys/ghp_" + "A1b2C3d4" * 5 + ".txt", "docs/a\u200bb.md", "docs/dotfiles-sandbox.md",
+               "deploy/studio-dev.yml", "/etc/hosts.md", "a/../b.md", "a//b.md", "d/" * 160 + "x.md"]
+        for p in bad:
+            with self.subTest(p):
+                page = copy.deepcopy(self.page)
+                page["activity"][0].update(files=[{"s": "A", "p": "docs/ok.md"}, {"s": "M", "p": p}], nFiles=9)
+                page["activity"][2].update(files=[{"s": "M", "p": "docs/domains/AE.md"}], nFiles=1)
+                pub, ctx = self.run_export(page)
+                self.assertNotIn("files", pub["activity"][0])
+                self.assertEqual(pub["activity"][0]["nFiles"], 9)
+                self.assertEqual(pub["activity"][2]["files"], [{"s": "M", "p": "docs/domains/AE.md"}])
+                self.assertEqual(self.gate(pub, ctx), [])
+                self.assertEqual(self.gate(pub, ctx, html=True), [])
+
+    def test_awkward_but_clean_paths_are_kept_and_pass_the_gate(self):
+        ok = ["docs/日本語 notes (v2).md", ".github/workflows/ci.yml", "web/vendor/uplot.min.js", "a b/c+d,e[1]#!$.txt",
+              "tests/redteam/samples/pass-minimal.json", "README.zh.md", "src/@scope/pkg/index.ts", "Makefile",
+              "app/[id]/page.tsx", "app/(site)/layout.tsx", "src/MyApp.Core/Program.cs", "ios/App.xcodeproj/project.pbxproj",
+              "docs/ADR-001.md", ".claude/settings.local.json", "v1.2.3.4/notes.md", "assets/" + "ab12" * 10 + ".png"]
+        self.files_on(0, ok, n=12)
+        pub, ctx = self.run_export()
+        self.assertEqual([f["p"] for f in pub["activity"][0]["files"]], ok)
+        self.assertEqual(self.gate(pub, ctx), [])
+        self.assertEqual(self.gate(pub, ctx, html=True), [])
+
+    def test_private_project_as_branch_part_keeps_substring_mode(self):
+        """Review R09 M1: a privateProjects word (not on the page) that is also a private branch part is
+        matched as a substring by the gate; the exporter must match it the same way, so a path or
+        title that merely contains it degrades instead of the gate refusing the snapshot."""
+        cfg = write_cfg(self.tmp.name, CFG_TEXT.replace("example-owner", "hakupao")
+                        .replace('privateProjects = ["dotfiles-sandbox"', 'privateProjects = ["dotfiles-sandbox", "zephyrine"'))
+        self.page["activity"][3]["branch"] = "zephyrine/topic"
+        self.files_on(0, ["docs/zephyrinex.md"])
+        self.page["activity"][2]["title"] = "docs: zephyrinex notes"
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertNotIn("files", pub["activity"][0])
+        self.assertEqual(pub["activity"][2]["title"], "docs:")
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_paths_joined_to_their_neighbours_degrade(self):
+        """Review R09 security M1: the gate reads the serialized snapshot as one stream, so "p" + "ixel-forge/..."
+        or "docs/field-note" + the next entry's "s" spells a private project. Only the commits whose lists
+        cause it lose them; the count is kept and reported; JSON and HTML pass the gate."""
+        cfg = write_cfg(self.tmp.name, CFG_TEXT.replace("example-owner", "hakupao"))
+        self.assertTrue({"pixel-forge", "field-notes"} <= cfg["privateProjects"])
+        for lst in (["ixel-forge/readme.md"], ["docs/field-note", "b.md"]):
+            with self.subTest(lst):
+                page = copy.deepcopy(self.page)
+                page["activity"][0].update(files=[{"s": "M", "p": x} for x in lst], nFiles=len(lst))
+                page["activity"][2].update(files=[{"s": "M", "p": "docs/domains/AE.md"}], nFiles=1)
+                pub, ctx = self.run_export(page, cfg)
+                self.assertNotIn("files", pub["activity"][0])
+                self.assertEqual(pub["activity"][0]["nFiles"], len(lst))
+                self.assertEqual(pub["activity"][2]["files"], [{"s": "M", "p": "docs/domains/AE.md"}])
+                self.assertEqual(ctx["degraded"]["filesJoined"], 1)
+                self.assertEqual(self.gate(pub, ctx), [])
+                self.assertEqual(self.gate(pub, ctx, html=True), [])
+                forged = copy.deepcopy(pub)
+                forged["activity"][0]["files"] = [{"s": "M", "p": x} for x in lst]
+                self.assertTrue(any("private name" in b for b in self.gate(forged, ctx)))
+        page = copy.deepcopy(self.page)                          # a lone "docs/field-note" joins nothing: kept
+        page["activity"][0].update(files=[{"s": "M", "p": "docs/field-note"}], nFiles=1)
+        pub, ctx = self.run_export(page, cfg)
+        self.assertEqual(pub["activity"][0]["files"], [{"s": "M", "p": "docs/field-note"}])
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_listed_fragment_never_frees_a_component_of_a_private_name(self):
+        """Review R09 security L2: "Falcon-Tools" listed exempts "tools" but not "falcon", a component of the
+        private repo falcon-ledger; both sides agree."""
+        cfg = write_cfg(self.tmp.name, 'branchFragments = ["Falcon-Tools"]\n' + UNLISTED.replace("example-owner", "hakupao"))
+        self.page["activity"][3]["branch"] = "falcon-tools/tune"
+        self.page["activity"][0]["title"] = "docs: tools for falcon"
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertIn("falcon", ctx["privateNames"])
+        self.assertNotIn("tools", ctx["privateNames"])
+        self.assertEqual(pub["activity"][0]["title"], "docs:")
+        self.assertEqual(self.gate(pub, ctx), [])
+        g = vp.derive(self.page, set(), fragments=["Falcon-Tools"], protected=["owl"])
+        self.assertIn("falcon", g[1])
+        self.assertNotIn("tools", g[1])
+
+    def test_degradations_are_counted_without_names(self):
+        self.page["activity"][3]["branch"] = "hakupao/secret-topic"                 # login unlisted: links and author go
+        self.files_on(0, ["src/falcon_ledger/x.py"])
+        pub, ctx = self.run_export(cfg=write_cfg(self.tmp.name, UNLISTED.replace("example-owner", "hakupao")))
+        d = ctx["degraded"]
+        self.assertEqual((d["filesDropped"], d["linksDropped"], d["authorsDropped"]), (1, 3, 4))      # 3 links, 4 public commits
+        self.assertTrue(all(isinstance(v, int) for v in d.values()))
+        src = Path(self.tmp.name) / "private.json"
+        src.write_text(json.dumps(self.page), encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            rc = ex.main([str(src), "--config", str(Path(self.tmp.name) / "public.toml"), "--terms", str(RT / "terms.json"),
+                          "--out", str(Path(self.tmp.name) / "o.json")])
+        self.assertEqual(rc, 0)
+        self.assertIn("export degraded (counts): filesDropped 1, linksDropped 3, authorsDropped 4", err.getvalue())
+        self.assertNotIn("falcon", err.getvalue())
+
+    def test_gate_folds_every_look_alike_the_exporter_folds(self):
+        """Review R09 security L1: the gate's look-alike table covers the exporter's."""
+        for k, v in ex.HOMOGLYPHS.items():
+            with self.subTest(chr(k)):
+                self.assertEqual(vp.LOOKALIKE.get(k), v)
+
+    def test_malformed_file_entries_degrade_that_commit_only(self):
+        for bad in ({"s": "X", "p": "a.md"}, {"s": "modified", "p": "a.md"}, {"s": "m", "p": "a.md"}, {"p": "a.md"},
+                    {"s": "M"}, {"s": "M", "p": 3}, {"s": "M", "p": None}, "a.md", None, ["M", "a.md"]):
+            with self.subTest(bad):
+                page = copy.deepcopy(self.page)
+                page["activity"][0].update(files=[{"s": "A", "p": "docs/ok.md"}, bad], nFiles=2)
+                pub, ctx = self.run_export(page)
+                self.assertNotIn("files", pub["activity"][0])
+                self.assertEqual(pub["activity"][0]["nFiles"], 2)
+                self.assertEqual(pub["activity"][2]["files"], [{"s": "M", "p": "docs/domains/AE.md"}])
+                self.assertEqual(self.gate(pub, ctx), [])
+        page = copy.deepcopy(self.page)
+        page["activity"][0].update(files="docs/ok.md", nFiles=1)                   # not a list at all
+        pub, ctx = self.run_export(page)
+        self.assertNotIn("files", pub["activity"][0])
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_files_truncated_to_50_and_n_is_the_true_count(self):
+        self.files_on(0, [f"src/f{i}.py" for i in range(80)], n=None)
+        self.page["activity"][0]["nFiles"] = None                                  # count unknown: the list length
+        pub, ctx = self.run_export()
+        self.assertEqual((len(pub["activity"][0]["files"]), pub["activity"][0]["nFiles"]), (50, 80))
+        self.assertEqual(self.gate(pub, ctx), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["files"].append({"s": "M", "p": "src/extra.py"})
+        self.assertTrue(any("more than 50 files" in b for b in self.gate(forged, ctx)))
+
+    def test_nfiles_is_optional_and_a_count(self):
+        for v, want in ((None, None), (0, 0), (3, 3), (-1, None), (2.5, None), ("3", None), (True, None)):
+            page = copy.deepcopy(self.page)
+            page["activity"][3]["nFiles"] = v
+            for a in page["activity"]:                                             # an old probe: no new keys at all
+                if a is not page["activity"][3]:
+                    for k in ("nFiles", "files", "author"):
+                        a.pop(k, None)
+            with self.subTest(v=v):
+                pub, ctx = self.run_export(page)
+                self.assertEqual(pub["activity"][3]["nFiles"], want)
+                self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_author_only_configured_and_only_on_public_commits(self):
+        pub, ctx = self.run_export()
+        self.assertEqual([a["author"] for a in pub["activity"]], ["hakupao" if a["public"] else None for a in pub["activity"]])
+        self.assertEqual(self.gate(pub, ctx), [])
+        for i in range(len(self.page["activity"])):
+            self.page["activity"][i]["author"] = "someone-else"                    # not configured: null
+        pub, ctx = self.run_export()
+        self.assertTrue(all(a["author"] is None for a in pub["activity"]))
+        cfg = write_cfg(self.tmp.name, CFG_TEXT.replace("example-owner", "hakupao").replace('authors = ["hakupao"]\n', ""))
+        page = copy.deepcopy(EXAMPLE)                                              # no authors configured: never shown
+        pub, ctx = self.run_export(page, cfg)
+        self.assertTrue(all(a["author"] is None for a in pub["activity"]))
+        self.assertEqual(self.gate(pub, ctx), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["author"] = "hakupao"
+        self.assertTrue(any("is not author" in b for b in self.gate(forged, ctx)))
+
+    def test_login_as_private_branch_part_needs_branch_fragments(self):
+        """R10 (D4): a private branch "<login>/topic" makes the login a private name. Unlisted, the
+        exporter drops the author and the commit links that spell it, and the gate passes; listed in
+        branchFragments, both stay. The gate refuses the login where it was not dropped."""
+        self.page["activity"][3]["branch"] = "hakupao/secret-topic"
+        pub, ctx = self.run_export(cfg=write_cfg(self.tmp.name, UNLISTED.replace("example-owner", "hakupao")))
+        self.assertIn("hakupao", ctx["privateNames"])
+        self.assertTrue(all(a["author"] is None and a["url"] is None for a in pub["activity"]))
+        self.assertEqual(self.gate(pub, ctx), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["author"] = "hakupao"
+        self.assertTrue(any("private name" in b for b in self.gate(forged, ctx)))
+        cfg = write_cfg(self.tmp.name, 'branchFragments = ["hakupao"]\n' + UNLISTED.replace("example-owner", "hakupao"))
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertNotIn("hakupao", ctx["privateNames"])
+        self.assertTrue({"secret", "topic"} <= set(ctx["privateNames"]))           # the other parts stay private
+        self.assertEqual(pub["activity"][0]["author"], "hakupao")
+        self.assertTrue(pub["activity"][0]["url"])
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_branch_fragments_are_split_and_only_exempt_branch_parts(self):
+        """A4: parts of a hyphenated public repo name in a private branch stay private unless listed (the
+        owner's D4 choice over relaxing the rule), so the gate refuses the page that shows that repo.
+        Listing "IT-Passport-Learning" exempts its parts; a listed word that is also a private repo
+        name stays private (only branch parts are exempt)."""
+        self.page["activity"][3]["branch"] = "Passport-Learning/notes"
+        self.page["activity"][0]["title"] = "docs: Passport chapter"
+        pub, ctx = self.run_export(cfg=write_cfg(self.tmp.name, UNLISTED.replace("example-owner", "hakupao")))
+        self.assertTrue({"Passport", "Learning"} <= set(ctx["privateNames"]))
+        self.assertEqual(pub["activity"][0]["title"], "docs:")
+        self.assertTrue(any("private name" in b for b in self.gate(pub, ctx)))      # the repo name itself
+        cfg = write_cfg(self.tmp.name, 'branchFragments = ["IT-Passport-Learning", "orchid-batch"]\n'
+                        + UNLISTED.replace("example-owner", "hakupao"))
+        pub, ctx = self.run_export(cfg=cfg)
+        self.assertFalse({"Passport", "Learning"} & set(ctx["privateNames"]))
+        self.assertEqual(pub["activity"][0]["title"], "docs: Passport chapter")
+        self.assertIn("orchid-batch", ctx["privateNames"])
+        self.assertEqual(self.gate(pub, ctx), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["title"] = "docs: orchid-batch notes"
+        self.assertTrue(any("private name" in b for b in self.gate(forged, ctx)))
+
+    def test_new_config_keys_are_checked(self):
+        for text in ('authors = "hakupao"\n', 'authors = ["not a login"]\n', 'authors = [""]\n',
+                     'branchFragments = "x"\n', 'branchFragments = [""]\n', 'branchFragment = ["x"]\n'):
+            with self.subTest(text), self.assertRaises(ex.ExportError):
+                write_cfg(self.tmp.name, text)
+        for cfg in ({"authors": "x"}, {"authors": ["not a login"]}, {"branchFragments": [3]}, {"branchFragments": [" "]}):
+            with self.subTest(cfg), self.assertRaises(vp.SetupError):
+                vp.check_config(cfg)
 
     # --- refusing --------------------------------------------------------------------------------
 

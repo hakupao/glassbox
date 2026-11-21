@@ -77,7 +77,7 @@ probe = {
                  {"agent": "codex", "version": "0.99.0", "processes": 1, "activeSessions": 1}],
     "git": [{"project": "p_4d5e6f708192", "remote": False, "commits": [
         {"t": "2026-11-17T00:48:00Z", "hash": "e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4",
-         "branch": "main", "title": "fix: handle empty mapping rule"}]}],
+         "branch": "main", "title": "fix: handle empty mapping rule", "pushed": False, "nFiles": 2}]}],
     "jobs": [{"name": "nightly-backup", "lastRun": "2026-11-16T18:00:05Z", "lastSuccess": "2026-11-16T18:00:05Z", "ok": True}],
 }
 
@@ -151,20 +151,27 @@ page = {
     "activity": [
         {"t": "2026-11-17T10:12:00+09:00", "source": "github", "repo": "IT-Passport-Learning", "public": True,
          "title": "feat: 第 12 章模拟题解析", "branch": "main", "hash": "a91c3e2",
-         "url": "https://github.com/hakupao/IT-Passport-Learning/commit/a91c3e2", "machine": "A", "pushed": True},
+         "url": "https://github.com/hakupao/IT-Passport-Learning/commit/a91c3e2", "machine": "A", "pushed": True,
+         "author": "hakupao", "nFiles": 4, "files": [{"s": "A", "p": "chapters/12/answers.md"}, {"s": "M", "p": "chapters/12/README.md"},
+                                                      {"s": "R", "p": "assets/fig-12-3.png"}, {"s": "D", "p": "drafts/ch12.txt"}]},
         {"t": "2026-11-17T09:55:00+09:00", "source": "local", "repo": "sdtm-pedia", "public": True,
-         "title": "wip: AE 域示例数据", "branch": "dev", "hash": "5c1d9e0", "url": None, "machine": "A", "pushed": False},
+         "title": "wip: AE 域示例数据", "branch": "dev", "hash": "5c1d9e0", "url": None, "machine": "A", "pushed": False,
+         "author": "hakupao", "nFiles": 3, "files": None},
         {"t": "2026-11-17T09:05:00+09:00", "source": "github", "repo": "sdtm-pedia", "public": True,
          "title": "docs: 补全 AE 域变量说明", "branch": "main", "hash": "4be0d71",
-         "url": "https://github.com/hakupao/sdtm-pedia/commit/4be0d71", "machine": "A", "pushed": True},
+         "url": "https://github.com/hakupao/sdtm-pedia/commit/4be0d71", "machine": "A", "pushed": True,
+         "author": "hakupao", "nFiles": 1, "files": [{"s": "M", "p": "docs/domains/AE.md"}]},
         {"t": "2026-11-17T09:48:00+09:00", "source": "local", "repo": "orchid-batch", "public": False,
-         "title": "fix: handle empty mapping rule", "branch": "main", "hash": "e1f2a3b", "url": None, "machine": "A", "pushed": False},
+         "title": "fix: handle empty mapping rule", "branch": "main", "hash": "e1f2a3b", "url": None, "machine": "A", "pushed": False,
+         "author": "hakupao", "nFiles": 2, "files": None},
         {"t": "2026-11-16T22:31:00+09:00", "source": "gitea", "repo": "falcon-ledger", "public": False,
          "title": "refactor: split validation pipeline for ACME-42", "branch": "dev", "hash": "77c0d1e",
-         "url": "https://gitea.example.org/team/falcon-ledger/commit/77c0d1e", "machine": "B", "pushed": True},
+         "url": "https://gitea.example.org/team/falcon-ledger/commit/77c0d1e", "machine": "B", "pushed": True,
+         "author": "hakupao", "nFiles": 6, "files": None},
         {"t": "2026-11-16T21:02:00+09:00", "source": "github", "repo": "shuttle-path", "public": True,
          "title": "feat: 步法热区可视化", "branch": "dev", "hash": "7f20a19",
-         "url": "https://github.com/hakupao/shuttle-path/commit/7f20a19", "machine": "A", "pushed": True},
+         "url": "https://github.com/hakupao/shuttle-path/commit/7f20a19", "machine": "A", "pushed": True,
+         "author": "hakupao", "nFiles": 0, "files": None},
     ],
     "machines": [
         {"id": i, "label": label, "role": role, "os": os_, "icon": LOOK[i][0], "color": LOOK[i][1], "online": i != "D",
@@ -208,6 +215,7 @@ ALLOW = {
     "activity[].branch": {"main", "dev"},           # branches of public repos, added automatically
 }
 CODES = {"A", "B", "C", "D", "V", "K", "L"}             # machine and account codes
+AUTHORS = {"hakupao"}                                   # config `authors` (S17 R09)
 HIDDEN = ["tailnet"]
 KEYWORDS = ["ACME-42"]
 MODELS = {"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1", "gpt-6-astra"}
@@ -290,6 +298,9 @@ def check_type(value, typ, generic):
         "model": lambda: value in MODELS or value == "other",
         "url": lambda: bool(PUBLIC_URL.match(value)),
         "title": lambda: not TICKET.search(value),
+        "path": lambda: bool(value) and not value.startswith("/") and "\\" not in value
+                        and ".." not in value.split("/") and not re.match(r"[A-Za-z]:", value),
+        "author": lambda: value in AUTHORS,
     }[kind]()
 
 
@@ -325,8 +336,10 @@ for m in src["today"]["byModel"]:
     if m["model"] not in MODELS:
         m["model"] = "other"
 for a in src["activity"]:
+    if not (a["public"] and a["pushed"] and a["source"] == "github"):  # paths: public, pushed, GitHub only
+        a["files"] = None
     if not a["public"]:                                              # rule 4
-        a.update(branch=None, hash=None, url=None, machine=None, t=a["t"][:13] + ":00:00" + a["t"][19:])
+        a.update(branch=None, hash=None, url=None, machine=None, author=None, t=a["t"][:13] + ":00:00" + a["t"][19:])
         for kw in KEYWORDS:                                          # rule 5
             a["title"] = re.sub(re.escape(kw), "******", a["title"], flags=re.I)
         a["title"] = TICKET.sub("******", a["title"])

@@ -45,5 +45,24 @@ class ConcurrentFirstOpen(unittest.TestCase):
                 conn.close()
 
 
+class ExistingDatabase(unittest.TestCase):
+    def test_schema_4_database_without_commit_files_opens_and_gains_it(self):
+        """S17 R09 adds commit_files with CREATE TABLE IF NOT EXISTS and no schema bump: a live
+        database from before opens as is, keeps its rows, and has the new table afterwards."""
+        from hub import db
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "hub.sqlite")
+            conn = db.connect(path)
+            conn.execute("INSERT INTO machines(id) VALUES('A')")
+            conn.execute("DROP TABLE commit_files")                   # as the live database is today
+            conn.commit()
+            conn.close()
+            conn = db.connect(path)
+            self.assertEqual(db.get(conn, "schema_version"), SCHEMA_VERSION)
+            self.assertEqual(conn.execute("SELECT id FROM machines").fetchall(), [("A",)])
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM commit_files").fetchone()[0], 0)
+            conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()

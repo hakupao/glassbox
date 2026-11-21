@@ -7,15 +7,18 @@ Checks every path given: the publish directory, its index.html, or the page JSON
   type; placeholders are exactly {"masked": true} (or the merged {"masked": true, "group":
   "private"} in today.byProject); titles carry no ticket id, e-mail, IP, path, URL or secret.
   HTML must embed its data as `window.GB = {...}` and that payload is checked the same way.
-- cross-field (rules 4, 7): private commits have null branch / hash / url / machine, `t` on the
-  hour and a masked repo; Gitea commits are never public; private byProject rows are the merged
-  row; hidden blocks are [].
+- cross-field (rules 4, 7): private commits have null branch / hash / url / machine / author, `t` on
+  the hour and a masked repo; Gitea commits are never public; private byProject rows are the merged
+  row; hidden blocks are []. Commit files (S17 R09): a non-empty `files` only on a commit that is
+  public, pushed and from GitHub, at most 50 entries, and `nFiles` (a count) at least that long.
+  `author` must be a configured login (`authors`), never free text.
 - visibility (review H1): public repos and private names are derived here from the private page
   (--private), not taken from the exporter. A name is public only if every occurrence is public
   and not Gitea; a name that is both allowlisted / shown and private is rejected.
 - name list (rule 6): terms from .local/redact_terms.local.json and the derived private names
   (repos, Text values, private commit ids and hosts, telling branch parts) must not occur
-  anywhere; telling branch parts (weak words) are exempt only inside a non-data <script> / <style>
+  anywhere (file paths included); a branch part is exempt only when it spells a public repo name or
+  is listed in `branchFragments` (R10, D4); telling branch parts (weak words) are exempt only inside a non-data <script> / <style>
   body that is byte-for-byte a web/ .js / .css file as hub.page.bundle() inlines it (public code,
   comments and licence headers included). Any other body counts as markup (fail closed). Text is NFKC-normalised, format characters dropped and Cyrillic / Greek look-alikes
   folded. Long terms (5+ letters or digits, or non-Latin): substring of the letters-and-digits
@@ -67,6 +70,9 @@ MODELS = set(json.loads((ROOT / "probe" / "pricing.json").read_text(encoding="ut
 MASK = {"masked": True}
 MASK_PRIVATE = {"masked": True, "group": "private"}
 GROUP_FIELD = "today.byProject[].project"
+FILES_MAX = 50
+PATH_MAX = 300
+LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}")
 
 PATTERNS = {
     "email": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"),
@@ -194,8 +200,8 @@ class SetupError(Exception):
 
 # Cyrillic / Greek letters that look Latin (review M1), folded before any comparison.
 LOOKALIKE = {ord(k): v for k, v in zip(
-    "аеорсухіјѕԁвкмнтАВЕКМНОРСТХІЈЅαβεικνορτυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧ",
-    "aeopcyxijsdbkmhtABEKMHOPCTXIJSabeikvoptuxABEZHIKMNOPTYX")}
+    "аеорсухіјѕԁвкмнтАВЕКМНОРСТХІЈЅαβεικνορτυχΑΒΕΖΗΙΚΜΝΟΡΤΥΧӏԛԝ",
+    "aeopcyxijsdbkmhtABEKMHOPCTXIJSabeikvoptuxABEZHIKMNOPTYXlqw")}
 
 
 def clean(s):
@@ -350,9 +356,17 @@ SITES = [("activity", "repo"), ("today.byProject", "project"), ("code.commits", 
 TEXT_PATHS = [p for p, t in FIELDS.items() if t.rstrip("?") == "text" and p != "activity[].branch"]
 
 
-def derive(private, private_projects, with_frags=False, codes=()):
+def listed_parts(fragments):
+    """branchFragments (R10, D4): every entry and its parts split like a branch name, normalised."""
+    return {norm(x) for w in fragments for x in [w, *re.split(r"[/\-_]+", w)] if norm(x)}
+
+
+def derive(private, private_projects, with_frags=False, codes=(), fragments=(), protected=()):
     """Visibility and private names, read from the PRIVATE page itself — not from the exporter.
-    A name is public only when every occurrence is public:true and not Gitea (review H1)."""
+    A name is public only when every occurrence is public:true and not Gitea (review H1).
+    fragments: the config's branchFragments, the only branch parts besides public repo names that
+    are not private (R10). protected: terms and keywords; a listed part that is a component of one of
+    them, of a private name or of a private project stays private ("Falcon-Tools" does not free falcon-ledger's "falcon")."""
     seen = {}
     for path, key in SITES:
         for e in walk_items(private, path):
@@ -395,6 +409,9 @@ def derive(private, private_projects, with_frags=False, codes=()):
     # A branch part that spells a public repo name (e.g. the owner's profile repo) reveals nothing;
     # keeping it would make that repo both public and private and stop every publish.
     frags = {f for f in frags if norm(f) not in {norm(p) for p in public}}
+    guarded = {norm(x) for w in names | set(private_projects) | set(protected) for x in [w, *re.split(r"[-/_.\s]+", w)] if norm(x)}
+    listed = listed_parts(fragments) - guarded
+    frags = {f for f in frags if norm(f) not in listed}
     vparts = vocabulary_parts()
     frags = {f for f in frags if norm(f) not in vparts}                  # claude of claude/x: a page word (R08)
     out = (public, names | hashes | frags, branches, (hashes | frags) - names)
@@ -416,7 +433,12 @@ class Gate:
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
         public, derived, branches, whole_words, frag_words = derive(private or {}, self.private_projects, with_frags=True,
-                                                                codes=set(config.get("codes", [])))
+                                                                codes=set(config.get("codes", [])),
+                                                                fragments=config.get("branchFragments", []),
+                                                                protected=[t for t in terms.get("terms", [])
+                                                                           if t.casefold() not in allow_words]
+                                                                + list(config.get("keywords", [])))
+        self.authors = set(config.get("authors", []))
         # Weak words (R08): branch fragments only. They are searched in the window.GB data script, the decoded data values and the
         # rest of an index.html too, except inside script/style bodies that equal a web/ file byte for byte (web_bodies():
         # the public repository's own code, e.g. a comment in art.js). A fragment that is a component of a stronger word (falcon of falcon-ledger) or a substring
@@ -567,6 +589,8 @@ class Gate:
             "code": lambda: bool(re.fullmatch(r"[A-Z]", v)) or v in self.codes,
             "model": lambda: v in MODELS or v == "other",
             "url": lambda: arg == "public-repo" and bool(self.repo_url and self.repo_url.fullmatch(v)),
+            "path": lambda: repo_path(v),
+            "author": lambda: v in self.authors and bool(LOGIN.fullmatch(v)),
         }[kind]()
 
     def title_problems(self, v):
@@ -631,7 +655,7 @@ class Gate:
             if a.get("public") is not True:
                 if a.get("public") is not False:
                     bad.append(f"{p}: public must be true or false")
-                for k in ("branch", "hash", "url", "machine"):
+                for k in ("branch", "hash", "url", "machine", "author"):
                     if a.get(k) is not None:
                         bad.append(f"{p}: private commit keeps {k}")
                 if not is_mask(a.get("repo")):
@@ -651,6 +675,18 @@ class Gate:
                     bad.append(f"{p}: public commit with a masked repo")
                 if a.get("source") == "local" and a.get("branch") is not None:
                     bad.append(f"{p}: local commit keeps branch")
+            # S17 R09: paths only where the repository already shows them: public, pushed, GitHub.
+            # pushed alone is not enough (any remote, a private Gitea mirror included).
+            files, n = a.get("files"), a.get("nFiles")
+            if n is not None and not (isinstance(n, int) and not isinstance(n, bool) and n >= 0):
+                bad.append(f"{p}: nFiles must be a whole count")
+            if isinstance(files, list) and files:
+                if not (a.get("public") is True and a.get("pushed") is True and a.get("source") == "github"):
+                    bad.append(f"{p}: file paths on a commit that is not public, pushed and from GitHub")
+                if len(files) > FILES_MAX:
+                    bad.append(f"{p}: more than {FILES_MAX} files listed")
+                if not (isinstance(n, int) and not isinstance(n, bool) and n >= len(files)):
+                    bad.append(f"{p}: nFiles is missing or smaller than the file list")
         today = page.get("today") if isinstance(page.get("today"), dict) else {}
         rows = today.get("byProject") if isinstance(today.get("byProject"), list) else []
         for i, r in enumerate(rows):
@@ -837,6 +873,14 @@ class Gate:
         return bad
 
 
+def repo_path(v):
+    """Type `path`: repo-relative (no leading /), no . / .. / blank segment, no drive letter, no backslash,
+    no control or format characters, at most PATH_MAX characters."""
+    return (isinstance(v, str) and 0 < len(v) <= PATH_MAX and v[0] != "/" and "\\" not in v
+            and not re.match(r"[A-Za-z]:", v) and all(unicodedata.category(ch)[0] != "C" for ch in v)
+            and all(part.strip() and part not in (".", "..") for part in v.split("/")))
+
+
 def _strings(node, out):
     if isinstance(node, dict):
         for k, v in node.items():
@@ -873,16 +917,21 @@ def check_terms(t):
         raise SetupError("terms file: match maps a term to substring or word")
 
 
-CONFIG_KEYS = {"privateTitles", "hidden", "keywords", "privateProjects", "codes", "githubOwners", "allow"}
+CONFIG_KEYS = {"privateTitles", "hidden", "keywords", "privateProjects", "codes", "githubOwners", "allow",
+               "authors", "branchFragments"}
 
 
 def check_config(c):
     extra = set(c) - CONFIG_KEYS
     if extra:
         raise SetupError(f"config: unknown key(s) {sorted(extra)}")
-    for k in ("hidden", "keywords", "privateProjects", "codes", "githubOwners"):
+    for k in ("hidden", "keywords", "privateProjects", "codes", "githubOwners", "authors", "branchFragments"):
         if not (isinstance(c.get(k, []), list) and all(isinstance(x, str) for x in c.get(k, []))):
             raise SetupError(f"config: {k} must be a list of strings")
+    if not all(LOGIN.fullmatch(a) for a in c.get("authors", [])):
+        raise SetupError("config: authors must be GitHub logins")
+    if not all(x.strip() for x in c.get("branchFragments", [])):
+        raise SetupError("config: branchFragments must not hold empty entries")
     if not isinstance(c.get("allow", {}), dict):
         raise SetupError("config: [allow] must be a table")
     bad = [k for k in c.get("allow", {}) if FIELDS.get(k, "").rstrip("?") != "text"]

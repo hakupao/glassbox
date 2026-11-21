@@ -46,6 +46,11 @@ CREATE TABLE IF NOT EXISTS commits (
   PRIMARY KEY (source, hash, machine)
 );
 CREATE INDEX IF NOT EXISTS commits_t ON commits(t);
+-- Files per commit hash (S17 R09). Added without a schema bump: CREATE TABLE IF NOT EXISTS lets
+-- a live database just gain it. n: file count (probe report or GitHub); files: JSON list of
+-- {"s": "M|A|R|D", "p": path} from GitHub's single-commit endpoint, at most 50, or NULL;
+-- fetched: when GitHub was asked (NULL = not yet). A GitHub list wins over a probe count.
+CREATE TABLE IF NOT EXISTS commit_files (hash TEXT PRIMARY KEY, n INTEGER, files TEXT, fetched REAL);
 CREATE TABLE IF NOT EXISTS machine_state (machine TEXT PRIMARY KEY, status TEXT, uptime INTEGER, updated REAL);
 CREATE TABLE IF NOT EXISTS machine_stats (
   machine TEXT, t TEXT, cpu REAL, mem_used REAL, mem_total REAL, disk_used REAL, disk_total REAL,

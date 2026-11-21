@@ -280,7 +280,7 @@ class GateCliTest(unittest.TestCase):
     def test_default_config_requires_prefix_only_private_titles(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = Path(d) / "public.toml"                     # no privateTitles: the default applies
-            cfg.write_text('githubOwners = ["example-owner"]\nhidden = ["tailnet"]\n'
+            cfg.write_text('githubOwners = ["example-owner"]\nhidden = ["tailnet"]\nbranchFragments = ["example-owner"]\n'
                            '[allow]\n"services[].name" = ["gitea"]\n', encoding="utf-8")
             page = json.loads((RT / "samples" / "pass-minimal.json").read_text(encoding="utf-8"))
             terms, ctx = RT / "context" / "terms.json", RT / "context" / "private.json"
@@ -295,6 +295,35 @@ class GateCliTest(unittest.TestCase):
                         self.assertIn("must be only a prefix", out)
             cfg.write_text('privateTitles = "full"\n', encoding="utf-8")
             self.assertEqual(run(p, "--terms", terms, "--config", cfg, "--private", ctx)[0], 2)
+
+    def test_branch_fragments_exempt_only_when_listed(self):
+        """R10 (D4): the context has a private branch "example-owner/marmotte". Without branchFragments the
+        parts example / owner are private names and the public commit link that spells them is refused;
+        listed, they pass. Listing never exempts a private repo name, and other parts stay private."""
+        terms, ctx = RT / "context" / "terms.json", RT / "context" / "private.json"
+        base = (RT / "context" / "public.toml").read_text(encoding="utf-8")
+        self.assertIn('branchFragments = ["example-owner"]\n', base)
+        with tempfile.TemporaryDirectory() as d:
+            cfg = Path(d) / "public.toml"
+            page = json.loads((RT / "samples" / "pass-minimal.json").read_text(encoding="utf-8"))
+            p = Path(d) / "page.json"
+            p.write_text(json.dumps(page), encoding="utf-8")
+            for listed, rc in (("", 1), ('branchFragments = ["example-owner"]\n', 0), ('branchFragments = ["owner", "EXAMPLE"]\n', 0)):
+                with self.subTest(listed=listed):
+                    cfg.write_text(base.replace('branchFragments = ["example-owner"]\n', listed), encoding="utf-8")
+                    code, out = run(p, "--terms", terms, "--config", cfg, "--private", ctx)
+                    self.assertEqual(code, rc, out)
+                    if rc:
+                        self.assertIn("private name", out)
+            cfg.write_text(base.replace('branchFragments = ["example-owner"]', 'branchFragments = ["example-owner", "orchid-batch"]'),
+                           encoding="utf-8")
+            for title in ("docs: marmotte notes", "docs: orchid-batch notes"):
+                with self.subTest(title=title):
+                    page["activity"][0]["title"] = title
+                    p.write_text(json.dumps(page), encoding="utf-8")
+                    code, out = run(p, "--terms", terms, "--config", cfg, "--private", ctx)
+                    self.assertEqual(code, 1, out)
+                    self.assertIn("private name", out)
 
     def test_publish_directory_is_single_file(self):
         """Review M2c: index.html plus an optional one-line CNAME; any other entry is refused."""

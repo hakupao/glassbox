@@ -134,7 +134,9 @@
      "t": "2026-11-17T00:48:00Z",
      "hash": "e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4",
      "branch": "main",
-     "title": "fix: handle empty mapping rule"
+     "title": "fix: handle empty mapping rule",
+     "pushed": false,
+     "nFiles": 2
     }
    ]
   }

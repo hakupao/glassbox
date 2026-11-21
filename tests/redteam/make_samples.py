@@ -43,7 +43,7 @@ def title(t): return lambda o: act(o).__setitem__("title", t)
 
 js("pass-minimal", "valid public page: merged private row, model other, private commit done right, 'owl' only inside 'bowling'", "pass", None)
 js("block-unknown-top-key", "rule 1: key not in the table", "block", "field not in public_fields.json", lambda o: o.__setitem__("notes", "x"))
-js("block-unknown-nested-key", "rule 1: author on a commit", "block", "field not in public_fields.json", lambda o: act(o).__setitem__("author", "someone"))
+js("block-unknown-nested-key", "rule 1: reviewer on a commit (author is public since S17 R09)", "block", "field not in public_fields.json", lambda o: act(o).__setitem__("reviewer", "someone"))
 js("block-hourly", "rule 7: today.hourly never public", "block", "field not in public_fields.json", lambda o: o["today"].__setitem__("hourly", [{"hour": 9, "requests": 3, "costUsd": 0.1}]))
 js("block-masked-extra-key", "placeholder carrying a length hint", "block", "placeholder must be exactly", lambda o: o["services"][1].__setitem__("name", {"masked": True, "len": 13}))
 js("block-group-outside-byproject", "merged-row placeholder only allowed in today.byProject", "block", "placeholder must be exactly", lambda o: o["services"][1].__setitem__("name", {"masked": True, "group": "private"}))
@@ -122,6 +122,62 @@ js("block-short-forced-substring", "per-term match mode: short term forced to su
 js("block-runtime-hash", "runtime private name: a private commit hash", "block", "private name", lambda o: act(o).__setitem__("hash", "e1f2a3b"))
 js("block-runtime-name-in-key", "a private name smuggled in as a key", "block", "private name", lambda o: o["today"].__setitem__("orchid-batch", 1))
 js("pass-word-mode-override", "term 'nightjar' set to word mode: 'nightjars' passes", "pass", None, title("docs: nightjars and owls"))
+
+# --- S17 R09: commit author, file count and file paths (R10: listed branch fragments) ---------------
+FILES = [{"s": "M", "p": "hub/export.py"}, {"s": "A", "p": "docs/日本語 notes (v2).md"}, {"s": "R", "p": "web/pages.js"}]
+def files(lst, n=None, who=act):
+    return lambda o: who(o).update(files=copy.deepcopy(lst), nFiles=len(lst) if n is None else n)
+def path(p): return files([{"s": "M", "p": p}])
+js("pass-files-author", "public pushed GitHub commit: configured author, paths, count; private commit keeps a count only; "
+   "the author is also a listed branch fragment (branchFragments), so it is not a private name", "pass", None,
+   lambda o: (files(FILES, 7)(o), act(o).__setitem__("author", "example-owner"), priv(o).__setitem__("nFiles", 2)))
+js("pass-nfiles-zero", "merge commit: nFiles 0, no list; nulls on every new field", "pass", None,
+   lambda o: (act(o).update(nFiles=0, author=None), priv(o).update(nFiles=None, author=None)))
+js("block-files-private-name", "rule 6: a path carries a private repo name", "block", "private name", path("src/falcon_ledger/rules.py"))
+js("block-files-private-camel", "rule 6: a path carries a private name in camelCase", "block", "private name", path("lib/OrchidBatch.ts"))
+js("block-files-short-term", "rule 6: a path carries a short private word as a directory", "block", "private name", path("x/owl/config.py"))
+js("block-files-private-hash", "rule 6: a path carries a private commit id", "block", "private name", path("notes/e1f2a3b.md"))
+js("block-files-branch-fragment", "rule 6: a path carries an unlisted private branch fragment", "block", "private name", path("docs/marmotte.md"))
+js("block-files-keyword", "rule 5/6: a path carries a blocked keyword", "block", "private name", path("plans/Project_Nightjar.md"))
+js("block-files-email", "pattern: a path that reads as an e-mail", "block", "email", path("docs/team@example.com"))
+js("block-files-ip", "pattern: a path that reads as an IP address", "block", "ipv4", path("releases/203.0.113.7/notes.md"))
+# Review R09 M1: no single path holds the name, the serialized stream does ("p" + "ixel-forge", "field-note" + next "s").
+js("block-files-join-key", "rule 6: a path joined to the key before it spells a private project", "block", "private name",
+   path("ixel-forge/readme.md"))
+js("block-files-join-next", "rule 6: a path joined to the next file entry spells a private project", "block", "private name",
+   files([{"s": "M", "p": "docs/field-note"}, {"s": "M", "p": "b.md"}]))
+js("block-files-on-private", "files on a private commit", "block", "file paths on a commit that is not public", files(FILES, who=priv))
+js("block-files-unpushed", "files on an unpushed commit of a public repo", "block", "file paths on a commit that is not public",
+   lambda o: (files(FILES)(o), act(o).__setitem__("pushed", False)))
+js("block-files-local", "files on a local commit of a public repo (pushed alone is not enough: any remote)", "block",
+   "file paths on a commit that is not public", lambda o: (files(FILES)(o), act(o).update(source="local", branch=None, url=None)))
+js("block-files-gitea", "files on a Gitea commit", "block", "file paths on a commit that is not public",
+   lambda o: (files(FILES)(o), act(o).update(source="gitea")))
+js("block-files-too-many", "more than 50 paths", "block", "more than 50 files",
+   files([{"s": "M", "p": f"src/f{i}.py"} for i in range(51)]))
+js("block-files-nfiles-short", "nFiles smaller than the list", "block", "nFiles is missing or smaller", files(FILES, 2))
+js("block-files-nfiles-missing", "list without nFiles", "block", "nFiles is missing or smaller",
+   lambda o: (files(FILES)(o), act(o).__setitem__("nFiles", None)))
+js("block-files-null", "files: null (the exporter drops the key instead)", "block", "must be a list",
+   lambda o: act(o).update(files=None, nFiles=3))
+js("block-nfiles-string", "rule 3: nFiles as a string", "block", "is not number", lambda o: act(o).__setitem__("nFiles", "3"))
+js("block-nfiles-negative", "nFiles below zero", "block", "nFiles must be a whole count", lambda o: priv(o).__setitem__("nFiles", -1))
+js("block-nfiles-fraction", "nFiles not whole", "block", "nFiles must be a whole count", lambda o: priv(o).__setitem__("nFiles", 2.5))
+for name, bad in (("absolute", "/etc/hosts.txt"), ("dotdot", "docs/../../x.md"), ("dot", "./x.md"),
+                  ("backslash", "docs\\x.md"), ("drive", "C:/x.md"), ("control", "docs/a\u0007b.md"),
+                  ("zero-width", "docs/a\u200bb.md"), ("blank-segment", "docs/ /x.md"), ("empty-segment", "docs//x.md"),
+                  ("long", "d/" * 150 + "x.md"), ("empty", "")):
+    js(f"block-path-{name}", f"type path: {name}", "block", "is not path", path(bad))
+js("block-files-status", "file status off the closed list", "block", "is not enum", files([{"s": "X", "p": "a.md"}]))
+js("block-files-status-word", "GitHub's status word instead of the letter", "block", "is not enum", files([{"s": "modified", "p": "a.md"}]))
+js("block-files-extra-key", "a file entry with a key outside the table", "block", "field not in public_fields.json",
+   files([{"s": "M", "p": "a.md", "sha": "4be0d71"}]))
+js("block-author-private", "rule 4: a private commit keeps the author", "block", "private commit keeps author",
+   lambda o: priv(o).__setitem__("author", "example-owner"))
+js("block-author-free-text", "author must be a configured login, not free text", "block", "is not author",
+   lambda o: act(o).__setitem__("author", "someone-else"))
+js("block-author-masked", "author is not a Text field: a placeholder is refused", "block", "where author? is expected",
+   lambda o: act(o).__setitem__("author", {"masked": True}))
 
 def page_js(o): return "window.GB = " + json.dumps(o, ensure_ascii=False) + ";"
 def ht(name, why, expect, reason, head="", body="", data=None):

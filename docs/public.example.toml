@@ -28,6 +28,20 @@ codes = []
 # Commit links must point to https://github.com/<owner>/<public repo>/commit/<hash>.
 githubOwners = ["example-owner"]
 
+# Commit author shown on public commits (S17 R09): the hub's GitHub login, and only if it is
+# listed here. Anything else, and every private commit, gets author = null. Missing or [] means
+# no author is published. Entries must be GitHub logins.
+authors = ["example-owner"]
+
+# Branch parts that may be public (R10, owner's decision D4). A telling part of a private branch
+# name (e.g. "example-owner" of "example-owner/topic") is a private name unless it spells a public
+# repo name or is listed here. Each entry is split on - / _ like a branch name and every part is
+# exempt ("IT-Passport-Learning" exempts "Passport" and "Learning"). A listed word that is also a
+# private repo name, term or keyword stays private, and so does a part that is a component of one
+# (listing "Falcon-Tools" frees "tools" but not the "falcon" of a private "falcon-ledger").
+# Usually: your GitHub login, if your branches start with it. Unlisted, the login is masked and the author and commit links are dropped.
+branchFragments = ["example-owner"]
+
 # Per-field allowlists for Text values (rule 2). A value not listed here is masked.
 # Names of public GitHub repos are added to activity[].repo and today.byProject[].project
 # automatically, and clean branch names of public commits to activity[].branch.

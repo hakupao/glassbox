@@ -1,0 +1,306 @@
+{
+ "schema": "glassbox.page/1",
+ "view": "public",
+ "generatedAt": "2026-11-17T10:30:00+09:00",
+ "tz": "Asia/Tokyo",
+ "pricingVersion": "2026-11-17",
+ "today": {
+  "requests": 120,
+  "sessions": 3,
+  "unpricedRequests": 0,
+  "cacheHitRate": 0.8,
+  "costUsd": 4.2,
+  "byModel": [
+   {
+    "model": "claude-opus-5-5",
+    "agent": "claude-code",
+    "requests": 100,
+    "costUsd": 4.0
+   },
+   {
+    "model": "other",
+    "agent": "codex",
+    "requests": 20,
+    "costUsd": null
+   }
+  ],
+  "byProject": [
+   {
+    "project": "sdtm-pedia",
+    "public": true,
+    "requests": 70,
+    "costUsd": 2.5
+   },
+   {
+    "project": {
+     "masked": true,
+     "group": "private"
+    },
+    "public": false,
+    "requests": 50,
+    "costUsd": 1.7
+   }
+  ]
+ },
+ "activity": [
+  {
+   "t": "2026-11-17T10:12:00+09:00",
+   "source": "github",
+   "repo": "sdtm-pedia",
+   "public": true,
+   "title": "docs: bowling score example for v1.2.3 at 10:30",
+   "branch": "main",
+   "hash": "4be0d71",
+   "url": "https://github.com/example-owner/sdtm-pedia/commit/4be0d71",
+   "machine": "A",
+   "pushed": true,
+   "files": [
+    {
+     "s": "M",
+     "p": "src/f0.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f1.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f2.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f3.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f4.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f5.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f6.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f7.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f8.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f9.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f10.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f11.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f12.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f13.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f14.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f15.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f16.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f17.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f18.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f19.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f20.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f21.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f22.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f23.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f24.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f25.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f26.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f27.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f28.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f29.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f30.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f31.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f32.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f33.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f34.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f35.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f36.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f37.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f38.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f39.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f40.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f41.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f42.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f43.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f44.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f45.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f46.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f47.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f48.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f49.py"
+    },
+    {
+     "s": "M",
+     "p": "src/f50.py"
+    }
+   ],
+   "nFiles": 51
+  },
+  {
+   "t": "2026-11-17T09:00:00+09:00",
+   "source": "local",
+   "repo": {
+    "masked": true
+   },
+   "public": false,
+   "title": "fix: handle empty mapping rule",
+   "branch": null,
+   "hash": null,
+   "url": null,
+   "machine": null,
+   "pushed": false
+  }
+ ],
+ "services": [
+  {
+   "name": "gitea",
+   "kind": "both",
+   "machine": "V",
+   "status": "up",
+   "uptimePct24h": 100.0,
+   "cpuPct": 0.4,
+   "memBytes": 210000000.0
+  },
+  {
+   "name": {
+    "masked": true
+   },
+   "kind": "container",
+   "machine": "V",
+   "status": "down",
+   "uptimePct24h": null,
+   "cpuPct": null,
+   "memBytes": null
+  }
+ ],
+ "tailnet": [],
+ "hidden": [
+  "tailnet"
+ ]
+}

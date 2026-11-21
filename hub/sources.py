@@ -13,6 +13,7 @@ private repository names.
 Known limits (CONTRACT §2.1): GitHub commits are default-branch only and at most 100 repositories;
 commits on other branches or private repos still arrive through the probes' local git snapshots.
 """
+import http.client
 import json
 import os
 import re
@@ -55,7 +56,8 @@ def _http(url, token=None, data=None, auth="Bearer", timeout=30):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read() or b"null"), r.headers
     except urllib.error.HTTPError as e:
-        if e.code == 429 or (e.code == 403 and e.headers.get("X-RateLimit-Remaining") == "0"):
+        if e.code == 429 or (e.code == 403 and (e.headers.get("X-RateLimit-Remaining") == "0"
+                                                or e.headers.get("Retry-After"))):     # secondary limit
             raise RateLimited(e.headers.get("X-RateLimit-Reset") or "") from None
         raise
 
@@ -102,6 +104,7 @@ def github(conn, cfg):
         raise RuntimeError("github graphql returned errors")
     viewer = res["data"]["viewer"]
     login = viewer["login"]
+    db.put(conn, "github.login", login)                  # the commit author shown on the page (S17 R09)
     cc = viewer["contributionsCollection"]
     cal = cc["contributionCalendar"]
     db.put(conn, "github.calendar", json.dumps({
@@ -149,8 +152,65 @@ def github(conn, cfg):
         checked = check_visibility(conn, token, api)
     except RateLimited:
         checked = "rate limited"
+    try:
+        files = fetch_files(conn, token, api)
+    except RateLimited:
+        files = "rate limited"
     return {"repos": len(repos), "commits": n_commits, "failed": failed, "total": cal["totalContributions"],
-            "visibility_checked": checked}
+            "visibility_checked": checked, "files_fetched": files}
+
+
+# GitHub's commit status -> the page's file status (CONTRACT §2): copied counts as added, changed as modified.
+FILE_STATUS = {"added": "A", "removed": "D", "modified": "M", "renamed": "R", "copied": "A", "changed": "M"}
+FILES_MAX = 50              # paths kept per commit; n carries the true count
+FILES_PER_RUN = 200         # single-commit requests per run, newest first
+FAILS_IN_A_ROW = 5          # consecutive failed requests that end the run's file fetch
+
+
+def fetch_files(conn, token, api="https://api.github.com", limit=FILES_PER_RUN):
+    """File lists of public GitHub commits from GET /repos/{nwo}/commits/{sha}, cached by hash for good
+    (commits are immutable). Only commits stored from GitHub and public now; the page and the exporter
+    decide again whether a list is shown. 404 / 422 (gone, not a commit) are cached as "no list" so the
+    budget moves on; other HTTP errors, timeouts and bad answers skip that commit until the next run,
+    and after FAILS_IN_A_ROW of them the run stops; RateLimited propagates after saving progress."""
+    todo = conn.execute(
+        "SELECT c.hash, c.remote FROM commits c LEFT JOIN commit_files f ON f.hash = c.hash "
+        "WHERE c.source = 'github' AND c.private = 0 AND f.fetched IS NULL AND c.remote LIKE 'github.com/%' "
+        "GROUP BY c.hash ORDER BY MAX(c.t) DESC LIMIT ?", (limit,)).fetchall()
+    done, fails = 0, 0
+    try:
+        for h, remote in todo:
+            if fails >= FAILS_IN_A_ROW:
+                print("github: commit file lists keep failing; stopping until the next run", file=sys.stderr)
+                break
+            n, files = None, None
+            try:
+                res, _ = _http(f"{api}/repos/{remote.split('/', 1)[1]}/commits/{h}", token)
+                listed = [f for f in (res or {}).get("files") or [] if isinstance(f, dict) and isinstance(f.get("filename"), str)]
+                files = [{"s": FILE_STATUS.get(f.get("status"), "M"), "p": f["filename"]} for f in listed[:FILES_MAX]]
+                n = len(listed)
+            except urllib.error.HTTPError as e:
+                if e.code not in (404, 422):
+                    fails += 1
+                    print(f"github: a commit file list failed with HTTP {e.code}", file=sys.stderr)
+                    continue
+            except (OSError, http.client.HTTPException, ValueError, AttributeError) as e:   # timeout, reset, cut short, not JSON
+                fails += 1
+                print(f"github: a commit file list failed ({e.__class__.__name__})", file=sys.stderr)
+                continue
+            fails = 0
+            # The list may be cut at its first page: n is the larger of GitHub's and the probe's count,
+            # in either order of arrival (ingest does the same).
+            conn.execute(
+                "INSERT INTO commit_files(hash, n, files, fetched) VALUES(?,?,?,?) ON CONFLICT(hash) DO UPDATE SET "
+                "n = CASE WHEN excluded.n IS NULL THEN commit_files.n "
+                "ELSE MAX(excluded.n, COALESCE(commit_files.n, 0)) END, "
+                "files = excluded.files, fetched = excluded.fetched",
+                (h, n, None if files is None else json.dumps(files, ensure_ascii=False), time.time()))
+            done += 1
+    finally:
+        conn.commit()
+    return done
 
 
 def set_visibility(conn, remote, vis):

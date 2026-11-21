@@ -1906,7 +1906,27 @@
    "hash": "a91c3e2",
    "url": "https://github.com/hakupao/IT-Passport-Learning/commit/a91c3e2",
    "machine": "A",
-   "pushed": true
+   "pushed": true,
+   "author": "hakupao",
+   "nFiles": 4,
+   "files": [
+    {
+     "s": "A",
+     "p": "chapters/12/answers.md"
+    },
+    {
+     "s": "M",
+     "p": "chapters/12/README.md"
+    },
+    {
+     "s": "R",
+     "p": "assets/fig-12-3.png"
+    },
+    {
+     "s": "D",
+     "p": "drafts/ch12.txt"
+    }
+   ]
   },
   {
    "t": "2026-11-17T09:55:00+09:00",
@@ -1918,7 +1938,9 @@
    "hash": "5c1d9e0",
    "url": null,
    "machine": "A",
-   "pushed": false
+   "pushed": false,
+   "author": "hakupao",
+   "nFiles": 3
   },
   {
    "t": "2026-11-17T09:05:00+09:00",
@@ -1930,7 +1952,15 @@
    "hash": "4be0d71",
    "url": "https://github.com/hakupao/sdtm-pedia/commit/4be0d71",
    "machine": "A",
-   "pushed": true
+   "pushed": true,
+   "author": "hakupao",
+   "nFiles": 1,
+   "files": [
+    {
+     "s": "M",
+     "p": "docs/domains/AE.md"
+    }
+   ]
   },
   {
    "t": "2026-11-17T09:00:00+09:00",
@@ -1944,7 +1974,9 @@
    "hash": null,
    "url": null,
    "machine": null,
-   "pushed": false
+   "pushed": false,
+   "author": null,
+   "nFiles": 2
   },
   {
    "t": "2026-11-16T22:00:00+09:00",
@@ -1958,7 +1990,9 @@
    "hash": null,
    "url": null,
    "machine": null,
-   "pushed": true
+   "pushed": true,
+   "author": null,
+   "nFiles": 6
   },
   {
    "t": "2026-11-16T21:02:00+09:00",
@@ -1970,7 +2004,9 @@
    "hash": "7f20a19",
    "url": "https://github.com/hakupao/shuttle-path/commit/7f20a19",
    "machine": "A",
-   "pushed": true
+   "pushed": true,
+   "author": "hakupao",
+   "nFiles": 0
   }
  ],
  "machines": [

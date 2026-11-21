@@ -15,6 +15,13 @@ private one: a path not in that table cannot reach the output. On the way:
 - today.byProject merges private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
+- Commit files (S17 R09): `files` only on public, pushed GitHub commits, at most 50, and only when
+  every path is a clean repo-relative path that carries no private name, term, branch part, commit
+  id or pattern the gate looks for; otherwise that one commit keeps only its count `nFiles`. The
+  snapshot is never refused because of a path. `author` only on public commits and only when it is
+  one of the configured `authors` and no private word; otherwise null.
+- Branch parts (R10, D4): a part of a private branch is a private name unless it is listed in
+  `branchFragments` (each entry split on - / _ like a branch) or spells a public repo name.
 
 Visibility (review H1): a repo / project name is public only if every occurrence in the page
 (activity, today.byProject, code.*, usageDays[].byProject) is public and not Gitea.
@@ -87,6 +94,17 @@ SCRUB = [
 ]
 
 
+# What the gate looks for in EVERY value, not only in titles (paths are not titles: a ticket-like
+# docs/ADR-001.md or a dotted src/MyApp.Core/ is fine). ':' '~' '\\' '%' '&' and quotes are not path
+# characters (PATH_CHARS), so URLs, IPv6, drive letters and encodings cannot occur in a kept path.
+PATH_FLAGS = SCRUB[:3] + [                                                          # private key, tokens, JWT
+    re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ts\.net|home\.arpa)\b"),                   # tailnet / LAN hosts
+    re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),                       # e-mail
+    re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\d)"),                         # IPv4
+    re.compile(r"/(?:Users|home|Volumes|root|private|mnt|srv|var)/"),                  # well-known dirs
+]
+
+
 class ExportError(Exception):
     pass
 
@@ -97,7 +115,15 @@ def _no_constant(name):
 
 # --- config ----------------------------------------------------------------------------------
 
-CONFIG_KEYS = {"privateTitles", "hidden", "keywords", "privateProjects", "codes", "githubOwners", "allow"}
+CONFIG_KEYS = {"privateTitles", "hidden", "keywords", "privateProjects", "codes", "githubOwners", "allow",
+               "authors", "branchFragments"}
+LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")          # a GitHub login
+FILES_MAX = 50
+PATH_MAX = 300
+FILE_STATUS = ("M", "A", "R", "D")
+# Characters a published path may hold. Anything else (%, &, \, quotes, <, >, :, ~, =, ...) could be
+# decoded or read as a URL, path or address by the gate, so such a commit keeps only its count.
+PATH_CHARS = re.compile(r"[\w .\-/+@,()\[\]#!$]+")
 TERMS_KEYS = {"_note", "terms", "allow", "match"}
 
 
@@ -126,7 +152,15 @@ def load_config(path=DEFAULT_CONFIG, terms=None):
         "codes": set(raw.get("codes", [])),
         "githubOwners": set(raw.get("githubOwners", [])),
         "allow": {k: set(v) for k, v in raw.get("allow", {}).items()},
+        "authors": raw.get("authors", []),
+        "branchFragments": raw.get("branchFragments", []),
     }
+    for k in ("authors", "branchFragments"):
+        if not (isinstance(cfg[k], list) and all(isinstance(x, str) and x.strip() for x in cfg[k])):
+            raise ExportError(f"{k} must be a list of non-empty strings")
+    if not all(LOGIN.fullmatch(a) for a in cfg["authors"]):
+        raise ExportError("authors: each entry must be a GitHub login")
+    cfg["authors"] = set(cfg["authors"])
     if cfg["privateTitles"] not in ("redacted", "prefix-only"):
         raise ExportError("privateTitles must be \"redacted\" or \"prefix-only\"")
     bad = [h for h in cfg["hidden"] if h not in HIDEABLE]
@@ -229,6 +263,16 @@ class Matcher:
                 self.long.add(n)
             elif tokens(t):
                 self.short.append(tokens(t))
+
+    def hits(self, text):
+        """Every term found in text (as its normal form or token tuple): to tell which hits are new."""
+        flat, toks = norm(text), tokens(text)
+        out = {n for n in self.long if n in flat}
+        for tt in self.short:
+            k = len(tt)
+            if any(toks[i:i + k] == tt for i in range(len(toks) - k + 1)):
+                out.add(tuple(tt))
+        return out
 
     def hit(self, text):
         flat = norm(text)
@@ -370,7 +414,29 @@ def _type_ok(v, typ, cfg, url_rx):
         "model": lambda: v in MODELS or v == "other",
         "url": lambda: bool(url_rx and url_rx.fullmatch(v)),
         "title": lambda: True,
+        "path": lambda: is_path(v),
+        "author": lambda: v in cfg["authors"] and bool(LOGIN.fullmatch(v)),
     }[kind]()
+
+
+def is_path(v):
+    """Type `path`: repo-relative, no leading /, no . or .. or blank segment, no drive letter or
+    backslash, no control / format characters, at most PATH_MAX characters."""
+    return (isinstance(v, str) and 0 < len(v) <= PATH_MAX and not v.startswith("/") and "\\" not in v
+            and not re.match(r"[A-Za-z]:", v) and not any(unicodedata.category(c)[0] == "C" for c in v)
+            and all(seg.strip() and seg not in (".", "..") for seg in v.split("/")))
+
+
+def branch_parts(listed):
+    """Normalised parts of the configured branchFragments, split like branch names."""
+    return {norm(x) for w in listed for x in re.split(r"[-/_]+", w) + [w] if norm(x)}
+
+
+def clean_path(p, matcher):
+    """A path the gate will not refuse: the path type, a plain character set, no private word and
+    none of the patterns the gate checks in every value (PATH_FLAGS)."""
+    return (is_path(p) and bool(PATH_CHARS.fullmatch(p)) and not matcher.hit(p)
+            and not any(rx.search(p) for rx in PATH_FLAGS))
 
 
 SEMVER = re.compile(r"\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?")      # review L3
@@ -515,19 +581,31 @@ def export(page, cfg, terms):
     # A part spelling a public repo name, in any case, reveals nothing (same rule as the gate);
     # other allowlisted values are per field and keep the exact match.
     shown = {norm(r) for r in public_repos if norm(r) not in private_keys}
+    # R10 (D4): explicitly public parts, except a part that is a component of a private name, term,
+    # keyword or blacklisted project ("Falcon-Tools" listed does not free the "falcon" of falcon-ledger).
+    # Every Text value that is not a branch or a public repo counts here, allowlisted ones included: the
+    # gate's private-name set, so the exporter is never looser than the gate.
+    pub_norm = {norm(r) for r in public_repos}
+    protected = {norm(x) for w in names | {v for g, v in texts if g not in NAME_FIELDS_SKIP and norm(v) not in pub_norm}
+                 | set(terms["terms"]) | set(cfg["keywords"])
+                 | cfg["privateProjects"]
+                 for x in [w, *re.split(r"[-/_.\s]+", w)] if norm(x)}
+    listed = branch_parts(cfg["branchFragments"]) - protected
     frags = {f for f in frags if norm(f) not in VOCAB and f not in allow_all and norm(f) not in shown
-             and not is_code(f, cfg)}
+             and norm(f) not in listed and not is_code(f, cfg)}
     modes = dict(terms["match"])
     # Commit ids and branch parts: whole tokens. The stricter substring match of a real name,
     # term or keyword with the same spelling, and explicit match entries, are kept.
-    stronger = {x.casefold() for x in names | set(terms["terms"]) | set(cfg["keywords"])}
+    stronger = {x.casefold() for x in names | set(terms["terms"]) | set(cfg["keywords"]) | cfg["privateProjects"]}
     for h in hashes | frags:
         if h.casefold() not in stronger:
             modes.setdefault(h.casefold(), "word")
-    matcher = Matcher(names | hashes | hosts | frags | set(terms["terms"]) | set(cfg["keywords"]), modes)
+    matcher = Matcher(names | hashes | hosts | frags | set(terms["terms"]) | set(cfg["keywords"])
+                      | cfg["privateProjects"], modes)
 
     url_rx = public_url_rx(public_repos, cfg["githubOwners"])
     branches = set()
+    notes = collections.Counter()           # degradations, counted for the context (no names)
     for e in activity:
         title = e.get("title") if isinstance(e.get("title"), str) else ""
         title = scrub_title(title, matcher)
@@ -539,7 +617,11 @@ def export(page, cfg, terms):
                 branches.add(b)
             else:
                 e["branch"] = None if b is None else _PRIVATE_GROUP_BRANCH
-            if not (isinstance(e.get("url"), str) and url_rx and url_rx.fullmatch(e["url"])):
+            # A link spells the owner: when that login is an unlisted private branch part (R10), the gate
+            # would refuse the page, so the link goes instead.
+            if not (isinstance(e.get("url"), str) and url_rx and url_rx.fullmatch(e["url"]) and not matcher.hit(e["url"])):
+                if isinstance(e.get("url"), str) and url_rx and url_rx.fullmatch(e["url"]):
+                    notes["linksDropped"] += 1
                 e["url"] = None
             if not (isinstance(e.get("hash"), str) and re.fullmatch(r"[0-9a-f]{7,40}", e["hash"])):
                 e["hash"] = None
@@ -551,6 +633,7 @@ def export(page, cfg, terms):
             if cfg["privateTitles"] == "prefix-only":
                 title = prefix_only(title)
         e["title"] = title
+        _files_and_author(e, is_public(e, "repo"), matcher, cfg, notes)
 
     if by_project:
         pub_rows = [p for p in by_project if is_public(p, "project")]
@@ -587,13 +670,79 @@ def export(page, cfg, terms):
         return a
 
     pub = _rebuild(src, "", allowed)
+    _no_joined_names(pub, matcher, notes)
     bad = []
     _check(pub, "", cfg, url_rx, bad)
     if bad:
         raise ExportError("export would publish mistyped values:\n  " + "\n  ".join(bad))
     ctx = {"privateNames": sorted(names | hashes | hosts | frags), "publicRepos": sorted(public_repos),
-           "publicBranches": sorted(branches)}
+           "publicBranches": sorted(branches),
+           "degraded": {k: notes[k] for k in ("filesDropped", "filesJoined", "linksDropped", "authorsDropped")}}
     return pub, ctx
+
+
+def _serial(page):
+    return json.dumps(page, ensure_ascii=False)
+
+
+def _no_joined_names(pub, matcher, notes):
+    """The gate reads the whole snapshot as one normalised stream, so a path joined to the JSON around it
+    ("p": "ixel-forge/..." after ..."p", or one file into the next) can spell a private name no single path
+    holds. Hits not already there without any file list are blamed on the lists: first every commit whose
+    own list causes a new hit loses it, then lists go one commit at a time until no new hit is left.
+    Hits present without any list are not the lists' doing and are left to the gate."""
+    acts = [a for a in pub.get("activity") or [] if isinstance(a, dict) and a.get("files")]
+    if not acts:
+        return
+    lists = {id(a): a["files"] for a in acts}
+    order = {id(a): list(a) for a in acts}              # key order decides what sits next to what
+
+    def hits_with(keep):
+        for a in acts:
+            items = [(k, lists[id(a)] if k == "files" else a[k]) for k in order[id(a)] if k != "files" or id(a) in keep]
+            a.clear()
+            a.update(items)
+        return matcher.hits(_serial(pub))
+
+    base = hits_with(set())
+    keep = {id(a) for a in acts}
+    if not (hits_with(keep) - base):
+        return
+    for a in acts:
+        if hits_with({id(a)}) - base:
+            keep.discard(id(a))
+            notes["filesJoined"] += 1
+    for a in acts:
+        if not (hits_with(keep) - base):
+            break
+        if id(a) in keep:
+            keep.discard(id(a))
+            notes["filesJoined"] += 1
+    hits_with(keep)
+
+
+def _files_and_author(e, public, matcher, cfg, notes):
+    """S17 R09. nFiles: a count or null. files: only for a public, pushed GitHub commit whose
+    published paths are all clean, else dropped for this commit alone (never an export error).
+    author: a configured login on a public commit that hits no private word, else null."""
+    n = e.get("nFiles")
+    n = n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else None
+    files = e.get("files")
+    shown = files[:FILES_MAX] if isinstance(files, list) else []
+    if (public and e.get("pushed") is True and e.get("source") == "github" and shown
+            and all(isinstance(f, dict) and f.get("s") in FILE_STATUS and clean_path(f.get("p"), matcher) for f in shown)):
+        e["files"] = [{"s": f["s"], "p": f["p"]} for f in shown]
+        n = max(n or 0, len(files))
+    else:
+        if public and e.get("pushed") is True and e.get("source") == "github" and shown:
+            notes["filesDropped"] += 1
+        e["files"] = None
+    e["nFiles"] = n
+    a = e.get("author")
+    if public and isinstance(a, str) and a in cfg["authors"] and matcher.hit(a):
+        notes["authorsDropped"] += 1
+    e["author"] = a if (public and isinstance(a, str) and a in cfg["authors"] and LOGIN.fullmatch(a)
+                        and not matcher.hit(a)) else None
 
 
 _PRIVATE_REPO = object()          # rebuilt as {"masked": true}: not a str, never on an allowlist
@@ -644,6 +793,8 @@ def _main(argv=None):
         from .bundle import bundle                    # lane D's single-file page
         site.mkdir(parents=True, exist_ok=True)
         (site / "index.html").write_text(bundle(pub), encoding="utf-8")
+    if any(ctx["degraded"].values()):              # counts only: misconfiguration shows without names
+        print("export degraded (counts): " + ", ".join(f"{k} {v}" for k, v in ctx["degraded"].items() if v), file=sys.stderr)
     print(f"wrote {a.out}" + (f" and {site}/index.html" if site else "")
           + (f" and the context {a.context} (private: keep it out of git)" if a.context else ""))
     return 0

@@ -69,7 +69,8 @@
   "git": [{                           // 快照：每个项目近 60 天内、作者是本人的提交
     "project": "p_…", "remote": true,  // remote=false 表示仓库没有远端
     "commits": [{"t": "…", "hash": "4be0d71…（完整 40 位）", "branch": "main", "title": "docs: …",
-                 "pushed": true}]           // false = 还没推到任何远端；远端来源没有同 hash 时，hub 用 local 兜底（§2.1）
+                 "pushed": true,            // false = 还没推到任何远端；远端来源没有同 hash 时，hub 用 local 兜底（§2.1）
+                 "nFiles": 3}]              // 可选：这个提交改动的文件数（只有数字，没有文件名）；合并提交为 0
   }],
   "jobs": [{"name": "backup", "lastRun": "…", "lastSuccess": "…", "ok": true}]
 }
@@ -94,6 +95,7 @@
 - **git 提交**：
   - 按 `(machine, project)` 整体替换，rebase 掉的旧哈希会自然消失。
   - 只计 `.local` 里配置的作者邮箱写的提交；邮箱本身不上报。
+  - `nFiles`（S17 R09）：每个仓库只多跑一次 `git log --numstat`，在本机数出每个提交的文件数，只上报数字。这次调用失败或超时时，提交照常上报，只是不带 `nFiles`。旧版探针不发这个字段，hub 照常接收；hub 也忽略提交里它不认识的键，所以 hub 可以先于探针升级。
 - **额度**：`account` 是账号标识（邮箱或组织 ID）加盐后 sha256 的前 8 位。hub 按 `(account, agent, window)` 取最新的样本。页面上的 `quota[].account` 用 `.local` 里配置的代号（例如 `"K"`），一个 agent 有多个账号时访客也能区分。没有配置代号的新账号：私有版里显示哈希，公开版里整条丢弃，并在私有版上提示"有未命名账号"。
 - **快照过期**：机器离线超过 15 分钟后，它的 `runtimes` 视为过期，页面上标成灰色；`jobs` 保留最后一次的值。
 - 各个部分都可以省略。省略表示"这次没有新数据"，不等于清空。
@@ -101,6 +103,8 @@
 ### 1.2 不上报
 
 对话正文、命令行、绝对路径、会话 ID、文件名、作者邮箱、账号原文。
+
+（S17 R09 确认：探针只报文件数 `nFiles`，不报文件名。页面上的文件路径只由 hub 从 GitHub 取，见 §2.1。）
 
 ## 2. 页面数据 `glassbox.page/1`
 
@@ -138,7 +142,10 @@
     "t", "source": "github" | "gitea" | "local",
     "repo": Text, "public": bool, "title",
     "branch", "hash", "url", "machine",         // 私有条目在公开版里这几项都是 null
-    "pushed": bool                              // provisional：false = 只在本地，还没推到远端
+    "pushed": bool,                             // provisional：false = 只在本地，还没推到远端
+    "author",                                   // 可选（S17 R09）：hub 的 GitHub 登录名；私有版每条都有，公开版只在公开条目上，私有条目为 null
+    "nFiles",                                   // 可选：文件数（探针或 GitHub），可为 null；合并提交可为 0
+    "files": [{"s": "M" | "A" | "R" | "D", "p"}] // 可选：文件路径，只在去重后来源是 github、仓库当前公开的条目上；最多 50 条，nFiles 是真实总数
   }],
 
   "machines": [{ … }],   // provisional：id、label: Text、role（可为 null）、os（可为 null）、icon（可为 null）、color（可为 null）、online、lastSeen、probeLastReport、system、history
@@ -158,6 +165,12 @@
   - 同一个 hash 只要 github 或 gitea 来源里有，就只保留那一条；`machine` 从同 hash 的 local 行补上。
   - 这取代了原来"local 只保留无远端项目和未推送提交"的规则。
   - **已知偏差**：用 squash 或 rebase 合并时，远端上是一个新 hash，本地分支上的原始提交 hash 在远端找不到，会按 local 兜底再算一次。同一份工作因此被计两次，`contributions` 和 `code.commits` 偏高，偏高的幅度取决于这种合并方式用得多不多。hub 不按标题或时间猜测去重，因为猜错会漏掉真实提交。
+- **作者与文件（S17 R09，2026-11-21 用户决定 D8）**：
+  - `author` = hub 采集 GitHub 时记下的登录名（kv `github.login`），不来自探针。私有版每条都带。
+  - `nFiles` 存在 hub 表 `commit_files`（按 hash），来自探针上报的文件数或 GitHub；路径列表只来自 GitHub；数字取 GitHub 和探针两者中较大的那个，不论谁先到（GitHub 接口第一页最多列 300 个文件，大提交的列表会被截断）。没有 GitHub 列表时，探针报的数字就是 `nFiles`。
+  - `files` 只由 hub 从 GitHub 单提交接口 `GET /repos/{nwo}/commits/{sha}`（`files[].filename`、`status`）取，只取 github 来源、当前公开的提交，按 hash 永久缓存（提交不可变）；每次采集最多 200 个，新的先取，遇到限流（429，或 403 且剩余额度为 0 或带 `Retry-After` 的次级限流）就停到下一轮。404 / 422 也记为已取（没有列表），其他错误（含超时、断连、不是 JSON）跳过这个提交，下一轮重试；连续失败 5 次就停到下一轮。
+  - GitHub 的 status 映射：`added` → A、`removed` → D、`modified` → M、`renamed` → R、`copied` → A、`changed` → M，其他 → M。每个提交最多保留 50 条路径，`nFiles` 是总数。
+  - 私有仓库、Gitea 和 local 提交在两个视图里都只显示文件数。
 - `contributions.days[].count` = 当天去重后的提交数。它不是 GitHub 官方的贡献数，所以 S10 要把 c-v6 的标题"GitHub 贡献"改成"提交"一类的说法。GitHub 主页显示的官方总数（含 issue、PR 等）如果要展示，另外放在可选字段 `contributions.githubOfficialTotal`。
 - `trend` 的最后一项必须是今天，它的值与 `today` 一致。
 - 其余规则（`hub/page.py`）：
@@ -208,8 +221,12 @@
    - 时间与版本：`iso`（ISO 时间）、`date`（`YYYY-MM-DD`）、`hash`（`^[0-9a-f]{7,40}$`）、`semver`（`\d+.\d+.\d+`，可带 `-alpha`、`-beta`、`-rc` 和序号，例如 `1.0.0-rc.1`；不接受构建元数据）；
    - 取值受限：`enum:a|b|…`（封闭枚举）、`const:…`（固定值）；`code`（机器或账号代号，`^[A-Z]$`，或 `.local` 里配置的代号）；`model`（价格表里出现过的模型名，或 `"other"`）；
    - 需要特殊处理：`url:public-repo`（必须指向公开仓库）、`title`（走规则 5）、`text`（规则 2）。
+   - 提交文件与作者（S17 R09）：`path`（仓库内相对路径：不以 `/` 开头，没有 `.`、`..` 或空白的路径段，没有盘符和反斜杠，没有控制字符和格式字符，最长 300 个字符）；`enum:M|A|R|D`（文件状态）；`author`（只接受 `public.local.toml` 里 `authors` 列出的 GitHub 登录名，不接受自由文本，也不是 `text`，所以不能用占位符）。
    - 类型后面加 `?` 表示也可以是 `null`。
-4. **私有条目**（`public: false`）：`branch`、`hash`、`url`、`machine` 一律为 `null`，`t` 截断到整点。
+4. **私有条目**（`public: false`）：`branch`、`hash`、`url`、`machine`、`author` 一律为 `null`，`t` 截断到整点。
+   - **文件路径**（S17 R09）：`files` 非空 ⇒ 条目 `public: true`、`pushed: true` 且 `source == "github"`。只有 `pushed` 不够：它的意思是"推到了某个远端"，可能是私有的 Gitea。`files` 最多 50 条，`nFiles` 必须是不小于列表长度的整数；`nFiles` 在任何条目上都只能是非负整数或 `null`。闸门独立检查这几条。
+   - **导出器按提交降级**：一个提交里只要有一条路径不是干净的 `path`、含字母、数字、空格和 `. _ - / + @ , ( ) [ ] # ! $` 以外的字符（例如 `%`、`&`、反斜杠、引号、反引号、`<`、`>`、`:`、`~`、`=`，它们可能被闸门解码或认成网址、路径）、命中私有名 / 屏蔽词 / 私有分支片段 / 私有提交 hash、或者含有闸门在所有值里都查的内容（邮箱、IPv4、tailnet / 局域网主机名、密钥、家目录等知名目录；工单号、带点的目录名这类只在标题里查的不算），这个提交就去掉 `files`、只保留 `nFiles`。闸门把整份快照序列化后当成一条字符流来查，所以导出器拼好公开页后还要用同样的方式再查一遍：路径和前后的键、下一个文件连起来拼出私有名时（例如 `"p"` 加上 `ixel-forge/…`），只去掉造成命中的那些提交的列表。路径永远不会让整份快照被闸门拒绝。去掉了多少链接、文件列表和作者，导出器只报数字（导出上下文的 `degraded` 和标准错误输出），不报名字，配置有问题时能看出来。
+   - **作者**：导出器只在公开条目上、值在 `authors` 里、且不命中任何私有词时保留 `author`，否则为 `null`。公开提交链接里含私有词（例如登录名是没列出的私有分支片段）时，链接也去掉。
 5. **提交标题**：先过正则打码（密钥、邮箱、IP、路径、工单号 `[A-Z][A-Z0-9]+-\d+`）和关键词屏蔽。`.local` 里的 `privateTitles` 开关有两档：`"prefix-only"`（默认，私有提交只保留 `fix:` 这类前缀；2026-11-17 用户决定）或 `"redacted"`（需显式配置，保留打码后的标题）。默认配置下，闸门也检查私有提交标题只剩前缀。
 6. **名单比对**：`.local/redact_terms.local.json` 里的词和所有私有名字，都不得出现在产物的任何位置，包括 HTML、JS 和注释。
    - **归一化**：先做 NFKC，删掉格式字符（零宽空格、软连字符等），把西里尔 / 希腊同形字母换成拉丁字母，不分大小写，再去掉所有不是字母或数字的字符。
@@ -218,5 +235,6 @@
    - 闸门还会把 HTML 实体、`\uXXXX`、`\u{…}`、`\xHH`、CSS 转义、`%` 编码和 JS 字符串拼接反复解码到不再变化，对每一层都再查一遍。
    - 导出器：标题里只要命中私有名字，整条标题只保留前缀（先解码 `%` 和 HTML 实体再匹配）。
    - `.local` 里可以给单个词指定匹配方式。
+   - **分支片段的豁免**（R10，2026-11-19 用户决定 D4）：私有分支名里有辨识度的片段算私有名，只有两种例外：片段（不分大小写）就是某个公开仓库名（b7e5216，保留：去掉它，配置里没列登录名时 11-19 的停发会重现）；或者它列在 `public.local.toml` 的 `branchFragments` 里。每一项按分支名同样的 `- / _` 拆开，各部分都豁免，例如列出 `IT-Passport-Learning` 就豁免 `Passport`、`Learning`。列出的词如果同时是私有仓库名、屏蔽词等，仍然是私有名：豁免只针对分支片段。拆出来的部分如果是某个私有名、屏蔽词、关键词或 `privateProjects` 的组成词，也不豁免：列出 `Falcon-Tools` 只豁免 `tools`，私有仓库 `falcon-ledger` 的 `falcon` 仍是私有名。导出器和闸门规则相同。
    - **私有名的来源**：私有页里所有 Text 字段的值都算私有名（项目、仓库、机器、服务、tailnet 设备、任务的名字，包括 §2.2 的 `code.repos[].repo`、`code.commits[].repo`、`usageDays[].byProject[].project`），除非它被判定为公开或在允许名单里；另外还有私有提交的 hash、链接主机名和分支名里有辨识度的片段。`warnings` 这类自由文本不做启发式提取：自由文本里的主机名等信息靠 `redact_terms` 词表拦截（2026-11-17 主控裁定）。
 7. `hidden` 里列出的块，值为 `[]`。`today.hourly` 不进公开版。
