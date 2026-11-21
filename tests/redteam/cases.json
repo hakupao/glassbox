@@ -468,6 +468,18 @@
   "why": "rule 6: a path joined to the next file entry spells a private project"
  },
  {
+  "file": "block-title-join-key.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a title joined to the next key spells a private project"
+ },
+ {
+  "file": "pass-title-lt-json.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "a title with '<': as page JSON it spells no private commit id"
+ },
+ {
   "file": "block-files-on-private.json",
   "expect": "block",
   "reason": "file paths on a commit that is not public",
@@ -892,6 +904,12 @@
   "expect": "block",
   "reason": "private commit keeps hash",
   "why": "rule 4 inside the embedded payload"
+ },
+ {
+  "file": "block-html-title-escaped.html",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: the bundler's \\u003c escape of '<b12' spells a private commit id"
  },
  {
   "file": "block-html-fetch.html",

@@ -12,6 +12,8 @@ private one: a path not in that table cannot reach the output. On the way:
   ticket ids, blocked keywords and every private name (normalised match, so `FalconLedger` and
   `falcon_ledger` both go). Private titles keep only a prefix such as `fix:` (`privateTitles =
   "prefix-only"`, the default by the owner's decision of 2026-11-17); "redacted" keeps the scrubbed text.
+  A title that spells a private name only together with the JSON around it, in the page JSON or in
+  index.html (where "<" is escaped), is cut to its prefix too (backlog A5).
 - today.byProject merges private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
@@ -677,7 +679,8 @@ def export(page, cfg, terms):
         raise ExportError("export would publish mistyped values:\n  " + "\n  ".join(bad))
     ctx = {"privateNames": sorted(names | hashes | hosts | frags), "publicRepos": sorted(public_repos),
            "publicBranches": sorted(branches),
-           "degraded": {k: notes[k] for k in ("filesDropped", "filesJoined", "linksDropped", "authorsDropped")}}
+           "degraded": {k: notes[k] for k in ("filesDropped", "filesJoined", "titlesJoined", "linksDropped",
+                                               "authorsDropped")}}
     return pub, ctx
 
 
@@ -685,12 +688,34 @@ def _serial(page):
     return json.dumps(page, ensure_ascii=False)
 
 
+def _hits(node, matcher):
+    """Hits in the forms the gate reads: the page JSON, and the data as hub/page.py html() inlines it in
+    index.html ("<" and U+2028 / U+2029 escaped, so "<b12" reads "u003cb12" there). Same escaping as html();
+    a test pins the two together. The escaped form is scanned only when it differs."""
+    raw = _serial(node)
+    out = matcher.hits(raw)
+    if "<" in raw or "\u2028" in raw or "\u2029" in raw:
+        esc = raw.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+        out |= matcher.hits(esc)
+    return out
+
+
 def _no_joined_names(pub, matcher, notes):
-    """The gate reads the whole snapshot as one normalised stream, so a path joined to the JSON around it
-    ("p": "ixel-forge/..." after ..."p", or one file into the next) can spell a private name no single path
-    holds. Hits not already there without any file list are blamed on the lists: first every commit whose
+    """The gate reads the whole snapshot as one normalised stream, JSON and bundled HTML alike, so text
+    joined to the JSON around it can spell a private name no single value holds. A page without any hit
+    costs one scan per form (both forms are scanned with every term: an escaped "<" makes new short
+    words, so long terms alone would not do). Otherwise file lists, then titles, are degraded."""
+    if not _hits(pub, matcher):
+        return
+    _joined_files(pub, matcher, notes)
+    _joined_titles(pub, matcher, notes)
+
+
+def _joined_files(pub, matcher, notes):
+    """A path joined to the JSON around it ("p": "ixel-forge/..." after ..."p", or one file into the next).
+    Hits not already there without any file list are blamed on the lists: first every commit whose
     own list causes a new hit loses it, then lists go one commit at a time until no new hit is left.
-    Hits present without any list are not the lists' doing and are left to the gate."""
+    Hits present without any list are not the lists' doing and are left to the next pass and the gate."""
     acts = [a for a in pub.get("activity") or [] if isinstance(a, dict) and a.get("files")]
     if not acts:
         return
@@ -702,7 +727,7 @@ def _no_joined_names(pub, matcher, notes):
             items = [(k, lists[id(a)] if k == "files" else a[k]) for k in order[id(a)] if k != "files" or id(a) in keep]
             a.clear()
             a.update(items)
-        return matcher.hits(_serial(pub))
+        return _hits(pub, matcher)
 
     base = hits_with(set())
     keep = {id(a) for a in acts}
@@ -719,6 +744,48 @@ def _no_joined_names(pub, matcher, notes):
             keep.discard(id(a))
             notes["filesJoined"] += 1
     hits_with(keep)
+
+
+def _joined_titles(pub, matcher, notes):
+    """A title joined to the JSON around it ("docs: note" + the next key "branch"; "<b12" escaped in
+    index.html). Hits not already there with every title cut to its prefix are blamed on titles: a title
+    whose own entry shows such a hit only with its full text is cut to its prefix (located per entry, so
+    about one page of extra scanning); if hits remain, titles are cut one at a time, in page order, until
+    none is left. Each cut is final and there are at most as many as titles, so this ends. Hits a prefix
+    still forms are not the full titles' doing and are left to the gate (it refuses; nothing leaks)."""
+    acts = [a for a in pub.get("activity") or [] if isinstance(a, dict) and isinstance(a.get("title"), str)
+            and prefix_only(a["title"]) != a["title"]]
+    if not acts:
+        return
+    full = {id(a): a["title"] for a in acts}
+
+    def cut(a, short=True):
+        a["title"] = prefix_only(full[id(a)]) if short else full[id(a)]
+
+    for a in acts:
+        cut(a)
+    base = _hits(pub, matcher)
+    for a in acts:
+        cut(a, False)
+    new = _hits(pub, matcher) - base
+    if not new:
+        return
+    done = set()
+    for a in acts:
+        shown = _hits(a, matcher)
+        cut(a)
+        if (shown - _hits(a, matcher)) & new:
+            done.add(id(a))
+            notes["titlesJoined"] += 1
+        else:
+            cut(a, False)
+    for a in acts:
+        if not (_hits(pub, matcher) - base):
+            break
+        if id(a) not in done:
+            cut(a)
+            done.add(id(a))
+            notes["titlesJoined"] += 1
 
 
 def _files_and_author(e, public, matcher, cfg, notes):

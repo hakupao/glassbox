@@ -1,5 +1,6 @@
 """Public exporter (S11): whitelist rebuild, masking, scrubbing; its output must pass the gate.
 All data is fabricated (schema/examples/ and the red-team context)."""
+import collections
 import contextlib
 import copy
 import io
@@ -604,6 +605,88 @@ class ExportTest(unittest.TestCase):
         pub, ctx = self.run_export(page, cfg)
         self.assertEqual(pub["activity"][0]["files"], [{"s": "M", "p": "docs/field-note"}])
         self.assertEqual(self.gate(pub, ctx), [])
+
+    def bundled(self, pub):
+        """Gate on index.html as hub/page.py html() builds it (with its "<" escaping)."""
+        from hub import page as hp
+        g = vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.last_input,
+                    vp.load_toml(Path(self.tmp.name) / "public.toml"))
+        tmpl = (f'<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="{vp.CSP}"></head>'
+                f"<body>{hp.MARKER}</body></html>")
+        p = Path(self.tmp.name) / "index.html"
+        p.write_text(hp.html(pub, tmpl), encoding="utf-8")
+        return g.check_file(p)
+
+    def joined_title(self, prep, title, harmless, cut):
+        """Export with `title` on activity[0] and with a harmless control title: only that title is cut, the
+        count says so, every other title equals the control, and JSON and bundled HTML pass the gate."""
+        page = copy.deepcopy(self.page)
+        prep(page)
+        ctrl = copy.deepcopy(page)
+        page["activity"][0]["title"], ctrl["activity"][0]["title"] = title, harmless
+        pub_c, ctx_c = self.run_export(ctrl)
+        self.assertEqual(pub_c["activity"][0]["title"], harmless)
+        self.assertEqual(ctx_c["degraded"]["titlesJoined"], 0)
+        pub, ctx = self.run_export(page)
+        self.assertEqual(pub["activity"][0]["title"], cut)
+        self.assertEqual(ctx["degraded"]["titlesJoined"], 1)
+        self.assertEqual([a["title"] for a in pub["activity"][1:]], [a["title"] for a in pub_c["activity"][1:]])
+        self.assertEqual(self.gate(pub, ctx), [])
+        self.assertEqual(self.bundled(pub), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["title"] = title
+        return forged
+
+    def test_title_joined_to_the_next_key_is_cut_to_its_prefix(self):
+        """Backlog A5 (1): "docs: note" + the next key "branch" spells the private project note-branch. With or
+        without file lists on the page, only that title is cut; the gate refuses the raw title."""
+        self.assertIn("note-branch", self.cfg["privateProjects"])
+
+        def no_files(p):
+            for a in p["activity"]:
+                a.update(files=None, nFiles=None)
+        for how, prep in (("no file lists", no_files), ("file lists", lambda p: None)):
+            with self.subTest(how):
+                forged = self.joined_title(prep, "docs: note", "docs: tidy", "docs:")
+                self.assertTrue(any("private name" in b for b in self.gate(forged)))
+        page = copy.deepcopy(self.page)                          # two such titles: both cut, the loop ends
+        page["activity"][0]["title"] = page["activity"][1]["title"] = "docs: note"
+        pub, ctx = self.run_export(page)
+        self.assertEqual((pub["activity"][0]["title"], pub["activity"][1]["title"]), ("docs:", "docs:"))
+        self.assertEqual(ctx["degraded"]["titlesJoined"], 2)
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_title_spelling_a_private_id_only_when_escaped_is_cut(self):
+        """Backlog A5 (2): html() writes "<" as \\u003c, so "<b12" spells the private commit id 003cb12 in
+        index.html only. The exporter checks both forms; the gate refuses the raw title in the bundle."""
+        def prep(p):
+            p["activity"][3]["hash"] = "003cb12"
+        forged = self.joined_title(prep, "fix: render <b12 tag", "fix: render <b tag", "fix:")
+        self.assertEqual(self.gate(forged), [])                  # the JSON form spells nothing
+        self.assertTrue(any("private name" in b for b in self.bundled(forged)))
+
+    def test_escaped_form_matches_the_bundler(self):
+        """The exporter's copy of html()'s escaping: a word formed only by the escape is found by both."""
+        from hub import page as hp
+        for c in ("<", " ", " "):
+            with self.subTest(hex(ord(c))):
+                term = "u%04xzqk" % ord(c)
+                m = ex.Matcher([term], {})
+                node = {"t": c + "zqk"}
+                self.assertFalse(m.hits(json.dumps(node, ensure_ascii=False)))
+                self.assertEqual(m.hits(hp.html(node, hp.MARKER)), {term})
+                self.assertEqual(ex._hits(node, m), {term})
+
+    def test_a_clean_page_costs_one_scan(self):
+        """No hit: one whole-page scan, nothing changed."""
+        pub, _ = self.run_export()
+        before = copy.deepcopy(pub)
+        m = ex.Matcher(["falcon-ledger"], {})
+        calls = []
+        orig = m.hits
+        m.hits = lambda t: calls.append(1) or orig(t)
+        ex._no_joined_names(pub, m, collections.Counter())
+        self.assertEqual((len(calls), pub), (1, before))
 
     def test_listed_fragment_never_frees_a_component_of_a_private_name(self):
         """Review R09 security L2: "Falcon-Tools" listed exempts "tools" but not "falcon", a component of the

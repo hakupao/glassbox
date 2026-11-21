@@ -6,7 +6,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| A5 | Two older ways the gate can still refuse the whole page with nothing leaking (found in the R09 security review): (1) a public commit title joined to the next JSON key spells a private name (`docs: note` + `branch`); (2) the exporter checks the page without the `<` → `\u003c` escaping that the HTML bundle adds, so a title can spell a private hash only in index.html | hub/export.py `_no_joined_names`, `_serial` | Same fix as for files: cut that one title to its prefix when it adds a hit, and check the escaped form too |
+| A6 | Three more ways the gate can refuse the whole page with nothing leaking (found while fixing A5): (1) the branch of a public commit joined to the next JSON key spells a private name; (2) a title written with literal escapes (`\\u0066…`, `\\x6f`, `o'+'wl`) is kept by the exporter but decoded and refused by the gate, which decodes more layers; (3) a title cut to its prefix still joins into a private name | hub/export.py `decode`, `_no_joined_names` | Low odds. Give the exporter the gate's decoding layers for titles; treat branch like title (null it for that commit); mask the prefix when it still hits |
 
 ## B. UI
 
@@ -41,6 +41,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- A5 (2026-11-21): a public commit title that spells a private name only when joined to the next JSON key, or only in the HTML bundle's escaped form, is now cut to its prefix for that one commit instead of the gate refusing the whole page. The export context counts it (`titlesJoined`).
 - A4, B4c (2026-11-21, S17 R09): commits show the author and a file list with M/A/R/D badges. File paths come only from GitHub (hub, single-commit endpoint) and appear in the public snapshot only on public, pushed, GitHub-source commits; private commits show a file count. Branch parts listed in `branchFragments` (public.toml) may be public; a listed part that is also part of a private name stays private.
 - B3, C2, C3 (2026-11-19): B3: zh `rt.fresh` is now "最新", as in ja. C2: `scripts/sync_publish.sh` compares (dry run, default) or copies (`--apply`) the two publisher config files to the VM; see `deploy/README.md`. C3: the page warns (`machine-config`, a count only) when Beszel returns systems that `[beszel.map]` does not list; checklist in `docs/runbooks/install-beszel-agent.md`.
 - C7 (2026-11-18): Windows task runs `pythonw.exe`; no console window (no conhost child), `LastTaskResult` 0, `probe.log` shows `(no console)` and `pushed: {"ok": true ...}`.

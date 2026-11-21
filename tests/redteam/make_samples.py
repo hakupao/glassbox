@@ -146,6 +146,10 @@ js("block-files-join-key", "rule 6: a path joined to the key before it spells a 
    path("ixel-forge/readme.md"))
 js("block-files-join-next", "rule 6: a path joined to the next file entry spells a private project", "block", "private name",
    files([{"s": "M", "p": "docs/field-note"}, {"s": "M", "p": "b.md"}]))
+# Backlog A5: a title joined to the next key ("docs: note" + "branch" spells the private project note-branch).
+js("block-title-join-key", "rule 6: a title joined to the next key spells a private project", "block", "private name", title("docs: note"))
+# Backlog A5: "<" is escaped in index.html, so "<b12" reads "u003cb12" there: the private commit id 003cb12.
+js("pass-title-lt-json", "a title with '<': as page JSON it spells no private commit id", "pass", None, title("fix: render <b12 tag"))
 js("block-files-on-private", "files on a private commit", "block", "file paths on a commit that is not public", files(FILES, who=priv))
 js("block-files-unpushed", "files on an unpushed commit of a public repo", "block", "file paths on a commit that is not public",
    lambda o: (files(FILES)(o), act(o).__setitem__("pushed", False)))
@@ -179,10 +183,14 @@ js("block-author-free-text", "author must be a configured login, not free text",
 js("block-author-masked", "author is not a Text field: a placeholder is refused", "block", "where author? is expected",
    lambda o: act(o).__setitem__("author", {"masked": True}))
 
-def page_js(o): return "window.GB = " + json.dumps(o, ensure_ascii=False) + ";"
-def ht(name, why, expect, reason, head="", body="", data=None):
+def page_js(o, esc=False):
+    d = json.dumps(o, ensure_ascii=False)
+    if esc:                                              # as hub/page.py html() inlines it
+        d = d.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    return "window.GB = " + d + ";"
+def ht(name, why, expect, reason, head="", body="", data=None, esc=False):
     o = copy.deepcopy(BASE) if data is None else data
-    gb = "" if data is False else f"<script>{page_js(o)}</script>"
+    gb = "" if data is False else f"<script>{page_js(o, esc)}</script>"
     doc = f"<!doctype html>\n<html><head><meta http-equiv=\"Content-Security-Policy\" content=\"{CSP}\"><meta charset=\"utf-8\"><title>glassbox</title>{head}<style>body{{background:#111}}</style></head>\n<body><main>\n{body}\n</main>{gb}</body></html>\n"
     (S / f"{name}.html").write_text(doc, encoding="utf-8")
     cases.append({"file": f"{name}.html", "expect": expect, "reason": reason, "why": why})
@@ -253,6 +261,8 @@ ht("block-html-script-d-ip", "SVG exemption must not cover a script variable nam
 ht("block-html-data-d-email", "SVG exemption must not cover data-d attributes", "block", "email", body='<i data-d="someone@example.com"></i>')
 ht("block-html-gb-payload", "rule 4 inside the embedded payload", "block", "private commit keeps hash",
    data=(lambda o: (o["activity"][1].__setitem__("hash", "0a1b2c3"), o)[1])(copy.deepcopy(BASE)))
+ht("block-html-title-escaped", "rule 6: the bundler's \\u003c escape of '<b12' spells a private commit id", "block", "private name",
+   data=(lambda o: (act(o).__setitem__("title", "fix: render <b12 tag"), o)[1])(copy.deepcopy(BASE)), esc=True)
 ht("block-html-fetch", "S12: runtime fetch of an external resource", "block", "external URL", body='<script>fetch("https://api.example.net/x")</script>')
 
 (OUT / "cases.json").write_text(json.dumps(cases, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
