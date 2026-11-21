@@ -6,7 +6,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| A4 | (Resolved in S17 R09, owner's decision D4: words listed in `branchFragments` in public.toml are exempt, and so is a word that spells a public repo name. A listed word that is also part of a private name stays private) | scripts/verify_public.py, hub/export.py | Move to Done once deployed |
 | A5 | Two older ways the gate can still refuse the whole page with nothing leaking (found in the R09 security review): (1) a public commit title joined to the next JSON key spells a private name (`docs: note` + `branch`); (2) the exporter checks the page without the `<` → `\u003c` escaping that the HTML bundle adds, so a title can spell a private hash only in index.html | hub/export.py `_no_joined_names`, `_serial` | Same fix as for files: cut that one title to its prefix when it adds a hit, and check the escaped form too |
 
 ## B. UI
@@ -42,6 +41,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- A4, B4c (2026-11-21, S17 R09): commits show the author and a file list with M/A/R/D badges. File paths come only from GitHub (hub, single-commit endpoint) and appear in the public snapshot only on public, pushed, GitHub-source commits; private commits show a file count. Branch parts listed in `branchFragments` (public.toml) may be public; a listed part that is also part of a private name stays private.
 - B3, C2, C3 (2026-11-19): B3: zh `rt.fresh` is now "最新", as in ja. C2: `scripts/sync_publish.sh` compares (dry run, default) or copies (`--apply`) the two publisher config files to the VM; see `deploy/README.md`. C3: the page warns (`machine-config`, a count only) when Beszel returns systems that `[beszel.map]` does not list; checklist in `docs/runbooks/install-beszel-agent.md`.
 - C7 (2026-11-18): Windows task runs `pythonw.exe`; no console window (no conhost child), `LastTaskResult` 0, `probe.log` shows `(no console)` and `pushed: {"ok": true ...}`.
 - A1, A2 (2026-11-19): not data bugs. The README screenshots `machines.png` and `overview.png` were taken while the KPI numbers were still rolling up (0.9 s); the live page settles on the same value as the panel title and the per-agent line ("205 req/session" in the same shot is 818 / 4). Fix: retake the screenshots after the roll.
