@@ -111,7 +111,7 @@ Optional, macOS only: the Claude Code quota samples come from `scripts/statuslin
 
 ### macOS (launchd)
 
-**ASK THE USER FIRST** (creates a login item). Create `~/Library/LaunchAgents/glassbox.probe.plist`:
+**ASK THE USER FIRST** (creates a login item). The probe stays running and pushes every 900 s itself (`push --every 900`, one fresh push process per cycle); launchd only keeps it alive (`KeepAlive`). Do not use launchd's `StartInterval` timer: on the dev Mac it stopped firing for about 38 hours while the job still looked loaded. Create `~/Library/LaunchAgents/glassbox.probe.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -121,15 +121,16 @@ Optional, macOS only: the Claude Code quota samples come from `scripts/statuslin
   <key>ProgramArguments</key><array>
     <string><PYTHON3_ABSOLUTE_PATH></string><string>-m</string><string>probe</string>
     <string>--config</string><string><HOME_DIR>/.glassbox/probe.toml</string><string>push</string>
+    <string>--every</string><string>900</string>
   </array>
   <key>WorkingDirectory</key><string><CLONE_PATH></string>
-  <key>StartInterval</key><integer>900</integer>
   <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
   <key>StandardOutPath</key><string><HOME_DIR>/.glassbox/probe.log</string>
   <key>StandardErrorPath</key><string><HOME_DIR>/.glassbox/probe.log</string>
 </dict></plist>
 ```
-launchd does not expand `~`, so write absolute paths in this file (it lives outside the repository). Then:
+launchd does not expand `~`, so write absolute paths in this file (it lives outside the repository). Replacing an older `StartInterval` agent (or a hand-written loop script): run the `bootout` below first, then rewrite the file. Then:
 
 ```sh
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/glassbox.probe.plist
@@ -139,7 +140,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/glassbox.probe.plist
 launchctl print gui/$(id -u)/glassbox.probe | grep -E 'state|last exit'
 tail -n 3 ~/.glassbox/probe.log
 ```
-Expect `last exit code = 0` and a `pushed:` line in the log within a minute (`RunAtLoad`). Remove: `launchctl bootout gui/$(id -u)/glassbox.probe`.
+Expect `state = running`, `last exit code = (never exited)` (the loop does not exit; a failed push is logged and retried 900 s later) and a `pushed:` line in the log within a minute, then one every 15 minutes. The loop starts each push as a new process, so a `git pull` in the clone takes effect from the next push without a restart. Remove: `launchctl bootout gui/$(id -u)/glassbox.probe`.
 
 ### Windows (Task Scheduler)
 

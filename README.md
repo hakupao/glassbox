@@ -39,6 +39,8 @@ Five pages (Overview, Usage, Code, Machines, Services), each panel expandable, i
 </tr>
 </table>
 
+Screenshots are retaken with `scripts/screenshots.sh [base-url]` (default: the public snapshot; en, 1440×900). It loads each page with `?t=8`, the page's still frame, so KPI numbers show their final values and the background art is not mid-animation.
+
 ## How it works
 
 ```
@@ -94,7 +96,7 @@ probe/     per-machine collector (logs, quotas, git, runtimes)
 hub/       ingest, collectors, page builder, exporter, publisher
 web/       the page (HTML, CSS, JS; zh / ja / en)
 schema/    data contract and the public field allowlist
-scripts/   publish gate, privacy scan
+scripts/   publish gate, privacy scan, screenshots
 deploy/    Dockerfile, compose, deploy guide
 docs/      runbooks, screenshots, project plan and design notes
 tests/     unit tests and red-team samples

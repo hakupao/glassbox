@@ -52,6 +52,20 @@ for pair in "${pairs[@]}"; do
 done
 [ "$apply" = 1 ] || exit 0
 
+# Phase 1b: the publisher running on the VM refuses keys its code does not know, so ask it whether it
+# accepts each file about to be written. Only its one-line answer is used (never its other output: it
+# could echo config contents). A publisher too old to answer counts as a refusal: deploy first.
+pub="${GLASSBOX_PUBLISHER:-glassbox-publisher}"
+for pair in ${todo[@]+"${todo[@]}"}; do
+  loc="${pair%%:*}"; name="$(basename "${pair#*:}")"
+  res="$(vm docker exec -i "$pub" python -m hub.publish --check-config "$name" < "$loc" 2>/dev/null | head -n 1)" || true
+  if [ "$res" = ok ]; then continue; fi
+  if [[ "$res" =~ ^unknown\ keys:\ [0-9]+$ ]]; then
+    echo "$name: the publisher on the VM does not know this config (${res}); deploy the new code first. Nothing written." >&2; exit 1
+  fi
+  echo "$name: the publisher on the VM could not check this config (not running, code older than --check-config, or it refuses the file); deploy first. Nothing written." >&2; exit 1
+done
+
 # Phase 2: write each file through a temp file that is 0640 root:10002 from the start (contents are
 # private; tee into a new file would follow root's umask), then install it in place.
 done_list=()

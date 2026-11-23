@@ -22,6 +22,7 @@ branch, source, interval, probeStale; GLASSBOX_PUBLISH_<KEY> environment variabl
                               stale (kuma_probes), default 1800 (two probe intervals), 900..86400
 
     python -m hub.publish [--once | --loop]
+    python -m hub.publish --check-config public.toml|terms.json < FILE   # would this image accept it?
 """
 import argparse
 import base64
@@ -263,10 +264,46 @@ def check_probes(env):
     _kuma(env, stale == 0, f"probes ok ({total})" if stale == 0 else f"stale probes: {stale} of {total}", "kuma_probes")
 
 
+def check_config(name, text):
+    """Would the code in this image accept `text` as public.toml / terms.json? scripts/sync_publish.sh
+    --apply asks the running publisher before it writes, because this code refuses keys it does not know.
+    Returns one line without names or values (they can be private): "ok", "unknown keys: N" or "rejected"."""
+    known = ex.CONFIG_KEYS if name == "public.toml" else ex.TERMS_KEYS
+    try:
+        text = text.decode("utf-8") if isinstance(text, bytes) else text
+        raw = tomllib.loads(text) if name == "public.toml" else json.loads(text)
+    except ValueError:                                # UnicodeDecodeError is a ValueError
+        return "rejected"
+    if not isinstance(raw, dict):
+        return "rejected"
+    if set(raw) - known:
+        return f"unknown keys: {len(set(raw) - known)}"
+    try:                                              # the rest of what export and the gate check
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / name
+            f.write_text(text, encoding="utf-8")
+            vp = _gate_module()
+            if name == "public.toml":
+                ex.load_config(f)
+                vp.check_config(raw)
+            else:
+                ex.load_terms(f)
+                vp.check_terms(raw)
+    except Exception:                                 # noqa: BLE001  any refusal is just "rejected"
+        return "rejected"
+    return "ok"
+
+
 def main(argv=None, env=os.environ, api=API):
     ap = argparse.ArgumentParser(prog="hub.publish")
     ap.add_argument("--loop", action="store_true", help="run forever, every GLASSBOX_PUBLISH_INTERVAL seconds")
+    ap.add_argument("--check-config", choices=["public.toml", "terms.json"],
+                    help="read that file from stdin, print ok / unknown keys: N / rejected, and exit")
     a = ap.parse_args(argv)
+    if a.check_config:
+        line = check_config(a.check_config, sys.stdin.buffer.read())
+        print(line, flush=True)
+        return 0 if line == "ok" else 1
     while True:
         try:
             interval = min(max(600, int(settings(env)[1].get("interval", "3600"))), 86400)  # Pages: 10 builds/hour

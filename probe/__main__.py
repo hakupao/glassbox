@@ -4,6 +4,7 @@
     python -m probe [--config FILE] report [--days N]  # print a glassbox.probe/1 report (usage part)
     python -m probe [--config FILE] daily [--days N]   # local-time daily totals, for checking by hand
     python -m probe [--config FILE] push [--days N]    # scan + report + POST to the hub
+    python -m probe [--config FILE] push --every 900   # stay running: push, wait, repeat (launchd KeepAlive)
 
 Config (TOML, optional; defaults shown):
     machine = "A"                       # this machine's code
@@ -24,6 +25,7 @@ Config (TOML, optional; defaults shown):
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import tomllib
@@ -125,6 +127,22 @@ def cmd_daily(conn, cfg, args):
         print(f"{d:10} {agent:11} {a[0]:6} {a[1]:11} {a[2]:11} {a[3]:13} {a[4]:12} {a[5]:9.2f} {a[6]}")
 
 
+def push_every(argv, seconds, run=subprocess.run, sleep=time.sleep):
+    """Resident mode for a supervisor that keeps the process alive (macOS launchd KeepAlive, whose
+    StartInterval timer was seen to stop firing). One `push` child per cycle, so every cycle runs the
+    code now in the clone, and a failed push (exit 1, a crash) is logged by the child and never ends the
+    loop: the next try is `seconds` later, not a fast respawn."""
+    root = Path(__file__).resolve().parents[1]
+    while True:
+        try:
+            run([sys.executable, "-m", "probe", *argv], cwd=root, check=False, timeout=seconds)
+        except subprocess.TimeoutExpired:
+            print(f"push took longer than {seconds} s: stopped", file=sys.stderr, flush=True)
+        except OSError as e:
+            print(f"push could not start: {type(e).__name__}", file=sys.stderr, flush=True)
+        sleep(seconds)
+
+
 def windowless_log(home=None):
     """pythonw.exe (Windows, no console window) sets sys.stdout / sys.stderr to None, so every message
     and traceback would be lost. Then append them to ~/.glassbox/probe.log instead (rotated at 1 MB).
@@ -162,7 +180,16 @@ def main(argv=None):
         if name == "push":
             p.add_argument("--rebaseline", action="store_true",
                            help="ask the hub to accept shrinking history (needs a newer probe or `hub machine rebaseline`)")
+            p.add_argument("--every", type=int, metavar="SECONDS",
+                           help="keep running and push every SECONDS (at least 60), each push in a fresh process")
     args = ap.parse_args(argv)
+    if getattr(args, "every", None) is not None:
+        if args.every < 60:
+            ap.error("--every must be at least 60 seconds")
+        if args.rebaseline:
+            ap.error("--rebaseline is a one-off; run it without --every")
+        push_every((["--config", str(Path(args.config).expanduser().resolve())] if args.config else []) + ["push", "--days", str(args.days)], args.every)
+        return
     cfg = load_config(args.config)
     conn = state.connect(cfg["state"])
     {"scan": cmd_scan, "report": cmd_report, "daily": cmd_daily, "push": cmd_push}[args.cmd](conn, cfg, args)

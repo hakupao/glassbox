@@ -39,6 +39,8 @@ tailnet 内有完整的私有视图，另有一份脱敏的公开快照，任何
 </tr>
 </table>
 
+截图用 `scripts/screenshots.sh [base-url]` 重拍（默认公开快照；英文，1440×900）。每页带 `?t=8` 加载，即页面自带的静止帧：KPI 数字直接是最终值，背景图不在动画中途。
+
 ## 工作原理
 
 ```
@@ -94,7 +96,7 @@ probe/     per-machine collector (logs, quotas, git, runtimes)
 hub/       ingest, collectors, page builder, exporter, publisher
 web/       the page (HTML, CSS, JS; zh / ja / en)
 schema/    data contract and the public field allowlist
-scripts/   publish gate, privacy scan
+scripts/   publish gate, privacy scan, screenshots
 deploy/    Dockerfile, compose, deploy guide
 docs/      runbooks, screenshots, project plan and design notes
 tests/     unit tests and red-team samples

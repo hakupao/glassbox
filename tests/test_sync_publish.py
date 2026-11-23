@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,8 @@ ROOT = Path(__file__).resolve().parent.parent
 STUB = """#!/usr/bin/env bash
 # fake VM: 'sudo' is dropped, 'install -o -g' ownership flags are ignored, -m is applied,
 # remote paths live under $FAKE_ROOT. FAIL_INSTALL_TO=<remote path> makes that install fail.
+# 'docker exec -i <name> python ARGS' runs this repo's code (the current publisher) with $FAKE_PY, or
+# FAKE_PUBLISHER=old|down|noisy plays a publisher without --check-config, a stopped one, or one that talks.
 [ "$1" = sudo ] && shift
 cmd="$1"; shift
 case "$cmd" in
@@ -19,6 +22,14 @@ case "$cmd" in
   rm) shift; rm -f "$FAKE_ROOT$1" ;;
   test) [ -e "$FAKE_ROOT$2" ] ;;
   true) ;;
+  docker) echo "$*" >> "$FAKE_ROOT/docker.log"
+          case "${FAKE_PUBLISHER:-current}" in
+            old) echo "hub.publish: error: unrecognized arguments: --check-config" >&2; exit 2 ;;
+            down) echo "Error response from daemon: No such container" >&2; exit 1 ;;
+            noisy) echo 'leaked = "private-value"'; echo "Traceback private-value" >&2; exit 1 ;;
+          esac
+          shift 4   # exec -i <name> python
+          cd "$REPO_CODE" && "$FAKE_PY" "$@" ;;
   install) mode=644; while [ $# -gt 2 ]; do [ "$1" = -m ] && mode="$2"; shift; done
            src="$1"; dst="$2"
            [ "$dst" = "${FAIL_INSTALL_TO:-}" ] && exit 1
@@ -28,6 +39,11 @@ esac
 """
 
 
+NEW = 'keywords = ["new"]\n'
+OLD = 'keywords = ["old"]\n'
+TERMS = '{"terms": ["x"]}\n'
+
+
 class SyncPublishTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -35,16 +51,17 @@ class SyncPublishTest(unittest.TestCase):
         (self.tmp / "repo/scripts").mkdir(parents=True)
         (self.tmp / "repo/.local").mkdir()
         shutil.copy(ROOT / "scripts/sync_publish.sh", self.tmp / "repo/scripts")
-        (self.tmp / "repo/.local/public.local.toml").write_text('a = "new"\n')
-        (self.tmp / "repo/.local/redact_terms.local.json").write_text('["x"]\n')
+        (self.tmp / "repo/.local/public.local.toml").write_text(NEW)
+        (self.tmp / "repo/.local/redact_terms.local.json").write_text(TERMS)
         pub = self.tmp / "vm/opt/glassbox/publish"
         pub.mkdir(parents=True)
-        (pub / "public.toml").write_text('a = "old"\n')
-        (pub / "terms.json").write_text('["x"]\n')
+        (pub / "public.toml").write_text(OLD)
+        (pub / "terms.json").write_text(TERMS)
         stub = self.tmp / "stub.sh"
         stub.write_text(STUB)
         stub.chmod(0o755)
-        self.env = {**os.environ, "GLASSBOX_VM_EXEC": str(stub), "FAKE_ROOT": str(self.tmp / "vm")}
+        self.env = {**os.environ, "GLASSBOX_VM_EXEC": str(stub), "FAKE_ROOT": str(self.tmp / "vm"),
+                    "REPO_CODE": str(ROOT), "FAKE_PY": sys.executable}
 
     def run_sync(self, *args, env=None):
         return subprocess.run(["bash", str(self.tmp / "repo/scripts/sync_publish.sh"), *args],
@@ -63,16 +80,16 @@ class SyncPublishTest(unittest.TestCase):
         self.assertIn("terms.json: same", r.stdout)
         self.assertNotIn("old", r.stdout)
         self.assertNotIn("new", r.stdout)
-        self.assertEqual((self.tmp / "vm/opt/glassbox/publish/public.toml").read_text(), 'a = "old"\n')
+        self.assertEqual((self.tmp / "vm/opt/glassbox/publish/public.toml").read_text(), OLD)
 
     def test_show_diff_prints_diff(self):
-        self.assertIn('+a = "new"', self.run_sync("--show-diff").stdout)
+        self.assertIn('+keywords = ["new"]', self.run_sync("--show-diff").stdout)
 
     def test_apply_copies_only_the_differing_file_and_leaves_no_temp(self):
         r = self.run_sync("--apply")
         self.assertEqual(r.returncode, 0, r.stderr)
         pub = self.tmp / "vm/opt/glassbox/publish"
-        self.assertEqual((pub / "public.toml").read_text(), 'a = "new"\n')
+        self.assertEqual((pub / "public.toml").read_text(), NEW)
         self.assertEqual(sorted(p.name for p in pub.iterdir()), ["public.toml", "terms.json"])
 
     def test_temp_file_is_private_before_contents_are_written(self):
@@ -87,11 +104,11 @@ class SyncPublishTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("terms.json: missing on the VM", r.stdout)
         self.assertEqual(self.run_sync("--apply").returncode, 0)
-        self.assertEqual((pub / "terms.json").read_text(), '["x"]\n')
+        self.assertEqual((pub / "terms.json").read_text(), TERMS)
 
     def test_failed_install_removes_temp_and_names_what_was_updated(self):
         pub = self.tmp / "vm/opt/glassbox/publish"
-        (pub / "terms.json").write_text('["old"]\n')
+        (pub / "terms.json").write_text('{"terms": ["old"]}\n')
         r = self.run_sync("--apply", env={**self.env, "FAIL_INSTALL_TO": "/opt/glassbox/publish/terms.json"})
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("already updated: /opt/glassbox/publish/public.toml", r.stderr)
@@ -106,7 +123,47 @@ class SyncPublishTest(unittest.TestCase):
     def test_apply_refuses_invalid_local_config(self):
         (self.tmp / "repo/.local/redact_terms.local.json").write_text("{not json")
         self.assertNotEqual(self.run_sync("--apply").returncode, 0)
-        self.assertEqual((self.tmp / "vm/opt/glassbox/publish/public.toml").read_text(), 'a = "old"\n')
+        self.assertEqual((self.tmp / "vm/opt/glassbox/publish/public.toml").read_text(), OLD)
+
+    # C11: the publisher running on the VM must accept the new config before anything is written
+    def unchanged(self):
+        self.assertEqual((self.tmp / "vm/opt/glassbox/publish/public.toml").read_text(), OLD)
+
+    def test_apply_asks_the_running_publisher_about_each_file_it_writes(self):
+        r = self.run_sync("--apply")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        log = (self.tmp / "vm/docker.log").read_text().splitlines()
+        self.assertEqual(log, ["exec -i glassbox-publisher python -m hub.publish --check-config public.toml"])
+
+    def test_apply_refuses_keys_the_running_publisher_does_not_know(self):
+        (self.tmp / "repo/.local/public.local.toml").write_text(NEW + "secretKey = 1\nother = 2\n")
+        r = self.run_sync("--apply")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("unknown keys: 2", r.stderr)
+        self.assertIn("Nothing written", r.stderr)
+        self.assertNotIn("secretKey", r.stdout + r.stderr)
+        self.unchanged()
+
+    def test_apply_refuses_when_the_publisher_cannot_answer(self):
+        for kind in ("old", "down", "noisy"):
+            with self.subTest(kind):
+                r = self.run_sync("--apply", env={**self.env, "FAKE_PUBLISHER": kind})
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("could not check", r.stderr)
+                for leak in ("private-value", "unrecognized", "No such container"):
+                    self.assertNotIn(leak, r.stdout + r.stderr)
+                self.unchanged()
+
+    def test_apply_refuses_a_file_the_publisher_rejects(self):
+        (self.tmp / "repo/.local/public.local.toml").write_text('hidden = ["no-such-block"]\n')
+        r = self.run_sync("--apply")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("could not check", r.stderr)
+        self.unchanged()
+
+    def test_dry_run_does_not_ask_the_publisher(self):
+        self.assertEqual(self.run_sync().returncode, 0)
+        self.assertFalse((self.tmp / "vm/docker.log").exists())
 
 
 if __name__ == "__main__":

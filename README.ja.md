@@ -39,6 +39,8 @@ tailnet 内ではすべてを見られるプライベートビュー、外部に
 </tr>
 </table>
 
+スクリーンショットは `scripts/screenshots.sh [base-url]` で撮り直せます（既定は公開スナップショット、英語、1440×900）。各ページを `?t=8`（ページ自身の静止フレーム）で開くので、KPI の数字は最終値のまま、背景アートもアニメーション途中になりません。
+
 ## 仕組み
 
 ```
@@ -94,7 +96,7 @@ probe/     per-machine collector (logs, quotas, git, runtimes)
 hub/       ingest, collectors, page builder, exporter, publisher
 web/       the page (HTML, CSS, JS; zh / ja / en)
 schema/    data contract and the public field allowlist
-scripts/   publish gate, privacy scan
+scripts/   publish gate, privacy scan, screenshots
 deploy/    Dockerfile, compose, deploy guide
 docs/      runbooks, screenshots, project plan and design notes
 tests/     unit tests and red-team samples

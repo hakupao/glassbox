@@ -397,5 +397,26 @@ class ProbeStaleTest(unittest.TestCase):
         self.assertIn("probe check failed (RuntimeError)", out.getvalue())
 
 
+
+class CheckConfigTest(unittest.TestCase):
+    """--check-config, as scripts/sync_publish.sh --apply runs it in the publisher container."""
+    def run_check(self, name, data):
+        import subprocess
+        import sys
+        return subprocess.run([sys.executable, "-m", "hub.publish", "--check-config", name], cwd=ROOT,
+                              input=data, capture_output=True)
+
+    def test_answers(self):
+        for name, data, line, rc in [("public.toml", b'keywords = ["k"]\n', b"ok", 0),
+                                     ("public.toml", b"zz = 1\nyy = 2\n", b"unknown keys: 2", 1),
+                                     ("terms.json", b'{"terms": ["x"]}', b"ok", 0),
+                                     ("public.toml", b"\xff\xfe not utf-8", b"rejected", 1),
+                                     ("terms.json", b"\xff\xfe", b"rejected", 1)]:
+            with self.subTest(name=name, data=data):
+                r = self.run_check(name, data)
+                self.assertEqual((r.stdout.strip(), r.returncode), (line, rc))
+                self.assertEqual(r.stderr, b"")
+
+
 if __name__ == "__main__":
     unittest.main()

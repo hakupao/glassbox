@@ -54,7 +54,7 @@ function metrics(s){
     ['mach.disk', pct(s.diskUsed, s.diskTotal), `${F.bytes(s.diskUsed)} · ${F.pct(pct(s.diskUsed, s.diskTotal))}`]];
 }
 function metricHtml([k, f, v]){
-  return `<div class="metric"><div class="lab"><span>${esc(t(k))}</span><b class="${f >= 0.75 ? G.lvlCls(f) : ''}">${esc(v)}</b></div>${G.bar(f, G.lvlIdx(f))}</div>`;
+  return `<div class="metric"><div class="lab"><span>${esc(t(k))}</span><b class="${f >= 0.75 ? G.lvlCls(f) : ''}" title="${esc(v)}">${esc(v)}</b></div>${G.bar(f, G.lvlIdx(f))}</div>`;
 }
 function liveAgents(id){
   return D.runtimes.filter(r => r.machine === id && r.activeSessions > 0 && !r.stale).map(r => bd(`${G.AG(r.agent)} ${F.n(r.activeSessions)}`, G.agCls(r.agent), true, '', true)).join(' ');
