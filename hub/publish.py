@@ -10,14 +10,16 @@ Off by default: without a token file it logs "publish disabled" and does nothing
 the publisher container does not publish. The first publish is a deliberate step.
 
 Settings: GLASSBOX_PUBLISH_DIR (default /run/glassbox-publish; never the hub's secrets) holds
-token, public.toml, terms.json, settings.toml [, kuma_push]. settings.toml has repo, cname, branch,
-source, interval; GLASSBOX_PUBLISH_<KEY> environment variables override it (tests):
+token, public.toml, terms.json, settings.toml [, kuma_push, kuma_probes]. settings.toml has repo, cname,
+branch, source, interval, probeStale; GLASSBOX_PUBLISH_<KEY> environment variables override it (tests):
     GLASSBOX_PUBLISH_REPO     owner/name
     GLASSBOX_PUBLISH_BRANCH   default gh-pages
     GLASSBOX_PUBLISH_CNAME    custom domain written to CNAME (required)
     GLASSBOX_PUBLISH_SOURCE   private page URL, default http://127.0.0.1:8787/page.json
     GLASSBOX_PUBLISH_INTERVAL seconds between runs with --loop, default 3600 (GitHub Pages: soft
                               limit 10 builds per hour)
+    GLASSBOX_PUBLISH_PROBESTALE seconds without a probe report before an online machine counts as
+                              stale (kuma_probes), default 1800 (two probe intervals), 900..86400
 
     python -m hub.publish [--once | --loop]
 """
@@ -34,6 +36,7 @@ import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 from . import export as ex
@@ -167,7 +170,7 @@ def settings(env):
     except (OSError, ValueError) as e:
         raise PublishError(f"cannot read settings.toml ({e.__class__.__name__})") from None
     s = {k: str(v) for k, v in s.items()}
-    for k in ("repo", "cname", "branch", "source", "interval"):
+    for k in ("repo", "cname", "branch", "source", "interval", "probeStale"):
         if env.get(f"GLASSBOX_PUBLISH_{k.upper()}"):
             s[k] = env[f"GLASSBOX_PUBLISH_{k.upper()}"]
     return d, s
@@ -194,24 +197,70 @@ def run_once(env=os.environ, api=API):
     return "published"
 
 
-def _kuma(env, ok, msg):
-    """Report to an Uptime Kuma push URL (optional file kuma_push). Never raises, never prints the URL:
-    it carries the push token."""
+def _kuma(env, ok, msg, name="kuma_push"):
+    """Report to an Uptime Kuma push URL (optional file `name` in the publish dir: kuma_push for the
+    publisher itself, kuma_probes for probe staleness). Never raises, never prints the URL: it carries
+    the push token."""
     d = Path(env.get("GLASSBOX_PUBLISH_DIR", "/run/glassbox-publish"))
     try:
-        url = (d / "kuma_push").read_text(encoding="utf-8").strip()
-    except OSError:
+        url = (d / name).read_text(encoding="utf-8").strip()
+    except (OSError, ValueError):                     # ValueError: not UTF-8; main() calls this outside a try
         return
     if not url:
         return
     if not url.startswith(("https://", "http://")) or any(c.isspace() or ord(c) < 32 for c in url):
-        print("publish: kuma_push is not a valid http(s) URL", file=sys.stderr)
+        print(f"publish: {name} is not a valid http(s) URL", file=sys.stderr)
         return
     q = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
     try:
         urllib.request.urlopen(f"{url}{'&' if '?' in url else '?'}{q}", timeout=15).close()
     except Exception:                                 # noqa: BLE001  any error text could contain the URL
-        print("publish: kuma push failed", file=sys.stderr)
+        print(f"publish: {name.replace('_', ' ')} failed", file=sys.stderr)
+
+
+def probe_stale_limit(cfg):
+    """probeStale seconds, 900..86400 (default 1800). The floor is hub/page.py STALE (15 min): above it a
+    stale probe no longer makes the page's `online` true, so `online` then means Beszel says up."""
+    try:
+        return min(max(900, int(cfg.get("probeStale", "1800"))), 86400)
+    except (ValueError, OverflowError):
+        return 1800
+
+
+def stale_probes(private, now, limit):
+    """(stale, total) over the private page's machines that have a probe. Stale = online (hub/page.py:
+    Beszel up and fresh, or a fresh probe) and the last probe report older than `limit` seconds. A
+    machine that is off (not online) does not count, so a machine shut down at night raises nothing."""
+    stale = total = 0
+    for m in private.get("machines") or []:
+        last = m.get("probeLastReport") if isinstance(m, dict) else None
+        if not isinstance(last, str):
+            continue
+        total += 1
+        try:
+            age = now - datetime.fromisoformat(last.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            age = float("inf")                        # unreadable time: treat as never reported
+        if m.get("online") is True and age > limit:
+            stale += 1
+    return stale, total
+
+
+def check_probes(env):
+    """Push probe staleness to kuma_probes (counts only: Kuma messages may reach notification
+    channels, so no machine names). Runs every cycle, also when publishing is disabled or failed.
+    If the private page cannot be fetched, nothing is pushed this cycle: the kuma_push monitor
+    already reports that failure, and a missing push makes this monitor alert in time as well."""
+    d = Path(env.get("GLASSBOX_PUBLISH_DIR", "/run/glassbox-publish"))
+    if not (d / "kuma_probes").is_file():
+        return
+    _, cfg = settings(env)
+    try:
+        private = fetch_private(cfg.get("source", "http://127.0.0.1:8787/page.json"))
+    except PublishError:
+        return
+    stale, total = stale_probes(private, time.time(), probe_stale_limit(cfg))
+    _kuma(env, stale == 0, f"probes ok ({total})" if stale == 0 else f"stale probes: {stale} of {total}", "kuma_probes")
 
 
 def main(argv=None, env=os.environ, api=API):
@@ -237,6 +286,10 @@ def main(argv=None, env=os.environ, api=API):
             print(f"publish failed ({e.__class__.__name__})", file=sys.stderr, flush=True)
             _kuma(env, False, "error")
             rc = 1
+        try:
+            check_probes(env)
+        except Exception as e:                        # noqa: BLE001  never stops publishing
+            print(f"publish: probe check failed ({e.__class__.__name__})", file=sys.stderr, flush=True)
         if not a.loop:
             return rc
         time.sleep(interval)

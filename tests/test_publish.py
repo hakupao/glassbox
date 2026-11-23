@@ -217,5 +217,185 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(self.gh.writes, [])
 
 
+def _ago(sec):
+    from datetime import UTC, datetime
+    return datetime.fromtimestamp(datetime.now(UTC).timestamp() - sec, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _page(*machines):
+    return {"schema": "glassbox.page/1", "view": "private",
+            "machines": [{"id": f"m{i}", "online": on, "probeLastReport": last} for i, (on, last) in enumerate(machines)]}
+
+
+class ProbeStaleTest(unittest.TestCase):
+    """C9: kuma_probes reports machines that are up but whose probe stopped. Fabricated pages, no network."""
+    URL = "https://kuma.example.org/api/push/probe-secret-token"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.d = Path(self.tmp.name)
+        (self.d / "kuma_probes").write_text(self.URL + "\n")
+        self.env = {"GLASSBOX_PUBLISH_DIR": str(self.d)}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def push(self, page, env=None):
+        """Run check_probes with the page; returns the list of (status, msg) pushed."""
+        from urllib.parse import parse_qs, urlsplit
+        calls = []
+        with mock.patch.object(publish, "fetch_private", return_value=page), \
+                mock.patch.object(publish.urllib.request, "urlopen", side_effect=lambda u, **k: calls.append(u) or mock.MagicMock()):
+            publish.check_probes(env or self.env)
+        out = []
+        for u in calls:
+            self.assertTrue(u.startswith(self.URL + "?"))
+            q = parse_qs(urlsplit(u).query)
+            out.append((q["status"][0], q["msg"][0]))
+        return out
+
+    def test_stale_and_online_is_down_with_counts_only(self):
+        got = self.push(_page((True, _ago(3600)), (True, _ago(60)), (True, None)))
+        self.assertEqual(got, [("down", "stale probes: 1 of 2")])
+
+    def test_offline_no_probe_and_fresh_are_not_counted(self):
+        got = self.push(_page((False, _ago(10 * 3600)), (True, None), (None, _ago(7200)), (True, _ago(1700))))
+        self.assertEqual(got, [("up", "probes ok (3)")])
+
+    def test_unreadable_report_time_counts_as_stale_when_online(self):
+        self.assertEqual(self.push(_page((True, "not a time"))), [("down", "stale probes: 1 of 1")])
+
+    def test_no_machines_is_up(self):
+        self.assertEqual(self.push(_page()), [("up", "probes ok (0)")])
+
+    def test_threshold_setting(self):
+        page = _page((True, _ago(2400)))
+        self.assertEqual(self.push(page)[0][0], "down")                                   # default 1800
+        self.assertEqual(self.push(page, dict(self.env, GLASSBOX_PUBLISH_PROBESTALE="3600"))[0][0], "up")
+        (self.d / "settings.toml").write_text("probeStale = 3600\n")
+        self.assertEqual(self.push(page)[0][0], "up")
+        lim = publish.probe_stale_limit
+        self.assertEqual([lim({}), lim({"probeStale": "60"}), lim({"probeStale": "999999"}),
+                          lim({"probeStale": "x"}), lim({"probeStale": "2400"}), lim({"probeStale": "1e999"})],
+                         [1800, 900, 86400, 1800, 2400, 1800])
+
+    def test_missing_empty_or_invalid_file_sends_nothing(self):
+        import contextlib
+        import io
+        (self.d / "kuma_probes").unlink()
+        self.assertEqual(self.push(_page((True, _ago(3600)))), [])
+        (self.d / "kuma_probes").write_text("\n")
+        self.assertEqual(self.push(_page((True, _ago(3600)))), [])
+        (self.d / "kuma_probes").write_text("ftp://x/probe-secret-token\n")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(self.push(_page((True, _ago(3600)))), [])
+        self.assertIn("kuma_probes is not a valid", err.getvalue())
+        self.assertNotIn("probe-secret-token", err.getvalue())
+
+    def test_fetch_failure_pushes_nothing(self):
+        calls = []
+        with mock.patch.object(publish, "fetch_private", side_effect=publish.PublishError("cannot fetch")), \
+                mock.patch.object(publish.urllib.request, "urlopen", side_effect=lambda u, **k: calls.append(u)):
+            publish.check_probes(self.env)
+        self.assertEqual(calls, [])
+
+    def test_runs_when_publishing_is_disabled_and_never_logs_the_url(self):
+        import contextlib
+        import io
+        (self.d / "kuma_push").write_text("https://kuma.example.org/api/push/publish-secret-token\n")
+        calls, out = [], io.StringIO()
+        page = _page((True, _ago(3600)))
+        with mock.patch.object(publish, "fetch_private", return_value=page), \
+                mock.patch.object(publish.urllib.request, "urlopen", side_effect=lambda u, **k: calls.append(u) or mock.MagicMock()), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            rc = publish.main([], env=self.env)                                          # no token: disabled
+        self.assertEqual(rc, 0)
+        self.assertIn("publish: disabled", out.getvalue())
+        self.assertEqual(len(calls), 1)                                                  # kuma_probes only
+        self.assertTrue(calls[0].startswith(self.URL))
+        self.assertIn("stale+probes%3A+1+of+1", calls[0])
+
+        calls.clear()
+        with mock.patch.object(publish, "fetch_private", return_value=page), \
+                mock.patch.object(publish.urllib.request, "urlopen", side_effect=OSError(self.URL)), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            publish.main([], env=dict(self.env, GLASSBOX_PUBLISH_PROBESTALE="x"))
+        self.assertIn("kuma probes failed", out.getvalue())
+        for secret in ("probe-secret-token", "publish-secret-token"):
+            self.assertNotIn(secret, out.getvalue())
+
+    def test_runs_when_publishing_fails(self):
+        import contextlib
+        import io
+        calls = []
+        with mock.patch.object(publish, "run_once", side_effect=publish.PublishError("x")), \
+                mock.patch.object(publish, "fetch_private", return_value=_page((True, _ago(60)))), \
+                mock.patch.object(publish.urllib.request, "urlopen", side_effect=lambda u, **k: calls.append(u) or mock.MagicMock()), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            rc = publish.main([], env=self.env)
+        self.assertEqual(rc, 1)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("probes+ok+%281%29", calls[0])
+
+    def test_hub_timestamp_format_and_boundary(self):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+        last = (datetime.now(ZoneInfo("Asia/Tokyo")) - timedelta(seconds=3600)).isoformat(timespec="seconds")
+        self.assertEqual(self.push(_page((True, last))), [("down", "stale probes: 1 of 1")])
+        now = datetime(2026, 11, 17, 11, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        at = lambda sec: (now - timedelta(seconds=sec)).isoformat(timespec="seconds")
+        self.assertEqual(publish.stale_probes(_page((True, at(1800))), now.timestamp(), 1800), (0, 1))   # age == limit
+        self.assertEqual(publish.stale_probes(_page((True, at(1801))), now.timestamp(), 1800), (1, 1))
+
+    def test_machines_built_by_hub_page(self):
+        """online comes from hub.page: Beszel up + stale probe counts; Beszel down or stale does not."""
+        from datetime import datetime, timezone
+        from hub import db, page
+        now = datetime(2026, 11, 17, 2, 0, tzinfo=timezone.utc)
+        t = now.timestamp()
+        conn = db.connect(self.d / "hub.sqlite")
+        try:
+            for m in ("up", "down", "gone", "fresh", "noprobe"):
+                conn.execute("INSERT INTO machines(id, role, os, last_report) VALUES(?, 'dev', 'macos', ?)",
+                             (m, None if m == "noprobe" else t - (60 if m == "fresh" else 3600)))
+            conn.execute("INSERT INTO machine_state VALUES('up', 'up', 3600, ?)", (t - 30,))
+            conn.execute("INSERT INTO machine_state VALUES('down', 'down', 3600, ?)", (t - 30,))
+            conn.execute("INSERT INTO machine_state VALUES('gone', 'up', 3600, ?)", (t - 2 * 3600,))   # Beszel stale
+            conn.execute("INSERT INTO machine_state VALUES('noprobe', 'up', 3600, ?)", (t - 30,))
+            built = page.build(conn, {"tz": "Asia/Tokyo"}, now)
+        finally:
+            conn.close()
+        online = {m["id"]: m["online"] for m in built["machines"]}
+        self.assertEqual(online, {"up": True, "down": False, "gone": False, "fresh": True, "noprobe": True})
+        self.assertEqual(publish.stale_probes(built, t, 1800), (1, 4))
+
+    def test_non_utf8_url_file_is_ignored(self):
+        import contextlib
+        import io
+        (self.d / "kuma_probes").write_bytes(b"https://kuma.example.org/\xff\xfe\n")
+        (self.d / "kuma_push").write_bytes(b"\xff\xfe\n")
+        calls = []
+        with mock.patch.object(publish, "run_once", side_effect=publish.PublishError("x")), \
+                mock.patch.object(publish, "fetch_private", return_value=_page((True, _ago(3600)))), \
+                mock.patch.object(publish.urllib.request, "urlopen", side_effect=lambda u, **k: calls.append(u) or mock.MagicMock()), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            rc = publish.main([], env=self.env)                                          # failing branch: no raise
+        self.assertEqual((rc, calls), (1, []))
+
+    def test_probe_check_failure_does_not_stop_publishing(self):
+        import contextlib
+        import io
+        (self.d / "token").write_text("fake-token\n")
+        out = io.StringIO()
+        with mock.patch.object(publish, "run_once", return_value="published") as ro, \
+                mock.patch.object(publish, "check_probes", side_effect=RuntimeError("boom")), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            rc = publish.main([], env=self.env)
+        ro.assert_called_once()
+        self.assertEqual(rc, 0)
+        self.assertIn("probe check failed (RuntimeError)", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

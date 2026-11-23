@@ -23,7 +23,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Notes |
 |---|---|---|
-| C1 | Publisher failure alert | Create an Uptime Kuma push monitor, put its URL in `/opt/glassbox/publish/kuma_push` (the code already reports to it) |
 | C4 | Token expiry reminders: GitHub read-only token, Gitea read-only token, publish token | Calendar entries before they expire |
 | C5 | After a reboot, confirm Tailscale reconnects by itself on the Windows machine and on the dev Mac | `tailscale status` |
 | C6 | Windows probe: confirm which agent log roots should be reported (defaults `~/.claude/projects`, `~/.codex/sessions`) | |
@@ -48,6 +47,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- C1 (2026-11-23): publisher failure alert: Uptime Kuma push monitor "glassbox publisher" (heartbeat 900 s, 1 retry, phone notification) fed by the publisher through `kuma_push`; first heartbeat received 10:29.
 - E1 (2026-11-23): S16 project retrospective written (kept practices, gaps, key decisions; private because it cites real data). Its gaps are filed as A7, B7, C9-C11, E2-E4.
 - B1 (2026-11-23, S17 R14): the daily background art is rewritten: 19 pieces modelled on real subjects and footage (measured from reference photographs, real motion, natural colour), replacing the first library; seven abstract templates became natural subjects (Saturn, aurora, meadow, dunes, braided river, the Earth at night from orbit, the galaxy M81). Captions were re-audited against the code: each claims only what is drawn, and the Claude Code / Codex split line shows only under the six pieces that draw it in the interface colours. Very small canvases show no art; very large ones use a coarser grid. Follow-ups: B6, A7.
 - A5 (2026-11-21): a public commit title that spells a private name only when joined to the next JSON key, or only in the HTML bundle's escaped form, is now cut to its prefix for that one commit instead of the gate refusing the whole page. The export context counts it (`titlesJoined`).

@@ -183,6 +183,28 @@ docker compose -f deploy/compose.yaml -f deploy/compose.build.yaml up -d --build
 The public-snapshot config exists twice: `.local/public.local.toml` and `.local/redact_terms.local.json` in the dev clone, and `/opt/glassbox/publish/public.toml` and `terms.json` on the VM. Set `GLASSBOX_VM_EXEC` to the command prefix that runs a command on the VM, unquoted words only (e.g. `GLASSBOX_VM_EXEC='ssh <host> limactl shell <vm> --'`; quoting the inner part makes the remote shell treat it as one command name), then run `scripts/sync_publish.sh` (dry run: prints "same" or "differs (N lines)" per file, never contents; `--show-diff` adds a diff, which is private).
 `scripts/sync_publish.sh --apply` validates the local TOML and JSON, compares every file first, writes each differing or missing one through a temp file next to it that is 0640 from the start, installs it (root, group 10002, mode 0640) and re-fetches it to confirm. It touches no other file and restarts nothing: the publisher reads the files on every run.
 
+## Publisher alerts (Uptime Kuma)
+
+The publisher can push to two optional Uptime Kuma push monitors, each one URL in its own file in `/opt/glassbox/publish/` (root, group 10002, mode 0640, like the other files there). The URLs carry the push token: the publisher never prints them. A missing or empty file means no push. A file that is not an http(s) URL logs "`<file>` is not a valid http(s) URL" and sends nothing.
+
+| File | Pushed every run | Status |
+|---|---|---|
+| `kuma_push` | the publish result | up: `published` / `unchanged`; down: `failed` / `error`. Nothing is pushed while publishing is disabled (no `token`). |
+| `kuma_probes` | probe staleness, also when publishing is disabled or fails | up: `probes ok (n)`; down: `stale probes: k of n`. Counts only, never machine names, because Kuma can forward messages to notification channels. |
+
+A machine counts as stale when it has a probe (`probeLastReport` set), is online on the private page, and its last probe report is older than `probeStale` seconds. A machine that is switched off is not online, so it does not count. Online with a stale probe means Beszel reports the machine up, so a machine without a Beszel agent cannot be checked this way: its `online` drops with its probe, 15 minutes after the last report. If the publisher cannot fetch the private page, it pushes nothing to `kuma_probes` that run: `kuma_push` reports the failure, and the missing push trips the probe monitor as well.
+
+To create a monitor: in Uptime Kuma, Add New Monitor, type **Push**, set the heartbeat interval a bit above the publisher `interval` (the deployed `interval = 600` uses a 15-minute heartbeat with 1 retry; the default 3600 s would need about 70 minutes). Write the push URL it shows into the file, for example `kuma_probes`:
+
+```sh
+sudo install -o root -g 10002 -m 0640 /dev/null /opt/glassbox/publish/kuma_probes
+sudo sh -c 'cat > /opt/glassbox/publish/kuma_probes'   # paste the push URL, then Ctrl-D
+```
+
+Kuma alerts when a push says down, and when pushes stop, so a dead publisher trips both monitors.
+
+`settings.toml` keys for this (the publisher reads them on every run): `interval` (seconds between runs, 600 to 86400, default 3600) and `probeStale` (seconds, 900 to 86400, default 1800, which is two 15-minute probe intervals). A machine is flagged at most one publisher `interval` after it goes stale, plus the monitor's retries (Kuma applies retries to a pushed down as well), so a long `interval` delays the alert.
+
 ## Restarting
 
 If the `tailscale` container is restarted or recreated by hand, restart the hub as well (`docker restart glassbox`): it is attached to the sidecar's network namespace, which is replaced. `depends_on ... restart: true` normally does this already (needs Compose 2.17 or newer).
