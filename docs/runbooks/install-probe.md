@@ -20,13 +20,30 @@ macOS (create `.git/hooks/pre-commit`, then make it executable):
 ```sh
 cat > .git/hooks/pre-commit <<'EOF'
 #!/bin/sh
-# glassbox: refuse to commit when the privacy scan finds anything (scripts/privacy_scan.py).
-exec python3 "$(git rev-parse --show-toplevel)/scripts/privacy_scan.py" >&2
+# glassbox: refuse to commit when the privacy scan finds anything (scripts/privacy_scan.py), and, when the
+# commit touches web/, when the staged web/ fails scripts/check_web.py or the publish gate would refuse it
+# (scripts/check_web_terms.py; it refreshes the cached private page if the hub answers within 3 s).
+py=python3
+top="$(git rev-parse --show-toplevel)"
+"$py" "$top/scripts/privacy_scan.py" >&2 || exit $?
+git diff --cached --name-only -- web | grep -q . || exit 0
+tmp="$(mktemp -d)" || exit 2
+trap 'rm -rf "$tmp"' EXIT
+git ls-files -z -- web scripts/check_web.py | xargs -0 git checkout-index --prefix="$tmp/" -- || exit 2
+"$py" "$tmp/scripts/check_web.py" >&2 || exit $?          # the staged web/ (check_web.py reads the web/ beside it)
+# unreachable while privacy_scan needs the list; kept fail-safe
+if [ ! -f "$top/.local/redact_terms.local.json" ]; then
+  echo "glassbox: web/ word check skipped (no .local/redact_terms.local.json)" >&2
+  exit 0
+fi
+"$py" "$top/scripts/check_web_terms.py" --web "$tmp/web" --try-refresh 3 >&2
 EOF
 chmod +x .git/hooks/pre-commit
 ```
 
-Windows (Git Bash; the hook runs under Git for Windows' shell): same content, with `python` instead of `python3` if `python3` is not on the PATH.
+Windows (Git Bash; the hook runs under Git for Windows' shell): same content, with `py=python` instead of `py=python3` if `python3` is not on the PATH.
+
+When a commit touches `web/`, the hook also runs `scripts/check_web.py` and `scripts/check_web_terms.py` on the staged `web/` files; the second is the publish gate's own word matcher with the real word list, so an edit that would make the gate refuse every publish is caught at commit time (backlog A7). It reads the private page cached at `.local/gate/page.private.json` for the derived names (repository names, commit ids, branch parts); the hook refreshes it when the hub answers within 3 s and otherwise uses the cache; refresh it by hand from a tailnet device with `python3 scripts/check_web_terms.py --refresh` (source: `--source`, else `$GLASSBOX_GATE_SOURCE`, else `hub_url` in `~/.glassbox/probe.toml` plus `/page.json`). It prints the cache's age and warns above 7 days. Without the cache it checks the word list only and says so. Hits are printed as `web/<file>:<line> term #<n>`, never the word.
 
 The scan needs the private term list `.local/redact_terms.local.json` (git-ignored). The user hands it over separately; place it at that path inside the clone. If it is missing the hook fails closed (exit 2, "setup error") and blocks every commit, which is the intended behaviour.
 

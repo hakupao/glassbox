@@ -66,7 +66,7 @@ The private view is not redacted and has no login of its own: only your devices,
 
 1. **Export** (`hub/export.py`): the public page is rebuilt from `schema/public_fields.json`, never trimmed from the private one. Private repositories, projects, services and devices become same-length placeholders before any styling; CSS blur is never treated as a privacy boundary. Commit titles lose secrets, e-mail addresses, IPs, paths and every private name.
 2. **Publish gate** (`scripts/verify_public.py`): an independent checker with its own rules compares the output with the real private names, then scans for addresses, keys and outside resources. Any hit rejects the publish; its messages show ordinals, never the values. Red-team samples in `tests/redteam/` must all be blocked.
-3. **Repository hygiene**: real data and environment details live only in a git-ignored `.local/`; a pre-commit hook (`scripts/privacy_scan.py`, installed per clone as in [`install-probe.md`](docs/runbooks/install-probe.md), with your own term list) rejects commits that contain private terms.
+3. **Repository hygiene**: real data and environment details live only in a git-ignored `.local/`; a pre-commit hook (`scripts/privacy_scan.py`, installed per clone as in [`install-probe.md`](docs/runbooks/install-probe.md), with your own term list) rejects commits that contain private terms; when `web/` is staged it also runs the gate's own word matcher over the shipped page code (`scripts/check_web_terms.py`), so an edit that would stop publishing is caught at commit time.
 
 ## Deploy your own
 

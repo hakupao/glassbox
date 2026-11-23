@@ -7,7 +7,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | # | Item | Where | Notes |
 |---|---|---|---|
 | A6 | Three more ways the gate can refuse the whole page with nothing leaking (found while fixing A5): (1) the branch of a public commit joined to the next JSON key spells a private name; (2) a title written with literal escapes (`\\u0066…`, `\\x6f`, `o'+'wl`) is kept by the exporter but decoded and refused by the gate, which decodes more layers; (3) a title cut to its prefix still joins into a private name | hub/export.py `decode`, `_no_joined_names` | Low odds. Give the exporter the gate's decoding layers for titles; treat branch like title (null it for that commit); mask the prefix when it still hits |
-| A7 | A library edit can stop publishing without warning: the gate matches private words in the shipped page code as substrings with punctuation ignored, and the unit test checks only the fabricated words | Add a local pre-commit check that runs the gate's matcher with the real word list over `web/` and prints ordinals only. It fails closed (no leak): found when the art rewrite collided with words three times (S17 R14c) |
 
 ## B. UI
 
@@ -27,7 +26,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | C5 | After a reboot, confirm Tailscale reconnects by itself on the Windows machine and on the dev Mac | `tailscale status` |
 | C6 | Windows probe: confirm which agent log roots should be reported (defaults `~/.claude/projects`, `~/.codex/sessions`) | |
 | C8 | The home-lab services README still describes the backup scope without glassbox | Separate repository |
-| C9 | Probe staleness alert: warn (private page, and Kuma) when a machine's last probe report is older than two intervals | The dev Mac probe stopped for about 38 hours (launchd StartInterval stopped firing) and was found by chance |
 | C10 | `docs/runbooks/install-probe.md`, macOS: switch to the always-running loop (KeepAlive + a loop script) now used on the dev Mac | |
 | C11 | `scripts/sync_publish.sh --apply`: refuse when the code running on the VM does not know a key in the new config | Old code rejects unknown keys, so config must follow the deploy |
 
@@ -47,6 +45,8 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- A7 (2026-11-23): `scripts/check_web_terms.py` runs the gate's own matcher with the real word list, config and a cached private page over the shipped web/ code (each inlined file and the whole bundled page), printing only file:line and term ordinals; the local pre-commit hook runs it (and `check_web.py`) on the staged web/ (`docs/runbooks/install-probe.md`, step 1). Not caught: a word formed with real page data next to the code.
+- C9 (2026-11-23): stale-probe alert: each publisher cycle pushes up/down with counts only to the Kuma push monitor "glassbox probes" (`kuma_probes`); down when a machine is online per Beszel but its probe is older than `probeStale` (1800 s). Machines without a Beszel agent cannot be checked this way. First push 12:04, `probes ok (2)`.
 - C1 (2026-11-23): publisher failure alert: Uptime Kuma push monitor "glassbox publisher" (heartbeat 900 s, 1 retry, phone notification) fed by the publisher through `kuma_push`; first heartbeat received 10:29.
 - E1 (2026-11-23): S16 project retrospective written (kept practices, gaps, key decisions; private because it cites real data). Its gaps are filed as A7, B7, C9-C11, E2-E4.
 - B1 (2026-11-23, S17 R14): the daily background art is rewritten: 19 pieces modelled on real subjects and footage (measured from reference photographs, real motion, natural colour), replacing the first library; seven abstract templates became natural subjects (Saturn, aurora, meadow, dunes, braided river, the Earth at night from orbit, the galaxy M81). Captions were re-audited against the code: each claims only what is drawn, and the Claude Code / Codex split line shows only under the six pieces that draw it in the interface colours. Very small canvases show no art; very large ones use a coarser grid. Follow-ups: B6, A7.

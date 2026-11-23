@@ -66,7 +66,7 @@ tailnet 内有完整的私有视图，另有一份脱敏的公开快照，任何
 
 1. **导出**（`hub/export.py`）：公开页面依据 `schema/public_fields.json` 重新生成，绝不是从私有页面裁剪而来。私有仓库、项目、服务和设备在应用任何样式之前，就已替换为等长的占位符；CSS 模糊从不被视为隐私边界。提交标题会去掉密钥、邮箱地址、IP、路径和所有私有名称。
 2. **发布门禁**（`scripts/verify_public.py`）：一个使用独立规则的检查器，先把输出与真实的私有名称比对，再扫描地址、密钥和外部资源。任何命中都会拒绝发布；其提示只显示序号，不显示具体值。`tests/redteam/` 中的红队样本必须全部被拦截。
-3. **仓库卫生**：真实数据和环境细节只存放在被 git 忽略的 `.local/` 中；pre-commit hook（`scripts/privacy_scan.py`，每个克隆按 [`install-probe.md`](docs/runbooks/install-probe.md) 单独安装，并配上你自己的私有词表）会拒绝包含私有词汇的提交。
+3. **仓库卫生**：真实数据和环境细节只存放在被 git 忽略的 `.local/` 中；pre-commit hook（`scripts/privacy_scan.py`，每个克隆按 [`install-probe.md`](docs/runbooks/install-probe.md) 单独安装，并配上你自己的私有词表）会拒绝包含私有词汇的提交；暂存区含 `web/` 时，它还会用门禁自己的匹配器检查要发布的页面代码（`scripts/check_web_terms.py`），会让发布停下的改动在提交时就被拦下。
 
 ## 部署你自己的实例
 
