@@ -150,6 +150,16 @@ js("block-files-join-next", "rule 6: a path joined to the next file entry spells
 js("block-title-join-key", "rule 6: a title joined to the next key spells a private project", "block", "private name", title("docs: note"))
 # Backlog A5: "<" is escaped in index.html, so "<b12" reads "u003cb12" there: the private commit id 003cb12.
 js("pass-title-lt-json", "a title with '<': as page JSON it spells no private commit id", "pass", None, title("fix: render <b12 tag"))
+# Backlog A6 (1): a branch joined to the next key ("feat/wild" + "hash" spells the private project wild-hash).
+js("block-branch-join-key", "rule 6: a public branch joined to the next key spells a private project", "block", "private name",
+   lambda o: act(o).__setitem__("branch", "feat/wild"))
+# Backlog A6 (2): literal escapes the gate decodes into a private word (owl) or a private project joined to "branch".
+for name, t in (("u", "docs: \\u006fwl notes"), ("x", "docs: \\x6fwl notes"), ("concat", "docs: 'o'+'wl' notes"),
+                ("u-join", "docs: n\\u006fte")):
+    js(f"block-title-escaped-{name}", f"rule 6: a title the gate decodes ({name}) spells a private name", "block", "private name", title(t))
+# Backlog A6 (3): a prefix joined to the next key ("perf:" + "branch" spells the private project perf-branch).
+js("block-title-prefix-join-key", "rule 6: a bare prefix joined to the next key spells a private project", "block", "private name",
+   title("perf:"))
 js("block-files-on-private", "files on a private commit", "block", "file paths on a commit that is not public", files(FILES, who=priv))
 js("block-files-unpushed", "files on an unpushed commit of a public repo", "block", "file paths on a commit that is not public",
    lambda o: (files(FILES)(o), act(o).__setitem__("pushed", False)))

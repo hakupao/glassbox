@@ -617,25 +617,79 @@ class ExportTest(unittest.TestCase):
         p.write_text(hp.html(pub, tmpl), encoding="utf-8")
         return g.check_file(p)
 
-    def joined_title(self, prep, title, harmless, cut):
-        """Export with `title` on activity[0] and with a harmless control title: only that title is cut, the
-        count says so, every other title equals the control, and JSON and bundled HTML pass the gate."""
+    def joined_title(self, prep, title, harmless, cut, key="title", count="titlesJoined", n=1, i=0):
+        """Export with `title` as activity[i][key] and with a harmless control value: only that value is
+        degraded to `cut`, the count is n, every other commit equals the control, and JSON and bundled HTML
+        pass the gate. Returns the export with the raw value put back, for the gate to refuse."""
         page = copy.deepcopy(self.page)
         prep(page)
         ctrl = copy.deepcopy(page)
-        page["activity"][0]["title"], ctrl["activity"][0]["title"] = title, harmless
+        page["activity"][i][key], ctrl["activity"][i][key] = title, harmless
         pub_c, ctx_c = self.run_export(ctrl)
-        self.assertEqual(pub_c["activity"][0]["title"], harmless)
-        self.assertEqual(ctx_c["degraded"]["titlesJoined"], 0)
+        self.assertEqual(pub_c["activity"][i][key], harmless)
+        self.assertEqual(ctx_c["degraded"][count], 0)
         pub, ctx = self.run_export(page)
-        self.assertEqual(pub["activity"][0]["title"], cut)
-        self.assertEqual(ctx["degraded"]["titlesJoined"], 1)
-        self.assertEqual([a["title"] for a in pub["activity"][1:]], [a["title"] for a in pub_c["activity"][1:]])
+        self.assertEqual(pub["activity"][i][key], cut)
+        self.assertEqual(ctx["degraded"][count], n)
+        self.assertEqual(pub["activity"][:i] + pub["activity"][i + 1:], pub_c["activity"][:i] + pub_c["activity"][i + 1:])
         self.assertEqual(self.gate(pub, ctx), [])
         self.assertEqual(self.bundled(pub), [])
         forged = copy.deepcopy(pub)
-        forged["activity"][0]["title"] = title
+        forged["activity"][i][key] = title
         return forged
+
+    def test_branch_joined_to_the_next_key_is_nulled(self):
+        """Backlog A6 (1): the public branch "feat/wild" + the next key "hash" spells the private project
+        wild-hash. Only that commit's branch becomes null; the gate refuses the raw branch."""
+        self.assertIn("wild-hash", self.cfg["privateProjects"])
+        forged = self.joined_title(lambda p: None, "feat/wild", "feat/tidy", None, "branch", "branchesJoined")
+        self.assertTrue(any("private name" in b for b in self.gate(forged)))
+        # A6 (2) for branches: a ref the gate decodes into a private word is masked, not published.
+        self.page["activity"][0]["branch"] = "feat/o'+'wl"
+        pub, ctx = self.run_export()
+        self.assertEqual(pub["activity"][0]["branch"], {"masked": True})
+        self.assertEqual(self.gate(pub, ctx), [])
+        self.assertEqual(self.bundled(pub), [])
+
+    def test_title_with_literal_escapes_is_cut(self):
+        """Backlog A6 (2): the gate decodes \\u, \\x, CSS escapes and 'a'+'b' (every layer), so a title that
+        spells a private word or a pattern only once decoded, alone or joined to the next key, is cut to its
+        prefix. A harmless escape stays as written; the gate refuses every raw title."""
+        for title, joined in (("docs: \\u006fwl notes", 0), ("docs: \\x6fwl notes", 0), ("docs: \\6f wl notes", 0),
+                              ("docs: 'o'+'wl' notes", 0), ("docs: \\u{6f}wl notes", 0), ("docs: ops\\u0040example.com", 0),
+                              ("docs: ping 203.0.113\\x2e7", 0), ("docs: open ftp\\u003a\\x2f\\x2fbox", 0),
+                              ("docs: n\\u006fte", 1), ("docs: n\\x6fte", 1)):
+            with self.subTest(title):
+                forged = self.joined_title(lambda p: None, title, "docs: \\u0041 tidy", "docs:", n=joined)
+                self.assertTrue(self.gate(forged))
+        self.page["activity"][0]["title"] = "fix: match \\d+ digits"
+        pub, ctx = self.run_export()
+        self.assertEqual(pub["activity"][0]["title"], "fix: match \\d+ digits")
+        self.assertEqual(self.gate(pub, ctx), [])
+
+    def test_gate_layers_match_the_gate(self):
+        """The exporter's copy of the gate's decoding (no shared code) gives the same layers."""
+        for s in ("plain", "\\u006fwl", "\\u{1F600}x", "\\x6f\\x77l", "\\6f wl", "&#x6f;&amp;lt;", "a\\/b", "%25%36%66",
+                  "'o'+'wl'", '"o" + "wl"', "`o`+`wl`", "\\u{110000}", "\\uZZZZ", "&lt;b12", "%u006f",
+                  "\\\\u0035\\u0035" * 3, json.dumps({"t": "\\u006fwl", "b": "o'+'wl"})):
+            with self.subTest(s):
+                self.assertEqual(ex.gate_layers(s), vp.decodings(s))
+
+    def test_prefix_that_still_joins_is_masked(self):
+        """Backlog A6 (3): "perf: note" + "branch" spells note-branch; its prefix "perf:" + "branch" spells
+        perf-branch. The title is masked to ******, the form CONTRACT §3 allows any title; a private commit
+        whose title is already only that prefix is masked too. Other titles are kept."""
+        self.assertIn("perf-branch", self.cfg["privateProjects"])
+        forged = self.joined_title(lambda p: None, "perf: note", "perf: tidy", ex.RED)
+        self.assertTrue(any("private name" in b for b in self.gate(forged)))
+        # Full text and prefix join the same way: the mask is reached directly, earlier titles stay.
+        forged = self.joined_title(lambda p: None, "perf: ---", "fix: ---", ex.RED, i=2)
+        self.assertTrue(any("private name" in b for b in self.gate(forged)))
+        self.cfg = write_cfg(self.tmp.name, CFG_TEXT.replace("example-owner", "hakupao")
+                             .replace('privateTitles = "redacted"', 'privateTitles = "prefix-only"'))
+        self.assertEqual(self.cfg["privateTitles"], "prefix-only")
+        forged = self.joined_title(lambda p: None, "perf:", "fix:", ex.RED, i=3)
+        self.assertTrue(any("private name" in b for b in self.gate(forged)))
 
     def test_title_joined_to_the_next_key_is_cut_to_its_prefix(self):
         """Backlog A5 (1): "docs: note" + the next key "branch" spells the private project note-branch. With or
@@ -687,6 +741,46 @@ class ExportTest(unittest.TestCase):
         m.hits = lambda t: calls.append(1) or orig(t)
         ex._no_joined_names(pub, m, collections.Counter())
         self.assertEqual((len(calls), pub), (1, before))
+
+    def test_decoding_a_commit_adds_no_whole_page_scan(self):
+        """A6: a title with something to decode is decoded on its own commit; a page without hits still
+        costs one whole-page scan per form."""
+        self.page["activity"][0]["title"] = "fix: match \\d+ digits"
+        pub, _ = self.run_export()
+        before = copy.deepcopy(pub)
+        m = ex.Matcher(["falcon-ledger"], {})
+        sizes = []
+        orig = m.hits
+        m.hits = lambda t: sizes.append(len(t)) or orig(t)
+        ex._no_joined_names(pub, m, collections.Counter())
+        self.assertEqual(pub, before)
+        self.assertGreater(len(sizes), 1)                        # the commit's decoded layers were scanned
+        self.assertEqual(sum(n > len(ex._serial(pub)) // 2 for n in sizes), 1)
+
+    def test_one_join_costs_a_constant_number_of_page_scans(self):
+        """Security review of A6: with one joined title among N commits, the number of whole-page scans does
+        not grow with N (the fallback stops as soon as the page is clean)."""
+        orig = ex._hits
+        counts = {}
+        for n in (20, 40, 80):
+            page = copy.deepcopy(self.page)
+            extra = [dict(copy.deepcopy(page["activity"][2]), hash=f"{i:07x}", title=f"docs: tidy {i}") for i in range(n)]
+            page["activity"] = page["activity"][:3] + extra + page["activity"][3:]
+            page["activity"][0]["title"] = "docs: note"
+            calls = []
+
+            def spy(node, matcher):
+                if isinstance(node.get("activity"), list):
+                    calls.append(1)
+                return orig(node, matcher)
+            ex._hits = spy
+            try:
+                pub, ctx = self.run_export(page)
+            finally:
+                ex._hits = orig
+            self.assertEqual((pub["activity"][0]["title"], ctx["degraded"]["titlesJoined"]), ("docs:", 1))
+            counts[n] = len(calls)
+        self.assertEqual(len(set(counts.values())), 1, counts)
 
     def test_listed_fragment_never_frees_a_component_of_a_private_name(self):
         """Review R09 security L2: "Falcon-Tools" listed exempts "tools" but not "falcon", a component of the

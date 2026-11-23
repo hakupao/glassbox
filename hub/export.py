@@ -13,7 +13,9 @@ private one: a path not in that table cannot reach the output. On the way:
   `falcon_ledger` both go). Private titles keep only a prefix such as `fix:` (`privateTitles =
   "prefix-only"`, the default by the owner's decision of 2026-11-17); "redacted" keeps the scrubbed text.
   A title that spells a private name only together with the JSON around it, in the page JSON or in
-  index.html (where "<" is escaped), is cut to its prefix too (backlog A5).
+  index.html (where "<" is escaped), is cut to its prefix too (backlog A5); so is one that spells a name
+  or pattern once decoded the way the gate decodes (\\u.., \\x.., 'a'+'b', ...), and a prefix that still
+  joins into a name becomes ****** (A6). A public branch that joins into a name becomes null (A6).
 - today.byProject merges private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
@@ -298,15 +300,45 @@ def decode(text, rounds=4):
     return text
 
 
+def gate_layers(text, limit=8):
+    """The decoded layers the gate checks besides the raw text (backlog A6). Reimplemented, not shared:
+    mirrors scripts/verify_public.py decodings() and _chr() (lines 239-263): the same steps in the same
+    order, the same round limit; tests/test_export.py compares the two on a table of inputs."""
+    def ch(h):
+        try:
+            return chr(int(h, 16))
+        except (ValueError, OverflowError):
+            return ""
+    out, t = [], text
+    for _ in range(limit):
+        n = html.unescape(t)
+        n = re.sub(r"\\u\{([0-9a-fA-F]{1,6})\}", lambda m: ch(m.group(1)), n)
+        n = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: ch(m.group(1)), n)
+        n = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: ch(m.group(1)), n)
+        n = re.sub(r"\\([0-9a-fA-F]{1,6})\s?", lambda m: ch(m.group(1)), n)
+        n = n.replace("\\/", "/")
+        n = urllib.parse.unquote(n)
+        n = re.sub(r"([\"'`])\s*\+\s*([\"'`])", "", n)
+        if n == t:
+            break
+        out.append(n)
+        t = n
+    return out
+
+
 def scrub_title(title, matcher):
-    """A title that mentions a private name is cut to its prefix (review L9); then regexes."""
+    """A title that mentions a private name is cut to its prefix (review L9); then regexes. A title the
+    gate's decoding turns into a private name or a pattern (\\u006f, \\x6f, 'o'+'wl', ...) is cut too
+    (backlog A6); the published text stays as written, only %-encoding and entities are undone."""
     t = decode(title)
-    if matcher.hit(t):
+    if any(matcher.hit(x) for x in [t, *gate_layers(t)]):
         t = prefix_only(t)
         if matcher.hit(t):
             t = RED
     for rx in SCRUB:
         t = rx.sub(RED, t)
+    if any(matcher.hit(x) or any(rx.search(x) for rx in SCRUB) for x in gate_layers(t)):
+        t = prefix_only(t)
     return t
 
 
@@ -679,8 +711,8 @@ def export(page, cfg, terms):
         raise ExportError("export would publish mistyped values:\n  " + "\n  ".join(bad))
     ctx = {"privateNames": sorted(names | hashes | hosts | frags), "publicRepos": sorted(public_repos),
            "publicBranches": sorted(branches),
-           "degraded": {k: notes[k] for k in ("filesDropped", "filesJoined", "titlesJoined", "linksDropped",
-                                               "authorsDropped")}}
+           "degraded": {k: notes[k] for k in ("filesDropped", "filesJoined", "branchesJoined", "titlesJoined",
+                                               "linksDropped", "authorsDropped")}}
     return pub, ctx
 
 
@@ -688,15 +720,42 @@ def _serial(page):
     return json.dumps(page, ensure_ascii=False)
 
 
+ESCAPABLE = re.compile(r"[&\\%+\"\x00-\x1f]")     # what the gate's decoding or JSON's own escapes act on
+
+
+def _strings(node, out):
+    """Keys and strings in order, as the gate's "decoded values" pass joins them."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            out.append(str(k))
+            _strings(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            _strings(v, out)
+    elif isinstance(node, str):
+        out.append(node)
+
+
 def _hits(node, matcher):
     """Hits in the forms the gate reads: the page JSON, and the data as hub/page.py html() inlines it in
     index.html ("<" and U+2028 / U+2029 escaped, so "<b12" reads "u003cb12" there). Same escaping as html();
-    a test pins the two together. The escaped form is scanned only when it differs."""
+    a test pins the two together. The escaped form is scanned only when it differs.
+    The gate also decodes the JSON and the joined keys and strings (backlog A6: "docs: n\\u006fte" + "branch").
+    Only a commit whose title or branch holds something to decode can differ there, so only such commits
+    (node is the page or one commit) are decoded, each on its own: no extra whole-page scan."""
     raw = _serial(node)
     out = matcher.hits(raw)
     if "<" in raw or "\u2028" in raw or "\u2029" in raw:
         esc = raw.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
         out |= matcher.hits(esc)
+    acts = node.get("activity") if isinstance(node.get("activity"), list) else [node]
+    for e in acts:
+        if isinstance(e, dict) and any(isinstance(e.get(k), str) and ESCAPABLE.search(e[k]) for k in ("title", "branch")):
+            vals = []
+            _strings(e, vals)
+            for text in (_serial(e), "\n".join(vals)):
+                for layer in gate_layers(text):
+                    out |= matcher.hits(layer)
     return out
 
 
@@ -704,11 +763,68 @@ def _no_joined_names(pub, matcher, notes):
     """The gate reads the whole snapshot as one normalised stream, JSON and bundled HTML alike, so text
     joined to the JSON around it can spell a private name no single value holds. A page without any hit
     costs one scan per form (both forms are scanned with every term: an escaped "<" makes new short
-    words, so long terms alone would not do). Otherwise file lists, then titles, are degraded."""
+    words, so long terms alone would not do). Otherwise file lists, then branches, then titles are degraded."""
     if not _hits(pub, matcher):
         return
     _joined_files(pub, matcher, notes)
+    _joined_branches(pub, matcher, notes)
     _joined_titles(pub, matcher, notes)
+
+
+def _blame(pub, acts, levels, matcher, notes, key):
+    """Degrade entries one level at a time (levels[id] lists the values from shown to most degraded) until
+    the page shows no hit beyond its base, the hits left with every entry at its last level: those are not
+    these entries' doing and are left to the next pass and the gate (it refuses; nothing leaks). First each
+    entry whose own text shows such a hit, located per entry (about one page of extra scanning), goes to the
+    first level that leaves it clean ("perf: ---" skips its prefix, which joins the same way), else to the
+    deepest level that removes one; then, if hits remain, entries go down one step at a time in page order,
+    one page scan per step. Each step is final and an entry has at most len(levels) - 1, so this ends.
+    notes[key] counts entries degraded."""
+    if not acts:
+        return
+    field = {"titlesJoined": "title", "branchesJoined": "branch"}[key]
+    at = {id(a): 0 for a in acts}
+
+    def put(a, i):
+        at[id(a)] = i
+        a[field] = levels[id(a)][i]
+
+    for a in acts:
+        put(a, len(levels[id(a)]) - 1)
+    base = _hits(pub, matcher)
+    for a in acts:
+        put(a, 0)
+    if not (_hits(pub, matcher) - base):
+        return
+    done = set()
+    for a in acts:                    # the first level that leaves the entry clean, else the deepest that helps
+        shown, best = _hits(a, matcher), 0
+        for i in range(1, len(levels[id(a)])):
+            put(a, i)
+            h = _hits(a, matcher)
+            if (shown - h) - base:
+                best = i
+                if not (h - base):
+                    break
+        put(a, best)
+        if best:
+            done.add(id(a))
+    left = _hits(pub, matcher) - base           # one page scan; then one per step taken, none per entry
+    for a in acts:
+        if not left:
+            break
+        while left and at[id(a)] < len(levels[id(a)]) - 1:
+            put(a, at[id(a)] + 1)
+            done.add(id(a))
+            left = _hits(pub, matcher) - base
+    notes[key] += len(done)
+
+
+def _joined_branches(pub, matcher, notes):
+    """A public commit's branch joined to the JSON around it ("feat/wild" + the next key "hash"): that one
+    branch becomes null (backlog A6), as a private commit's is."""
+    acts = [a for a in pub.get("activity") or [] if isinstance(a, dict) and isinstance(a.get("branch"), str)]
+    _blame(pub, acts, {id(a): [a["branch"], None] for a in acts}, matcher, notes, "branchesJoined")
 
 
 def _joined_files(pub, matcher, notes):
@@ -748,44 +864,13 @@ def _joined_files(pub, matcher, notes):
 
 def _joined_titles(pub, matcher, notes):
     """A title joined to the JSON around it ("docs: note" + the next key "branch"; "<b12" escaped in
-    index.html). Hits not already there with every title cut to its prefix are blamed on titles: a title
-    whose own entry shows such a hit only with its full text is cut to its prefix (located per entry, so
-    about one page of extra scanning); if hits remain, titles are cut one at a time, in page order, until
-    none is left. Each cut is final and there are at most as many as titles, so this ends. Hits a prefix
-    still forms are not the full titles' doing and are left to the gate (it refuses; nothing leaks)."""
+    index.html; "docs: n\\u006fte" decoded) is cut to its prefix (backlog A5); a prefix that still joins
+    ("perf:" + "branch") is masked to ****** (A6), the masked form CONTRACT §3 allows any title. Private
+    titles that are only a prefix already can be masked too."""
     acts = [a for a in pub.get("activity") or [] if isinstance(a, dict) and isinstance(a.get("title"), str)
-            and prefix_only(a["title"]) != a["title"]]
-    if not acts:
-        return
-    full = {id(a): a["title"] for a in acts}
-
-    def cut(a, short=True):
-        a["title"] = prefix_only(full[id(a)]) if short else full[id(a)]
-
-    for a in acts:
-        cut(a)
-    base = _hits(pub, matcher)
-    for a in acts:
-        cut(a, False)
-    new = _hits(pub, matcher) - base
-    if not new:
-        return
-    done = set()
-    for a in acts:
-        shown = _hits(a, matcher)
-        cut(a)
-        if (shown - _hits(a, matcher)) & new:
-            done.add(id(a))
-            notes["titlesJoined"] += 1
-        else:
-            cut(a, False)
-    for a in acts:
-        if not (_hits(pub, matcher) - base):
-            break
-        if id(a) not in done:
-            cut(a)
-            done.add(id(a))
-            notes["titlesJoined"] += 1
+            and a["title"] != RED]
+    levels = {id(a): list(dict.fromkeys([a["title"], prefix_only(a["title"]), RED])) for a in acts}
+    _blame(pub, acts, levels, matcher, notes, "titlesJoined")
 
 
 def _files_and_author(e, public, matcher, cfg, notes):

@@ -480,6 +480,42 @@
   "why": "a title with '<': as page JSON it spells no private commit id"
  },
  {
+  "file": "block-branch-join-key.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a public branch joined to the next key spells a private project"
+ },
+ {
+  "file": "block-title-escaped-u.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a title the gate decodes (u) spells a private name"
+ },
+ {
+  "file": "block-title-escaped-x.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a title the gate decodes (x) spells a private name"
+ },
+ {
+  "file": "block-title-escaped-concat.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a title the gate decodes (concat) spells a private name"
+ },
+ {
+  "file": "block-title-escaped-u-join.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a title the gate decodes (u-join) spells a private name"
+ },
+ {
+  "file": "block-title-prefix-join-key.json",
+  "expect": "block",
+  "reason": "private name",
+  "why": "rule 6: a bare prefix joined to the next key spells a private project"
+ },
+ {
   "file": "block-files-on-private.json",
   "expect": "block",
   "reason": "file paths on a commit that is not public",

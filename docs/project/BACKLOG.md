@@ -6,7 +6,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| A6 | Three more ways the gate can refuse the whole page with nothing leaking (found while fixing A5): (1) the branch of a public commit joined to the next JSON key spells a private name; (2) a title written with literal escapes (`\\u0066…`, `\\x6f`, `o'+'wl`) is kept by the exporter but decoded and refused by the gate, which decodes more layers; (3) a title cut to its prefix still joins into a private name | hub/export.py `decode`, `_no_joined_names` | Low odds. Give the exporter the gate's decoding layers for titles; treat branch like title (null it for that commit); mask the prefix when it still hits |
+| A8 | Two more ways the gate can refuse the whole page with nothing leaking (found in the A6 review; they predate A6): (1) a title with a literal backslash sequence such as `\r\n` serialises to `\\r\\n`, which the gate's path / UNC pattern matches in the raw layer; (2) the exporter's join check covers names only, not the gate's patterns, so values joined or decoded into e.g. `//` (protocol-relative) are refused | hub/export.py `scrub_title`, `_hits` | Exporter: check the serialised title against its own copy of the gate's path / URL patterns and degrade that commit; extend the join check to patterns |
 
 ## B. UI
 
@@ -36,6 +36,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- A6 (2026-11-23): the exporter checks titles and public branches across all of the gate's decoding layers; a public branch that joins into a private name is nulled (`degraded.branchesJoined`); a title prefix that still joins becomes `******`. A join costs a constant number of page scans. Follow-up: A8.
 - B5, B7, C10, C11 (2026-11-23): B5 machine metric labels never wrap (values ellipsize, full value in the tooltip). B7 `scripts/screenshots.sh` takes the README screenshots from the frozen frame `?t=8`. C10 `python -m probe push --every 900` under launchd KeepAlive replaces StartInterval in the macOS runbook. C11 `sync_publish.sh --apply` first asks the running publisher (`--check-config`) and refuses unless it answers ok, so config can no longer run ahead of the deployed code.
 - E2, E3, E4 (2026-11-23): adopted as working rules for later steps: visual work gets one approved sample before the batch; the private trace is appended by a script with clock timestamps; large steps land as several commits and drafts do not stay untracked.
 - B2 (2026-11-19, S17 R08, 8963aac): machine mini charts replay the 24 h history as a sliding window, only when visible and without reduced motion, marked "replay".

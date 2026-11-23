@@ -6,7 +6,7 @@ githubOwners = ["example-owner"]
 # S17 R09 / R10: the login shown as commit author, and branch parts that may be public.
 authors = ["example-owner"]
 branchFragments = ["example-owner"]
-privateProjects = ["dotfiles-sandbox", "pixel-forge", "field-notes", "note-branch"]   # the last three: R09 / A5 join samples
+privateProjects = ["dotfiles-sandbox", "pixel-forge", "field-notes", "note-branch", "wild-hash", "perf-branch"]   # all but the first: R09 / A5 / A6 join samples
 
 [allow]
 "services[].name" = ["gitea", "status-page"]
