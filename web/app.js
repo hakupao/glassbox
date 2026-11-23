@@ -420,8 +420,11 @@ function art(){
   G.capText = () => {
     const name = t('art.name.' + nn);
     $('cap0').textContent = t('art.cap', {n: A.ymd, id: nn, name}) + (A.src ? ' · ' + t('art.credit', {src: A.src}) : '') + (A.id !== A.auto ? ' · ' + t('art.preview') : '');
-    $('capMid').innerHTML = `<span style="color:${BLUE}">■</span> Claude Code ${F.pct(share)}&emsp;<span style="color:${OR}">■</span> Codex ${F.pct(1 - share)}`;
-    $('cap1').textContent = t('art.legend.' + nn, {n: F.n(A.n), tok: F.tok(totTok)});
+    /* the split line only under pieces that draw their data in the two interface colours */
+    $('capMid').innerHTML = A.split ? `<span style="color:${BLUE}">■</span> Claude Code ${F.pct(share)}&emsp;<span style="color:${OR}">■</span> Codex ${F.pct(1 - share)}` : '';
+    /* narrow screens (the art's own phone breakpoint) use a shorter legend where the drawn count differs from the full one */
+    const lk = cv.clientWidth < 640 && G.has('art.legendS.' + nn) ? 'art.legendS.' + nn : 'art.legend.' + nn;
+    $('cap1').textContent = t(lk, {n: F.n(A.n), tok: F.tok(totTok)});
     cv.setAttribute('aria-label', t('art.aria', {name, enc: t('art.enc.' + nn)}));
   };
   G.art = A;
@@ -475,9 +478,11 @@ G.boot = () => {
   G.render();
   addEventListener('hashchange', () => G.render());
   const drawAll = (Tm, force) => { if(A && A.draw) A.draw(Tm + 6); tick(Tm, force); };
-  let lastF = 0;
-  function frame(ts){ requestAnimationFrame(frame); if(document.hidden || ts - lastF < 40) return; lastF = ts; drawAll((performance.now() - start) / 1000); }
+  /* about 25 frames a second; after a slow frame wait longer, so drawing never takes more than about a third of the main thread */
+  let lastF = 0, gap = 40;
+  function frame(ts){ requestAnimationFrame(frame); if(document.hidden || ts - lastF < gap) return; lastF = ts;
+    const t0 = performance.now(); drawAll((t0 - start) / 1000); gap = Math.max(40, Math.min(500, (performance.now() - t0) * 3)); }
   if(FROZEN !== null) drawAll(FROZEN, true); else if(REDUCE) drawAll(8, true); else { drawAll(0, true); requestAnimationFrame(frame); }
-  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { G.runFits(); if(A && A.relayout) A.relayout(); if(G.STATIC) drawAll(FROZEN !== null ? FROZEN : 8, true); }, 120); });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { G.runFits(); if(G.capText) G.capText(); if(A && A.relayout) A.relayout(); if(G.STATIC) drawAll(FROZEN !== null ? FROZEN : 8, true); }, 120); });
 };
 })();

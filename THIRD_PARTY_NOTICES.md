@@ -10,7 +10,7 @@ glassbox is MIT licensed (see [LICENSE](LICENSE)). It includes or adapts the fol
   No source file was copied; each template names its source piece in a header comment, and the page caption credits ascii.rest
   on the days those templates are shown.
 - Files: `web/art.js` (shipped in the page and in every public snapshot; the full license text is in its header) and
-  `design/mockups/s17-bg-lib.html` (the design library the templates were developed in).
+  `design/mockups/s17-bg-lib.html` (an earlier design library of the templates).
 
 ```text
 MIT License
@@ -35,6 +35,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Public-domain data
+
+- `web/art.js` embeds three public-domain maps, each named in the header comment of the piece that uses it:
+  NASA's Black Marble 2012 night lights (NASA Earth Observatory / NOAA NGDC, Suomi NPP VIIRS) and the Natural Earth 1:50m land
+  outline (piece 07), and the near side of the Clementine 750 nm lunar albedo mosaic (USGS; piece 19), each reduced to a coarse grid.
 
 ## Phosphor Icons
 

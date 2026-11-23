@@ -405,6 +405,8 @@ button{font:inherit;color:inherit}
 #view>.grp-h:first-child{margin-top:6px}
 .cap{display:flex;justify-content:space-between;gap:var(--s3);font:12px var(--mono);color:var(--ink-3);padding:6px 0 0}
 @media (max-width:640px){.cap{flex-direction:column;gap:2px}}
+.cap>span:empty{display:none}
+#capMid{white-space:nowrap}
 .tail{height:34vh}
 .nogb{padding:60px 0;font:var(--fs-2) var(--mono);color:var(--ink-3)}
 
