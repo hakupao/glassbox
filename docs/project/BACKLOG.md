@@ -18,16 +18,13 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Notes |
 |---|---|---|
-| C4 | Token expiry reminders: GitHub read-only token, Gitea read-only token, publish token | Calendar entries before they expire |
 | C5 | After a reboot, confirm Tailscale reconnects by itself on the Windows machine and on the dev Mac | `tailscale status` |
 | C6 | Windows probe: confirm which agent log roots should be reported (defaults `~/.claude/projects`, `~/.codex/sessions`) | |
-| C8 | The home-lab services README still describes the backup scope without glassbox | Separate repository |
 
 ## D. Optional
 
 | # | Item | Notes |
 |---|---|---|
-| D1 | GitHub social preview image | Settings, General, Social preview: `docs/screenshots/overview.png` |
 
 ## E. Project
 
@@ -36,6 +33,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- C4, C8, D1 (2026-11-23): C4 checked: the two GitHub fine-grained tokens are set to never expire and the Gitea tokens have no expiry, so no reminders are needed (add one if a token is regenerated with an expiry). C8: the home-lab services README has a glassbox section (deployment, alerts, backup and restore). D1: the GitHub social preview is a 1280x640 shot of the public overview.
 - A6 (2026-11-23): the exporter checks titles and public branches across all of the gate's decoding layers; a public branch that joins into a private name is nulled (`degraded.branchesJoined`); a title prefix that still joins becomes `******`. A join costs a constant number of page scans. Follow-up: A8.
 - B5, B7, C10, C11 (2026-11-23): B5 machine metric labels never wrap (values ellipsize, full value in the tooltip). B7 `scripts/screenshots.sh` takes the README screenshots from the frozen frame `?t=8`. C10 `python -m probe push --every 900` under launchd KeepAlive replaces StartInterval in the macOS runbook. C11 `sync_publish.sh --apply` first asks the running publisher (`--check-config`) and refuses unless it answers ok, so config can no longer run ahead of the deployed code.
 - E2, E3, E4 (2026-11-23): adopted as working rules for later steps: visual work gets one approved sample before the batch; the private trace is appended by a script with clock timestamps; large steps land as several commits and drafts do not stay untracked.
