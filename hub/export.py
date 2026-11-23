@@ -15,7 +15,9 @@ private one: a path not in that table cannot reach the output. On the way:
   A title that spells a private name only together with the JSON around it, in the page JSON or in
   index.html (where "<" is escaped), is cut to its prefix too (backlog A5); so is one that spells a name
   or pattern once decoded the way the gate decodes (\\u.., \\x.., 'a'+'b', ...), and a prefix that still
-  joins into a name becomes ****** (A6). A public branch that joins into a name becomes null (A6).
+  joins into a name becomes ****** (A6). A public branch that joins into a name becomes null (A6). The same
+  happens when a title or branch forms one of the gate's patterns only once serialised or decoded (A8: "\\r\\n"
+  is "\\\\r\\\\n" in JSON, a \\\\host\\ path to the gate).
 - today.byProject merges private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
@@ -257,6 +259,7 @@ class Matcher:
 
     def __init__(self, names, modes):
         self.long, self.short = set(), []
+        self.url_rx = None                # public commit links (export() sets it): not a pattern hit (A8)
         for t in names:
             n = norm(t)
             if not n:
@@ -638,6 +641,7 @@ def export(page, cfg, terms):
                       | cfg["privateProjects"], modes)
 
     url_rx = public_url_rx(public_repos, cfg["githubOwners"])
+    matcher.url_rx = url_rx
     branches = set()
     notes = collections.Counter()           # degradations, counted for the context (no names)
     for e in activity:
@@ -736,13 +740,73 @@ def _strings(node, out):
         out.append(node)
 
 
+# The patterns the gate looks for in every text it reads (backlog A8). Reimplemented, not shared: mirrors
+# scripts/verify_public.py PATTERNS (lines 77-91), ABS_URL / REL_URL / XMLNS (99-102) and PROTO_REL (121-123), and
+# their use in check_text() (lines 533-549: every layer; an absolute URL is fine when it is an XML namespace or
+# a public commit link). The SVG geometry exemption there concerns HTML tags, which page data cannot hold
+# ("<" is escaped). tests/test_export.py compares the two on a table of inputs.
+GATE_PATTERNS = {
+    "email": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"),
+    "ipv4": re.compile(r"(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\w|\.\d)"),
+    "ipv6": re.compile(r"(?i)(?<![\w:])(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}(?![\w:])"
+                       r"|(?<![\w:])(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?(?![\w:])"),
+    "path": re.compile(r"(?:/Users/|/home/|/Volumes/|/root/|/private/|/mnt/|/srv/|/var/folders/"
+                       r"|(?<![\w~])~/|(?<![A-Za-z])[A-Za-z]:\\{1,2}[\w.$ -]|\\\\[A-Za-z0-9.-]+\\)"),
+    "lan host": re.compile(r"(?i)\b[\w-]+(?:\.[\w-]+)*\.(?:ts\.net|home\.arpa)\b"),
+    "secret": re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"
+                         r"|\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}"
+                         r"|sk-[A-Za-z0-9_-]{16,}|sk_(?:live|test)_[A-Za-z0-9]{8,}|npm_[A-Za-z0-9]{20,}|hf_[A-Za-z0-9]{20,}"
+                         r"|xox[a-z]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"
+                         r"|\beyJ[\w-]{5,}\.[\w-]{5,}(?:\.[\w-]*)?"
+                         r"|(?i:\b(?:password|passwd|secret|token|api[_-]?key)\s*[=:]\s*[\"']?[^\s\"'<>{}]{4,})"),
+}
+GATE_ABS_URL = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'<>()\\]*")
+GATE_REL_URL = re.compile(r"(?i)(?:\b(?:src|href|srcset|action|data|poster|xlink:href)\s*=\s*[\"']?\s*"
+                          r"|url\(\s*[\"']?\s*|@import\s+[\"']?\s*|\bimport\s*\(\s*[\"']|\bfetch\s*\(\s*[\"'])//")
+GATE_XMLNS = re.compile(r"http://www\.w3\.org/(?:2000/svg|1999/xhtml|1999/xlink|XML/1998/namespace)")
+GATE_PROTO_REL = re.compile(r"[\"'`][ \t]*[/\\][ \t]*[/\\][ \t]*[\w-]+(?:\.[\w-]+)+"
+                            r"|[(=][/\\][ \t]*[/\\][ \t]*[\w-]+(?:\.[\w-]+)+"
+                            r"|\b[A-Za-z][\w+.-]*:\s*(?:\\|/\s+/|/\\)\s*[/\\]?\s*[\w-]+(?:\.[\w-]+)+")
+
+
+def pattern_hits(text, url_rx=None):
+    """What the gate's patterns find in one text, raw layer only: a list of (kind, match), one per match.
+    url_rx: the public commit links, which the gate allows."""
+    out = [(kind, m.group(0)) for kind, rx in GATE_PATTERNS.items() for m in rx.finditer(text)]
+    for m in GATE_ABS_URL.finditer(text):
+        u = m.group(0).rstrip(".,;")
+        if not (GATE_XMLNS.fullmatch(u) or (url_rx and url_rx.fullmatch(u))):
+            out.append(("url", u))
+    return out + [("rel", m.group(0)) for rx in (GATE_REL_URL, GATE_PROTO_REL) for m in rx.finditer(text)]
+
+
+def _entry_patterns(e, url_rx):
+    """Pattern hits in one commit as the gate reads it: page JSON as written (--out uses indent=1) and compact as
+    inlined in index.html (with its escaping), the joined keys and strings, and every decoded layer of each.
+    Patterns stop at quotes, spaces and brackets, so what a title or branch forms stays inside its commit.
+    A hit is ("\\0", commit, kind, match, n): numbered per commit, so the same text in a title and in a branch
+    are two hits (each value is blamed for its own), and the shape is one no name hit has."""
+    vals = []
+    _strings(e, vals)
+    compact = _serial(e)
+    esc = compact.replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+    out = set()
+    for text in dict.fromkeys((compact, esc, json.dumps(e, ensure_ascii=False, indent=1), "\n".join(vals))):
+        for layer in [text, *gate_layers(text)]:
+            for (kind, m), c in collections.Counter(pattern_hits(layer, url_rx)).items():
+                out.update(("\0", id(e), kind, m, i) for i in range(c))
+    return out
+
+
 def _hits(node, matcher):
     """Hits in the forms the gate reads: the page JSON, and the data as hub/page.py html() inlines it in
     index.html ("<" and U+2028 / U+2029 escaped, so "<b12" reads "u003cb12" there). Same escaping as html();
     a test pins the two together. The escaped form is scanned only when it differs.
     The gate also decodes the JSON and the joined keys and strings (backlog A6: "docs: n\\u006fte" + "branch").
     Only a commit whose title or branch holds something to decode can differ there, so only such commits
-    (node is the page or one commit) are decoded, each on its own: no extra whole-page scan."""
+    (node is the page or one commit) are decoded, each on its own: no extra whole-page scan.
+    The gate's patterns (A8: "\\r\\n" in JSON reads as a \\\\host\\ path, '"//a.b' as a protocol-relative URL) are
+    looked for per commit, each on its own: also no extra whole-page scan."""
     raw = _serial(node)
     out = matcher.hits(raw)
     if "<" in raw or "\u2028" in raw or "\u2029" in raw:
@@ -750,12 +814,17 @@ def _hits(node, matcher):
         out |= matcher.hits(esc)
     acts = node.get("activity") if isinstance(node.get("activity"), list) else [node]
     for e in acts:
-        if isinstance(e, dict) and any(isinstance(e.get(k), str) and ESCAPABLE.search(e[k]) for k in ("title", "branch")):
+        if not isinstance(e, dict):
+            continue
+        if any(isinstance(e.get(k), str) and ESCAPABLE.search(e[k]) for k in ("title", "branch")):
             vals = []
             _strings(e, vals)
-            for text in (_serial(e), "\n".join(vals)):
+            joined = "\n".join(vals)             # raw too: a literal tab is "\t" in the JSON but no letter here
+            out |= matcher.hits(joined)
+            for text in (_serial(e), joined):
                 for layer in gate_layers(text):
                     out |= matcher.hits(layer)
+        out |= _entry_patterns(e, getattr(matcher, "url_rx", None))
     return out
 
 

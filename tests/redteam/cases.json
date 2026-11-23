@@ -510,6 +510,24 @@
   "why": "rule 6: a title the gate decodes (u-join) spells a private name"
  },
  {
+  "file": "block-title-backslash-json.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "pattern: literal backslash sequences in a title read as a UNC path once serialised"
+ },
+ {
+  "file": "block-branch-backslash-json.json",
+  "expect": "block",
+  "reason": "path",
+  "why": "pattern: a branch with backslashes reads as a UNC path once serialised"
+ },
+ {
+  "file": "block-title-proto-rel.json",
+  "expect": "block",
+  "reason": "protocol-relative",
+  "why": "pattern: a quote then //host in a title reads as a protocol-relative URL"
+ },
+ {
   "file": "block-title-prefix-join-key.json",
   "expect": "block",
   "reason": "private name",

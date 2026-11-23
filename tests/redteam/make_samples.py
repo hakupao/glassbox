@@ -157,6 +157,13 @@ js("block-branch-join-key", "rule 6: a public branch joined to the next key spel
 for name, t in (("u", "docs: \\u006fwl notes"), ("x", "docs: \\x6fwl notes"), ("concat", "docs: 'o'+'wl' notes"),
                 ("u-join", "docs: n\\u006fte")):
     js(f"block-title-escaped-{name}", f"rule 6: a title the gate decodes ({name}) spells a private name", "block", "private name", title(t))
+# Backlog A8: JSON writes a title's "\r\n" as "\\r\\n", a \\host\ path to the gate; '"//host' reads as protocol-relative.
+js("block-title-backslash-json", "pattern: literal backslash sequences in a title read as a UNC path once serialised", "block", "path",
+   title("fix: normalise \\r\\n line endings"))
+js("block-branch-backslash-json", "pattern: a branch with backslashes reads as a UNC path once serialised", "block", "path",
+   lambda o: act(o).__setitem__("branch", "feat\\b\\c"))
+js("block-title-proto-rel", "pattern: a quote then //host in a title reads as a protocol-relative URL", "block", "protocol-relative",
+   title('docs: load "//cdn.example.com here'))
 # Backlog A6 (3): a prefix joined to the next key ("perf:" + "branch" spells the private project perf-branch).
 js("block-title-prefix-join-key", "rule 6: a bare prefix joined to the next key spells a private project", "block", "private name",
    title("perf:"))

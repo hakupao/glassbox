@@ -675,6 +675,68 @@ class ExportTest(unittest.TestCase):
             with self.subTest(s):
                 self.assertEqual(ex.gate_layers(s), vp.decodings(s))
 
+    def test_gate_patterns_match_the_gate(self):
+        """A8: the exporter's copy of the gate's patterns (no shared code): same expressions, same findings."""
+        self.assertEqual({k: r.pattern for k, r in ex.GATE_PATTERNS.items()}, {k: r.pattern for k, r in vp.PATTERNS.items()})
+        for mine, theirs in ((ex.GATE_ABS_URL, vp.ABS_URL), (ex.GATE_REL_URL, vp.REL_URL), (ex.GATE_XMLNS, vp.XMLNS),
+                             (ex.GATE_PROTO_REL, vp.PROTO_REL)):
+            self.assertEqual(mine.pattern, theirs.pattern)
+        url_rx = ex.public_url_rx({"sdtm-pedia"}, {"hakupao"})
+
+        def gate_finds(t):
+            out = [(k, m.group(0)) for k, rx in vp.PATTERNS.items() for m in rx.finditer(t)]
+            out += [("url", u) for m in vp.ABS_URL.finditer(t) if not (vp.XMLNS.fullmatch(u := m.group(0).rstrip(".,;"))
+                                                                      or url_rx.fullmatch(u))]
+            return out + [("rel", m.group(0)) for rx in (vp.REL_URL, vp.PROTO_REL) for m in rx.finditer(t)]
+        for s in ('"fix: a\\\\r\\\\n b"', '"x": "//cdn.example.com"', "ops@example.com", "203.0.113.7", "fd7a:115c::1",
+                  "/" + "Users/x", "C:\\\\x", "box.tail1a2b.ts.net", "token = abcd1234", "https://example.com/a.",
+                  "https://github.com/hakupao/sdtm-pedia/commit/4be0d71", "http://www.w3.org/2000/svg", 'src="//a.b',
+                  "url(//a.b)", "https:\\\\a.b", "=//a.b", "plain words, nothing here"):
+            with self.subTest(s):
+                self.assertEqual(ex.pattern_hits(s, url_rx), gate_finds(s))
+                self.assertEqual(bool(gate_finds(s)), s != "plain words, nothing here" and "sdtm-pedia" not in s and "w3.org" not in s)
+
+    def test_title_or_branch_the_gate_reads_as_a_pattern_is_degraded(self):
+        """Backlog A8: "\\r\\n" is written "\\\\r\\\\n" in the JSON, which the gate reads as a \\\\host\\ path; '"//host'
+        in a title reads as a protocol-relative URL. That title is cut to its prefix, that branch becomes null;
+        the page JSON (as --out writes it, indent=1, and compact) and the bundle pass; the gate refuses the raw value."""
+        for title, cut, n in (("fix: normalise \\r\\n line endings", "fix:", 1), ("fix: a\\tb\\tc", "fix:", 1)):
+            with self.subTest(title):
+                forged = self.joined_title(lambda p: None, title, "fix: normalise line endings", cut, n=n)
+                self.assertTrue(any("path" in b for b in self.gate(forged)))
+                self.assertEqual(self.gate_indented(self.run_export(self.page_with(0, "title", title))), [])
+        forged = self.joined_title(lambda p: None, "feat\\b\\c", "feat/b-c", None, "branch", "branchesJoined")
+        self.assertTrue(any("path" in b for b in self.gate(forged)))
+        # The same text in the title and the branch of one commit: two hits, both values degrade (fuzz seed 3).
+        page = self.page_with(0, "branch", "feat\\b\\c")
+        page["activity"][0]["title"] = "wip\\b\\c"
+        pub, ctx = self.run_export(page)
+        self.assertEqual((pub["activity"][0]["title"], pub["activity"][0]["branch"]), (ex.RED, None))
+        self.assertEqual((ctx["degraded"]["titlesJoined"], ctx["degraded"]["branchesJoined"]), (1, 1))
+        self.assertEqual(self.gate(pub, ctx), [])
+        self.assertEqual(self.gate_indented((pub, ctx)), [])
+        self.page["activity"][0]["title"] = 'docs: load "//cdn.example.com here'
+        pub, ctx = self.run_export()
+        self.assertEqual(self.gate(pub, ctx), [])
+        self.assertEqual(self.bundled(pub), [])
+        forged = copy.deepcopy(pub)
+        forged["activity"][0]["title"] = 'docs: load "//cdn.example.com here'
+        self.assertTrue(any("protocol-relative" in b for b in self.gate(forged)))
+
+    def page_with(self, i, key, value):
+        page = copy.deepcopy(self.page)
+        page["activity"][i][key] = value
+        return page
+
+    def gate_indented(self, exported):
+        """Gate on the page JSON exactly as `--out` writes it (indent=1)."""
+        pub, _ = exported
+        g = vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.last_input,
+                    vp.load_toml(Path(self.tmp.name) / "public.toml"))
+        p = Path(self.tmp.name) / "page.public.json"
+        p.write_text(json.dumps(pub, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        return g.check_file(p)
+
     def test_prefix_that_still_joins_is_masked(self):
         """Backlog A6 (3): "perf: note" + "branch" spells note-branch; its prefix "perf:" + "branch" spells
         perf-branch. The title is masked to ******, the form CONTRACT §3 allows any title; a private commit
@@ -682,6 +744,12 @@ class ExportTest(unittest.TestCase):
         self.assertIn("perf-branch", self.cfg["privateProjects"])
         forged = self.joined_title(lambda p: None, "perf: note", "perf: tidy", ex.RED)
         self.assertTrue(any("private name" in b for b in self.gate(forged)))
+        # A8 review: a literal tab / newline reads "\t" / "\n" in the JSON but vanishes in the gate's raw join of
+        # keys and strings, where "perf:" + "branch" spells perf-branch.
+        for ws in ("\t", "\n"):
+            with self.subTest(repr(ws)):
+                forged = self.joined_title(lambda p: None, "perf:" + ws, "fix:" + ws, ex.RED)
+                self.assertTrue(any("private name" in b for b in self.gate(forged)))
         # Full text and prefix join the same way: the mask is reached directly, earlier titles stay.
         forged = self.joined_title(lambda p: None, "perf: ---", "fix: ---", ex.RED, i=2)
         self.assertTrue(any("private name" in b for b in self.gate(forged)))
@@ -733,9 +801,10 @@ class ExportTest(unittest.TestCase):
 
     def test_a_clean_page_costs_one_scan(self):
         """No hit: one whole-page scan, nothing changed."""
-        pub, _ = self.run_export()
+        pub, ctx = self.run_export()
         before = copy.deepcopy(pub)
         m = ex.Matcher(["falcon-ledger"], {})
+        m.url_rx = ex.public_url_rx(ctx["publicRepos"], self.cfg["githubOwners"])     # as export() sets it
         calls = []
         orig = m.hits
         m.hits = lambda t: calls.append(1) or orig(t)
@@ -746,9 +815,10 @@ class ExportTest(unittest.TestCase):
         """A6: a title with something to decode is decoded on its own commit; a page without hits still
         costs one whole-page scan per form."""
         self.page["activity"][0]["title"] = "fix: match \\d+ digits"
-        pub, _ = self.run_export()
+        pub, ctx = self.run_export()
         before = copy.deepcopy(pub)
         m = ex.Matcher(["falcon-ledger"], {})
+        m.url_rx = ex.public_url_rx(ctx["publicRepos"], self.cfg["githubOwners"])     # as export() sets it
         sizes = []
         orig = m.hits
         m.hits = lambda t: sizes.append(len(t)) or orig(t)
@@ -758,15 +828,15 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(sum(n > len(ex._serial(pub)) // 2 for n in sizes), 1)
 
     def test_one_join_costs_a_constant_number_of_page_scans(self):
-        """Security review of A6: with one joined title among N commits, the number of whole-page scans does
-        not grow with N (the fallback stops as soon as the page is clean)."""
+        """Security review of A6: with one joined title among N commits (a name, or an A8 pattern), the number of
+        whole-page scans does not grow with N (the fallback stops as soon as the page is clean)."""
         orig = ex._hits
         counts = {}
-        for n in (20, 40, 80):
+        for n, (title, cut) in ((n, t) for t in (("docs: note", "docs:"), ("docs: a\\tb\\tc", "docs:")) for n in (20, 40, 80)):
             page = copy.deepcopy(self.page)
             extra = [dict(copy.deepcopy(page["activity"][2]), hash=f"{i:07x}", title=f"docs: tidy {i}") for i in range(n)]
             page["activity"] = page["activity"][:3] + extra + page["activity"][3:]
-            page["activity"][0]["title"] = "docs: note"
+            page["activity"][0]["title"] = title
             calls = []
 
             def spy(node, matcher):
@@ -778,9 +848,10 @@ class ExportTest(unittest.TestCase):
                 pub, ctx = self.run_export(page)
             finally:
                 ex._hits = orig
-            self.assertEqual((pub["activity"][0]["title"], ctx["degraded"]["titlesJoined"]), ("docs:", 1))
-            counts[n] = len(calls)
-        self.assertEqual(len(set(counts.values())), 1, counts)
+            self.assertEqual((pub["activity"][0]["title"], ctx["degraded"]["titlesJoined"]), (cut, 1))
+            counts[title, n] = len(calls)
+        for title in ("docs: note", "docs: a\\tb\\tc"):
+            self.assertEqual(len({v for (t, _), v in counts.items() if t == title}), 1, counts)
 
     def test_listed_fragment_never_frees_a_component_of_a_private_name(self):
         """Review R09 security L2: "Falcon-Tools" listed exempts "tools" but not "falcon", a component of the

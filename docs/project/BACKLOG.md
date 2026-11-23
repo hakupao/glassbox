@@ -6,7 +6,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Where | Notes |
 |---|---|---|---|
-| A8 | Two more ways the gate can refuse the whole page with nothing leaking (found in the A6 review; they predate A6): (1) a title with a literal backslash sequence such as `\r\n` serialises to `\\r\\n`, which the gate's path / UNC pattern matches in the raw layer; (2) the exporter's join check covers names only, not the gate's patterns, so values joined or decoded into e.g. `//` (protocol-relative) are refused | hub/export.py `scrub_title`, `_hits` | Exporter: check the serialised title against its own copy of the gate's path / URL patterns and degrade that commit; extend the join check to patterns |
 
 ## B. UI
 
@@ -33,6 +32,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- A8 (2026-11-23): the exporter has its own copy of the gate's patterns (paths, URLs, protocol-relative, secrets) and checks each commit's title and branch as the gate reads them (indented and compact JSON, joined values raw and decoded); a hit degrades that commit only. Random pages refused by the old exporter: about 100 in 300; now 0.
 - C4, C8, D1 (2026-11-23): C4 checked: the two GitHub fine-grained tokens are set to never expire and the Gitea tokens have no expiry, so no reminders are needed (add one if a token is regenerated with an expiry). C8: the home-lab services README has a glassbox section (deployment, alerts, backup and restore). D1: the GitHub social preview is a 1280x640 shot of the public overview.
 - A6 (2026-11-23): the exporter checks titles and public branches across all of the gate's decoding layers; a public branch that joins into a private name is nulled (`degraded.branchesJoined`); a title prefix that still joins becomes `******`. A join costs a constant number of page scans. Follow-up: A8.
 - B5, B7, C10, C11 (2026-11-23): B5 machine metric labels never wrap (values ellipsize, full value in the tooltip). B7 `scripts/screenshots.sh` takes the README screenshots from the frozen frame `?t=8`. C10 `python -m probe push --every 900` under launchd KeepAlive replaces StartInterval in the macOS runbook. C11 `sync_publish.sh --apply` first asks the running publisher (`--check-config`) and refuses unless it answers ok, so config can no longer run ahead of the deployed code.
