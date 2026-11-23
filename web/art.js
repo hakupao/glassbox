@@ -58,19 +58,24 @@ function noise(x, y){ const s_ = v => v * v * (3 - 2 * v);
    A layer may bring its own palette (new Layer(c, r, pal)): entries 0 / 1 are always the two data colours (Claude Code blue, Codex amber) and are kept for
    the elements that carry data; the rest are scenery colours of the piece. A piece may also ask for a finer cell (cell in its library row). */
 const BR = [[0, 1], [1, 2], [0, 3], [1, 0], [0, 2], [1, 3], [0, 0], [1, 1]], SH = [[0, 0], [1, 1], [1, 0], [0, 1]];
+/* the (colour, level) runs of a layer are found with a counting sort into one index array; layers draw one at a time, so all of them share it */
+let LORD = new Int32Array(0), LKEY = new Int16Array(0), LCNT = new Int32Array(0);
 class Layer{
-  constructor(cols, rows, pal, cell){ this.cols = cols; this.rows = rows; this.pal = pal || PAL; this.P = cell || P; const n = cols * rows; this.gb = new Float32Array(n); this.gc = new Uint8Array(n);
-    this.bk = new Array(this.pal.length * LV).fill(null); this.bc = new Int32Array(this.pal.length * LV); }                     /* buckets are made on first use: a long palette costs nothing until a colour is drawn */
+  constructor(cols, rows, pal, cell){ this.cols = cols; this.rows = rows; this.pal = pal || PAL; this.P = cell || P; const n = cols * rows; this.gb = new Float32Array(n); this.gc = new Uint8Array(n); }
   clear(){ this.gb.fill(0); }
   /* set: write over whatever is there (b = 0 erases), so a near subject can cover a far one; put keeps the brighter of the two */
   set(x, y, b, c){ x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= this.cols || y >= this.rows) return; const k = x * this.rows + y; this.gb[k] = Math.min(1, b); this.gc[k] = c; }
   put(x, y, b, c){ x = Math.round(x); y = Math.round(y); if(x < 0 || y < 0 || x >= this.cols || y >= this.rows) return; const k = x * this.rows + y; if(b > this.gb[k]){ this.gb[k] = Math.min(1, b); this.gc[k] = c; } }
   draw(ax, gain, halo, style){
-    const {gb, gc, bk, bc, rows, P} = this; bc.fill(0);
-    for(let k = 0; k < gb.length; k++){ const a = gb[k]; if(a < .05) continue; const key = gc[k] * LV + Math.min(LV, Math.ceil(a * LV)) - 1; (bk[key] || (bk[key] = new Int32Array(gb.length)))[bc[key]++] = k; }
-    for(let key = 0; key < bk.length; key++){
-      const n = bc[key]; if(!n) continue;
-      const col = this.pal[(key / LV) | 0], f = (key % LV + 1) / LV, a = bk[key], rgb = `${col[0]},${col[1]},${col[2]}`;
+    const {gb, gc, rows, P} = this, N = gb.length, NK = this.pal.length * LV;
+    if(LORD.length < N){ LORD = new Int32Array(N); LKEY = new Int16Array(N); } if(LCNT.length < NK + 1) LCNT = new Int32Array(NK + 1);
+    const ord = LORD, kb = LKEY, cnt = LCNT; cnt.fill(0, 0, NK + 1);
+    for(let k = 0; k < N; k++){ const a = gb[k]; if(!(a >= .05)){ kb[k] = -1; continue; } const key = gc[k] * LV + Math.min(LV, Math.ceil(a * LV)) - 1; kb[k] = key; cnt[key + 1]++; }
+    for(let i = 1; i <= NK; i++) cnt[i] += cnt[i - 1];
+    for(let k = 0; k < N; k++){ const key = kb[k]; if(key >= 0) ord[cnt[key]++] = k; }          /* afterwards cnt[key] is where the run of key ends */
+    for(let key = 0, i0 = 0; key < NK; key++){
+      const i1 = cnt[key], n = i1 - i0; if(!n) continue;
+      const col = this.pal[(key / LV) | 0], f = (key % LV + 1) / LV, a = ord.subarray(i0, i1), rgb = `${col[0]},${col[1]},${col[2]}`; i0 = i1;
       if(halo && f > .85){   /* soft halo: one larger faint square per bright cell, no shadowBlur */
         const hs = P * 2.2, ho = (P - hs) / 2; ax.fillStyle = `rgba(${rgb},${(.1 * gain).toFixed(3)})`; ax.beginPath();
         if(style === 'dot') for(let i = 0; i < n; i++){ const k = a[i], x = ((k / rows) | 0) * P + P / 2, y = (k % rows) * P + P / 2; ax.moveTo(x + hs / 2, y); ax.arc(x, y, hs / 2, 0, TAU); }
@@ -2254,7 +2259,7 @@ function tFish(env, X){
      steps beside it: the soft fringe that stands in for a hard outline */
   const glow = [], DX = [-1, 1, 0, 0], DY = [0, 0, -1, 1];
   function stamp(){
-    const yc = phone ? 0 : TOP - 1;                                                     /* never above the band inside the content column (caption line) */
+    const yc = TOP - 1;                                                                 /* never above the band inside the content column (caption line; on a phone the column is the whole width) */
     for(let x = x0; x <= x1; x++) for(let y = y0; y <= y1; y++){ const b = ZB[x * rows + y]; if(b < .5) continue;
       for(let n = 0; 8 > n; n++){ const d = n < 4 ? 1 : 2, nx = x + DX[n & 3] * d, ny = y + DY[n & 3] * d; if(nx < 0 || ny < 0 || nx >= cols || ny >= rows || ZZ[nx * rows + ny] > -1e8) continue;
         glow.push(nx, ny, b * (d === 1 ? .26 : .12), ZC[x * rows + y]); } }
@@ -2311,8 +2316,8 @@ function tFish(env, X){
     for(let c = 0; c < cols; c++){ const open = phone || c < mg - 1 || c > cols - mg, fl = dune[c];
       let far = fl, cc = 0, cd = 0, cb = false; for(const k of bush){ const d = (c - k.x) / k.w; if(d > -1 && d < 1){ const t = fl - k.h * Math.sqrt(1 - d * d) * (k.br ? .45 + .55 * Math.pow(Math.abs(Math.cos(c * .8 / U + k.x)), .5) : 1 + .12 * Math.sin(c * 1.7 / U + k.x)); if(t < far){ far = t; cc = k.c; cd = d; cb = k.br; } } }
       for(let y = open ? 0 : TOP - 1; y < fl; y++){ const lit = shaft(c, y);
-        const b = Math.min(.6, Math.max(0, lit - .3) * 1.1) * (1 - .3 * y / FLOOR) * (phone ? sstep(0, TOP + 5 * U, y) * (1 - .85 * sstep(.3, .12, Math.abs(c / cols - .52))) : open ? 1 : sstep(TOP - 1, TOP + 7 * U, y)) * (.75 + .25 * hash2(c, y));
-        if(b > .05) RL.put(c, y, b, SHAFT);
+        const b = Math.min(.6, Math.max(0, lit - .3) * 1.1) * (1 - .3 * y / FLOOR) * (phone ? (y < TOP - 1 ? 0 : sstep(0, TOP + 5 * U, y)) * (1 - .85 * sstep(.3, .12, Math.abs(c / cols - .52))) : open ? 1 : sstep(TOP - 1, TOP + 7 * U, y)) * (.75 + .25 * hash2(c, y));
+        if(b > .05) RL.put(c, y, b, SHAFT);                                       /* on a phone the caption lies over the rows above the open band: no shaft there */
         const hz = sstep(FLOOR - band * .5, FLOOR + 2 * U, y) * (open || y > TOP + 3 * U ? 1 : 0); if(hz > .05 && (c + y & 1) && b < .1) RL.put(c, y, .1 + .14 * hz * hash2(c, y + 7) * .7, HAZE);   /* teal haze at the back */
         if(y >= far){ const e = (y - far) / U, lum = clamp01(.55 - .5 * cd + (e < 2 ? .4 : 0) - .015 * e), pol = hash2((c / U) >> (cb ? 0 : 1), (y / U) >> 1) > .45 ? 1 : .55;
           BL.put(c, y, (.09 + .26 * lum * pol) * (1 + .6 * lit), cc); } } }
@@ -3356,7 +3361,7 @@ function tSwell(env, X){
      life and its ends are ragged. Foam is written into a table over (slice, column) and picked up by the march. ---- */
   const BW = 0, bk = TAU / WV[BW][0], bdx = Math.sin(WV[BW][1]), bdz = Math.cos(WV[BW][1]), bc = OM[BW] / bk, LS = 24, TE = 4, TF = 12, ZB = 85;
   const FO = new Float32Array(NJ * cols), RATE = .6 + .4 * clamp01(D.jitter * .5), GT = WV[BW][2] + .16 * hs, EV = [], ZN = ZJ[JB] * .8; let EVE = NaN, FC = 0;
-  const foam = t => { FO.fill(0); FC = 0; const xa = ZN / F, xb = ZB / F; let a0 = 1e9, a1 = -1e9, s0 = 1e9, s1 = -1e9;
+  const foam = (t, cnt) => { if(!cnt) FO.fill(0); FC = 0; const xa = ZN / F, xb = ZB / F; let a0 = 1e9, a1 = -1e9, s0 = 1e9, s1 = -1e9;
     for(const [x, z] of [[-CX * xa, ZN], [(cols - CX) * xa, ZN], [-CX * xb, ZB], [(cols - CX) * xb, ZB]]){ const a = bdx * x + bdz * z, s = -bdz * x + bdx * z; a0 = Math.min(a0, a); a1 = Math.max(a1, a); s0 = Math.min(s0, s); s1 = Math.max(s1, s); }
     const E0 = Math.floor(t / TE);
     if(E0 !== EVE){ EVE = E0; EV.length = 0; const m0 = Math.floor((s0 - 14) / LS), m1 = Math.ceil((s1 + 14) / LS);   /* the breakers alive in this stretch of time: a pure function of E0, kept until it changes */
@@ -3373,11 +3378,11 @@ function tSwell(env, X){
       let zl = 1e9, zh = -1e9, xl = 1e9, xh = -1e9; for(const a of [ac0 - 1, ac0 + L + FR]) for(const s of [sc0 - Wm * 1.3, sc0 + Wm * 1.3]){ const x = bdx * a - bdz * s, z = bdz * a + bdx * s; zl = Math.min(zl, z); zh = Math.max(zh, z); xl = Math.min(xl, x); xh = Math.max(xh, x); }
       if(zh < ZN || zl > ZB) continue; zl = Math.max(zl, ZN);
       let j0 = Math.ceil(jOf(zl)), j1 = Math.min(NJ - 1, Math.floor(jOf(zh))), cov = 1; if(j1 < j0){ j0 = j1 = Math.min(NJ - 1, Math.round(jOf((zl + zh) / 2))); cov = Math.max(.5, Math.min(1, (zh - zl) / (ZJ[j0] * ZJ[j0] / (F * CH) * .5))); } if(j0 < 0) j0 = 0;
-      for(let j = j0; j <= j1; j++){ const z = ZJ[j], fz = F / z, c0 = Math.max(0, Math.ceil(CX + xl * fz)), c1 = Math.min(cols - 1, Math.floor(CX + xh * fz)), far = fz < 5, fq = Math.max(5, fz * .8);
-        for(let c = c0; c <= c1; c++){ const x = (c - CX) / fz, a = bdx * x + bdz * z, sw = -bdz * x + bdx * z - sc0, da = cov < 1 ? Math.max(0, Math.min(L, a - ac0)) : a - ac0; if(da < -1 || da > L + FR) continue;
+      for(let j = j0; j <= j1; j++){ const z = ZJ[j]; if(cnt && !(z > 15 && z < 42)) continue; const fz = F / z, c0 = Math.max(0, Math.ceil(CX + xl * fz)), c1 = Math.min(cols - 1, Math.floor(CX + xh * fz)), far = fz < 5, fq = Math.max(5, fz * .8);
+        for(let c = c0; c <= c1; c++){ const x = (c - CX) / fz, a = bdx * x + bdz * z, sw = -bdz * x + bdx * z - sc0, da = cov < 1 ? Math.max(0, Math.min(L, a - ac0)) : a - ac0; if(da < -1 || da > L + FR || cnt && da <= L) continue;
           const rg = noise(sw * .45 + n * 5.1, da * .45 + m * 3.7), tau = da < 0 ? 0 : da > L ? tb : da / bc, age = age0 - tau, wl = Math.sin(Math.PI * Math.min(.93, Math.max(.07, tau / Tb))) * (.75 + .5 * rg), ds = sw / Wm, lat = 1 - ds * ds / (wl * wl); if(lat <= 0) continue;
           let I, front = 0, toe = 0;
-          if(da > L){ const fe = FR * (.3 + .42 * noise(sw * .7 + m * 9.1, t * .9 + n * 2.3) + .36 * noise(sw * 3.3 + n * 4.7, t * 1.6 + m)); if(da - L > fe) continue; I = 1; front = 1; toe = (da - L) / fe; if(z > 15 && z < 42) FC++; }                   /* the white water going down the front */
+          if(da > L){ const fe = FR * (.3 + .42 * noise(sw * .7 + m * 9.1, t * .9 + n * 2.3) + .36 * noise(sw * 3.3 + n * 4.7, t * 1.6 + m)); if(da - L > fe) continue; if(z > 15 && z < 42) FC++; if(cnt) continue; I = 1; front = 1; toe = (da - L) / fe; }                   /* the white water going down the front */
           else { I = (da < 0 ? 1 + da : 1) * (age < .4 ? 1 : Math.exp(-(age - .4) / 3.5)); if(live && L - da < 1.2) front = 1 - (L - da) / 1.2; }
           I *= Math.min(1, lat * 2.2); if(far) I *= (.45 + .5 * rg) * (front > 0 ? 1 : Math.exp(-age / 2.5));   /* far off only fresh white water shows */ if(I < .04) continue; const st = 1 + .22 * age;
           const nz = far ? rg : .3 * noise(da * 1.1 / st + n * 13.1, sw * 1.1 + m * 7.7) + .3 * noise(da * 2.9 / st + m, sw * 2.9 + n * 5.3) + .4 * noise(da * fq / st + n, sw * fq * .6 + m * 3.3);
@@ -3385,8 +3390,8 @@ function tSwell(env, X){
           const lace = 1 - Math.abs(2 * nz - 1) * (2.4 + 3.2 * clamp01(age / 6)), body = I * (.3 - .22 * clamp01(age / 4) + .8 * Math.max(0, lace)), fr_ = .4 + .62 * toe * toe + .34 * (noise(sw * 1.7 + m, da * .5 - t * 1.5 + n) - .5) - .5 * (nz - .5);   /* the white water: a bright roller at its toe, streaks and shadow up to the crest */
           const f = (body + (fr_ - body) * front) * cov, k = j * cols + c; if(f > FO[k]) FO[k] = f > 1 ? 1 : f; } } } };
   /* the static frame (tm = 14) is taken at the moment, within the arrival of the set, with the most white water going down the front of a crest in the middle distance (15 to 42 m)
-     (capped, so a frame is not chosen for being all foam) */
-  { let best = -1; for(let i = 0; i < 24; i++){ const tc = TC - 6 + i * .4; foam(tc); const sc = Math.min(FC, cols * 3) + (i === 15 ? 1 : 0); if(sc > best){ best = sc; T0 = tc; } } }
+     (capped, so a frame is not chosen for being all foam). foam(t, true) only counts that white water: it skips every cell that cannot add to the count */
+  { let best = -1; for(let i = 0; i < 24; i++){ const tc = TC - 6 + i * .4; foam(tc, true); const sc = Math.min(FC, cols * 3) + (i === 15 ? 1 : 0); if(sc > best){ best = sc; T0 = tc; } } }
   /* ---- life at natural scale. Shearwaters: stiff-winged birds that skim the troughs and arc up over the crests, banked, with a short
      burst of quick flaps now and then; placed in metres at the distance where the wings span eight to twelve cells, hidden by nearer
      crests. The first crosses the moon's path at the static frame. A vessel far out with a masthead light. ---- */
