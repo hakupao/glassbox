@@ -17,6 +17,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | B2 | Machine mini charts: replay the 24 h history as a sliding window (one step per second, looping), like the reference site's public snapshot | Only when visible and without `prefers-reduced-motion`; show a small "replay" mark so it is not mistaken for live data |
 | B4 | Activity view: learn from the reference site's activity feed (`#cat=activity&tab=feed`) | Ours is a flat commit list with a detail popup (`web/pages.js` `commitItem`). Reference: a vertical timeline grouped by day ("today, 6 changes"); each commit is a nested card (repo tag, short hash, "unpushed" badge, author, time, file list with M/A/R badges, "load more (17)", diff link); filter chips with counts (all / commits / pushed / unpushed ...); on phones a bottom tab bar, cards keep the timeline rail, long paths cut with an ellipsis; smooth expand and switch animations. Public snapshot rule still applies: private repo names and file paths must not leak, so the file list may be public-repo only or counts only. Take the design rules, not the components; first set them as variables and conventions in `web/styles.css`, then change the pages: (1) clear order inside a card (tags, title, author and time, files, actions), only 3 to 4 levels of size and color; (2) color only where things must be told apart (repo tag, file status, timeline dot), the rest in grays, badges small with pale fills; (3) monospace for data only (hashes, paths, times), body font for text; (4) a fixed spacing scale between and inside cards; (5) phone layout designed on its own: bottom tab bar, full-width segmented switch, paths cut with an ellipsis instead of wrapping; (6) long lists always folded ("load more (n)") so card height stays bounded |
 | B5 | Machine panel (zh): the "内存" label wraps onto two lines on some rows at 1440 px | Overview machines panel | Seen 2026-11-19, already on the live site before R08 |
+| B7 | Screenshot script: freeze animations (`?t=` or reduced motion) or wait for them to settle | README screenshots taken mid-roll were once mistaken for data bugs (A1/A2) |
 
 ## C. Operations
 
@@ -27,6 +28,9 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 | C5 | After a reboot, confirm Tailscale reconnects by itself on the Windows machine and on the dev Mac | `tailscale status` |
 | C6 | Windows probe: confirm which agent log roots should be reported (defaults `~/.claude/projects`, `~/.codex/sessions`) | |
 | C8 | The home-lab services README still describes the backup scope without glassbox | Separate repository |
+| C9 | Probe staleness alert: warn (private page, and Kuma) when a machine's last probe report is older than two intervals | The dev Mac probe stopped for about 38 hours (launchd StartInterval stopped firing) and was found by chance |
+| C10 | `docs/runbooks/install-probe.md`, macOS: switch to the always-running loop (KeepAlive + a loop script) now used on the dev Mac | |
+| C11 | `scripts/sync_publish.sh --apply`: refuse when the code running on the VM does not know a key in the new config | Old code rejects unknown keys, so config must follow the deploy |
 
 ## D. Optional
 
@@ -38,10 +42,13 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Notes |
 |---|---|---|
-| E1 | S16: project retrospective, `RETROSPECTIVE.md` (kept, gaps, key decisions) | Per-step retros for S13 and S15 exist in the private evidence folder |
+| E2 | Aesthetic steps: set the quality bar on one finished sample (reference photos, a motion clip, real conditions: zero-token day, phone, panel cover) before making the batch | The first art library was judged perfunctory and took three days and many rounds to redo (S17 R07 → R14) |
+| E3 | Append to the private trace with a script (timestamp from the clock, fixed keys) instead of by hand | Hand-written timestamps in the S17 trace are out of order |
+| E4 | Land large steps as several commits (e.g. library split first, then batches); move or delete drafts instead of leaving them untracked | R14 landed as one commit; draft mockups left untracked |
 
 ## Done
 
+- E1 (2026-11-23): S16 project retrospective written (kept practices, gaps, key decisions; private because it cites real data). Its gaps are filed as A7, B7, C9-C11, E2-E4.
 - B1 (2026-11-23, S17 R14): the daily background art is rewritten: 19 pieces modelled on real subjects and footage (measured from reference photographs, real motion, natural colour), replacing the first library; seven abstract templates became natural subjects (Saturn, aurora, meadow, dunes, braided river, the Earth at night from orbit, the galaxy M81). Captions were re-audited against the code: each claims only what is drawn, and the Claude Code / Codex split line shows only under the six pieces that draw it in the interface colours. Very small canvases show no art; very large ones use a coarser grid. Follow-ups: B6, A7.
 - A5 (2026-11-21): a public commit title that spells a private name only when joined to the next JSON key, or only in the HTML bundle's escaped form, is now cut to its prefix for that one commit instead of the gate refusing the whole page. The export context counts it (`titlesJoined`).
 - A4, B4c (2026-11-21, S17 R09): commits show the author and a file list with M/A/R/D badges. File paths come only from GitHub (hub, single-commit endpoint) and appear in the public snapshot only on public, pushed, GitHub-source commits; private commits show a file count. Branch parts listed in `branchFragments` (public.toml) may be public; a listed part that is also part of a private name stays private.

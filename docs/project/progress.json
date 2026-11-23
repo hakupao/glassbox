@@ -1,7 +1,7 @@
 {
   "project": "glassbox",
   "tier": 3,
-  "updated": "2026-11-18",
+  "updated": "2026-11-23",
   "steps": {
     "S01": {
       "status": "done",
@@ -60,7 +60,8 @@
       "note": "2026-11-18: public at https://status.bojiang.org (GitHub Pages, custom domain, HTTPS enforced); repo public with READMEs en/zh/ja, MIT; publisher on the deploy VM republishes every 10 min as one parentless gh-pages commit after export + gate; live page re-gated clean. Follow-ups: machines online count mismatch, overview requests < per-agent count, background art, Kuma alert for the publisher, label==code export error"
     },
     "S16": {
-      "status": "todo"
+      "status": "done",
+      "note": "2026-11-23: project retrospective S01-S17 (private: real names and paths), three sections plus timeline and numbers; independent critic review, 2 rounds, fixes applied. Gaps filed as BACKLOG A7, B7, C9-C11, E2-E4"
     },
     "S10a": {
       "status": "done",
@@ -73,6 +74,10 @@
     "S10c": {
       "status": "done",
       "note": "zh/ja/en: key sets identical, 0 missing keys in browser runs across 20 routes x 3 widths"
+    },
+    "S17": {
+      "status": "done",
+      "note": "2026-11-19..23: backlog round: activity timeline + phone tab bar, author and GitHub file lists on public commits, branch-fragment allow list, title-join degrade (A5), daily background art rewritten as 19 natural scenes (67f2a3f, reviews APPROVE, real-data gate clean, deployed and verified live), README screenshots retaken (c3565bd). Open: R11 ops (Kuma monitors, token expiry), BACKLOG"
     }
   },
   "evidence": ".local/evidence/ (gitignored: contains real data)",
