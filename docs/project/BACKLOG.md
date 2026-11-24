@@ -17,8 +17,6 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 | # | Item | Notes |
 |---|---|---|
-| C5 | After a reboot, confirm Tailscale reconnects by itself on the Windows machine and on the dev Mac | `tailscale status` |
-| C6 | Windows probe: confirm which agent log roots should be reported (defaults `~/.claude/projects`, `~/.codex/sessions`) | |
 
 ## D. Optional
 
@@ -32,6 +30,7 @@ Open items after S15 (2026-11-18). To be handled together; each one gets its own
 
 ## Done
 
+- C5, C6 (2026-11-24, on the Windows machine): C5: the Tailscale service starts automatically (not delayed), the client starts at login, and unattended mode is now on (`tailscale set --unattended=true`), so the tailnet stays up without a signed-in user; runbook step 4 now says so. Not yet verified: a push after a reboot and before anyone logs in (check the machine's last report on the hub after the next reboot); the dev Mac's reboot check is still open too. C6: the probe keeps the default roots `~/.claude/projects` and `~/.codex/sessions`, no config change. Checked and left out: no WSL distribution, no other user profile with agent logs, `~/.claude/transcripts` (another tool's format, stopped in February), and directories that hold no session logs (jobs, history, session index, plugin cache, per-project `.claude`). Also seen: one scheduled push took over 2 minutes, of which the log scan was 12 s; the rest is not measured yet.
 - B6 part (2026-11-23): the art kit's Layer uses one shared index with a counting sort (heap at 2560 px: 83 MB to 10 MB, pixels identical); swell (16) mount about 13 ms faster; goldfish (11) on phones keeps light shafts and fish below the caption band, so no day of the year passes 3 % lit pixels behind the caption (was up to 9 %). The rest stays in B6.
 - A8 (2026-11-23): the exporter has its own copy of the gate's patterns (paths, URLs, protocol-relative, secrets) and checks each commit's title and branch as the gate reads them (indented and compact JSON, joined values raw and decoded); a hit degrades that commit only. Random pages refused by the old exporter: about 100 in 300; now 0.
 - C4, C8, D1 (2026-11-23): C4 checked: the two GitHub fine-grained tokens are set to never expire and the Gitea tokens have no expiry, so no reminders are needed (add one if a token is regenerated with an expiry). C8: the home-lab services README has a glassbox section (deployment, alerts, backup and restore). D1: the GitHub social preview is a 1280x640 shot of the public overview.

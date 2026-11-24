@@ -38,6 +38,14 @@ Expect `{"ok": true}`. Failure causes in order: hub not deployed yet (see `deplo
 
 ## 4. Keep it on
 
-Tailscale must start at login and stay connected: macOS "Launch at login" in the Tailscale menu; Windows runs as a service by default.
+Tailscale must start at login and stay connected: macOS "Launch at login" in the Tailscale menu. Windows runs as a service by default, but without unattended mode the connection belongs to the signed-in user and drops when nobody is logged in (after a reboot, before login), so the scheduled probe push cannot reach the hub. Turn it on once:
+
+```sh
+tailscale set --unattended=true
+```
+
+or tick Preferences → Run unattended in the tray menu.
+
+**Verify** (Windows): `tailscale debug prefs` shows `"ForceDaemon": true`.
 
 **Verify** after a reboot: `tailscale status` shows connected without manual action.
