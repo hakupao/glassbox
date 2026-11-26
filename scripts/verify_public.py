@@ -17,8 +17,11 @@ Checks every path given: the publish directory, its index.html, or the page JSON
   and not Gitea; a name that is both allowlisted / shown and private is rejected.
 - name list (rule 6): terms from .local/redact_terms.local.json and the derived private names
   (repos, Text values, private commit ids and hosts, telling branch parts) must not occur
-  anywhere (file paths included); a branch part is exempt only when it spells a public repo name or
-  is listed in `branchFragments` (R10, D4); telling branch parts (weak words) are exempt only inside a non-data <script> / <style>
+  anywhere (file paths included); a branch part is exempt only when it spells a public repo name, is
+  listed in `branchFragments` (R10, D4), or is a word of the page's own web/ code (A9, page_code_words(): read from
+  the web/ working tree, so scripts/check_web_terms.py, the pre-commit check, exempts only the words of web/ at HEAD
+  and catches a codename first written into web/ by the commit; a branch part that is a component of a private name, term, keyword or project is never exempt;
+  a private commit title in a "redacted" snapshot may not hold a part exempt only by A9); telling branch parts (weak words) are exempt only inside a non-data <script> / <style>
   body that is byte-for-byte a web/ .js / .css file as hub.page.bundle() inlines it (public code,
   comments and licence headers included). Any other body counts as markup (fail closed). Text is NFKC-normalised, format characters dropped and Cyrillic / Greek look-alikes
   folded. Long terms (5+ letters or digits, or non-Latin): substring of the letters-and-digits
@@ -52,6 +55,7 @@ or any unexpected failure (one line, no traceback).
 This file shares no code with hub/export.py on purpose: one bug must not pass both.
 """
 import argparse
+import functools
 import html
 import json
 import math
@@ -314,6 +318,7 @@ def vocabulary_parts():
 
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+REFERENCED = re.compile(r'<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"/:]+\.(?:js|css))"')   # the files index.html inlines
 
 
 def web_bodies(web=None):
@@ -325,7 +330,7 @@ def web_bodies(web=None):
     index = web / "index.html"
     if not web.is_dir() or not index.is_file():
         return set()
-    names = re.findall(r'<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"/:]+\.(?:js|css))"', index.read_text(encoding="utf-8"))
+    names = REFERENCED.findall(index.read_text(encoding="utf-8"))
     out = set()
     for n in names:
         f = web / n
@@ -334,6 +339,49 @@ def web_bodies(web=None):
         if f.is_file():
             out.add("\n" + f.read_text(encoding="utf-8"))
     return out
+
+
+_INLINED_TAG = re.compile(r'<link rel="stylesheet" href="[a-z0-9-]+\.css">|<script src="[a-z0-9-]+\.js"></script>')
+
+
+def page_code_words(web=None, read=None):
+    """A9: normalised words() of the public page's own static code, as hub.page.bundle() ships it: web/index.html
+    (minus the <link> / <script src> tags the bundler replaces, whose file names never ship) and every .js / .css it
+    references (web_bodies()). Used ONLY to classify branch fragments: a private branch part such as "route" that is a
+    word of this code reveals nothing, and the exporter cannot remove it from the page. hub/export.py keeps its own copy
+    (page_code_words); tests/test_bundle_gate.py checks both give the same set. Encoded data runs (DATA_RUN, e.g. the
+    base64-like art data in art.js) are left out: their random tokens are no words. Missing web/: empty; a symbolic link
+    (web/, index.html or a referenced file): SetupError, checked before anything is read.
+    The set comes from the web/ working tree, so a codename written into web/ would free itself here. The deployed web/
+    only comes from commits that passed the pre-commit hook, and scripts/check_web_terms.py exempts only the words of
+    web/ as committed at HEAD (read=: name -> text or None, another source for the same files; there git show HEAD):
+    a word first added by the commit being checked cannot free itself (A9 review H1)."""
+    if read is not None:
+        template = read("index.html")
+        if template is None:
+            return frozenset()
+        bodies = {"\n" + t for t in (read(n) for n in REFERENCED.findall(template)) if t is not None}
+        return _code_text_words(template, bodies)
+    web = Path(web or WEB_DIR)
+    index = web / "index.html"
+    if web.is_symlink() or index.is_symlink():
+        raise SetupError("web/: symbolic links are not allowed in the shipped page code")
+    if not web.is_dir() or not index.is_file():
+        return frozenset()
+    bodies = web_bodies(web)                                   # raises SetupError on a symbolic link
+    return _code_text_words(index.read_text(encoding="utf-8"), bodies)
+
+
+def _code_text_words(template, bodies):
+    return _code_words("\n".join([_INLINED_TAG.sub("", template), *sorted(bodies)]))
+
+
+DATA_RUN = re.compile(r"[A-Za-z0-9+/=]{64,}")
+
+
+@functools.cache
+def _code_words(text):
+    return frozenset(n for n in map(norm, words(DATA_RUN.sub(" ", text))) if n)
 
 
 def walk_items(node, path):
@@ -361,12 +409,16 @@ def listed_parts(fragments):
     return {norm(x) for w in fragments for x in [w, *re.split(r"[/\-_]+", w)] if norm(x)}
 
 
-def derive(private, private_projects, with_frags=False, codes=(), fragments=(), protected=()):
+def derive(private, private_projects, with_frags=False, codes=(), fragments=(), protected=(), page_code=True):
     """Visibility and private names, read from the PRIVATE page itself — not from the exporter.
     A name is public only when every occurrence is public:true and not Gitea (review H1).
-    fragments: the config's branchFragments, the only branch parts besides public repo names that
-    are not private (R10). protected: terms and keywords; a listed part that is a component of one of
-    them, of a private name or of a private project stays private ("Falcon-Tools" does not free falcon-ledger's "falcon")."""
+    fragments: the config's branchFragments (R10); with public repo names, words of the page vocabulary
+    (vocabulary_parts(), R08) and words of the page's own static code (page_code_words(), A9: "route" of data-route),
+    the only branch parts that are not private. protected: terms and keywords; a listed or page-code part that is a
+    component of one of them, of a private name or of a private project stays private ("Falcon-Tools" does not free
+    falcon-ledger's "falcon"). Vocabulary parts are freed without that guard (R08). page_code: True = the words of the
+    web/ working tree (export, gate), a set = exactly those words (scripts/check_web_terms.py: web/ at HEAD),
+    False = no A9 exemption (the private-title check of a redacted snapshot)."""
     seen = {}
     for path, key in SITES:
         for e in walk_items(private, path):
@@ -414,14 +466,26 @@ def derive(private, private_projects, with_frags=False, codes=(), fragments=(), 
     frags = {f for f in frags if norm(f) not in listed}
     vparts = vocabulary_parts()
     frags = {f for f in frags if norm(f) not in vparts}                  # claude of claude/x: a page word (R08)
+    # A9: a word of the page's own code (route of data-route) is not private either. Not when it is a component of a
+    # private name, private project, term or keyword (guarded, exact parts only): "falcon" of falcon-ledger stays private
+    # even if web/ code has it, because freeing it would let a title show part of a private name. Such a branch then
+    # stops publishing until it is gone (fail closed, no leak). A substring is not a component: "format" inside a longer
+    # private word is freed, it says nothing about that word. The guard also takes the words() of each value
+    # (RouteKestrel: route, kestrel). Parts of private commit ids and URL hosts are not guarded: the whole id or host
+    # stays a strong private word (accepted, A9 review L2).
+    if page_code is not False:
+        guard = guarded | {norm(x) for w in names | set(private_projects) | set(protected) for x in words(w) if norm(x)}
+        pcode = (page_code_words() if page_code is True else frozenset(page_code)) - guard
+        frags = {f for f in frags if norm(f) not in pcode}
     out = (public, names | hashes | frags, branches, (hashes | frags) - names)
     return out + (frags - names - hashes,) if with_frags else out      # commit ids and hosts are always strong (R08 L1)
 
 
 class Gate:
-    def __init__(self, terms, private, config):
+    def __init__(self, terms, private, config, page_code=True):
         """terms: parsed redact-terms JSON; private: the private page/1 the snapshot was exported
-        from (None only for fabricated examples); config: parsed TOML."""
+        from (None only for fabricated examples); config: parsed TOML. page_code: which page-code words free a branch
+        part (A9), as in derive(): True = web/ as it is, a set = those words (check_web_terms.py: HEAD's), False = none."""
         check_terms(terms)
         check_config(config)
         allow_words = {a.casefold() for a in terms.get("allow", [])}
@@ -432,12 +496,15 @@ class Gate:
         self.private_titles = config.get("privateTitles", "prefix-only")      # default: owner's decision 2026-11-17
         if self.private_titles not in ("prefix-only", "redacted"):
             raise SetupError("config privateTitles must be \"prefix-only\" or \"redacted\"")
+        derive_args = dict(codes=set(config.get("codes", [])), fragments=config.get("branchFragments", []),
+                           protected=[t for t in terms.get("terms", []) if t.casefold() not in allow_words]
+                           + list(config.get("keywords", [])))
         public, derived, branches, whole_words, frag_words = derive(private or {}, self.private_projects, with_frags=True,
-                                                                codes=set(config.get("codes", [])),
-                                                                fragments=config.get("branchFragments", []),
-                                                                protected=[t for t in terms.get("terms", [])
-                                                                           if t.casefold() not in allow_words]
-                                                                + list(config.get("keywords", [])))
+                                                                page_code=page_code, **derive_args)
+        # A9 review M1: branch parts freed only as page-code words still may not stand in a private commit's title
+        # (privateTitles = "redacted" keeps the scrubbed text); check_page looks for them there.
+        freed = derive(private or {}, self.private_projects, with_frags=True, page_code=False, **derive_args)[4] - frag_words
+        self.title_only = sorted(freed)
         self.authors = set(config.get("authors", []))
         # Weak words (R08): branch fragments only. They are searched in the window.GB data script, the decoded data values and the
         # rest of an index.html too, except inside script/style bodies that equal a web/ file byte for byte (web_bodies():
@@ -663,6 +730,12 @@ class Gate:
                 if self.private_titles == "prefix-only" and not (
                         isinstance(a.get("title"), str) and PREFIX_ONLY.fullmatch(a["title"])):
                     bad.append(f"{p}: private commit title must be only a prefix (privateTitles = prefix-only)")
+                if isinstance(a.get("title"), str) and self.title_only:
+                    ws = [words(x) for x in [a["title"], *decodings(a["title"])]]
+                    for f in self.title_only:
+                        pat = words(f)
+                        if any(w[j:j + len(pat)] == pat for w in ws for j in range(len(w) - len(pat) + 1)):
+                            bad.append(f"{p}: private commit title holds a private branch part {hide(f)}")
                 t = a.get("t")
                 try:
                     dt = datetime.fromisoformat(t)

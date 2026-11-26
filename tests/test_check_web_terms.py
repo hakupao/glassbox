@@ -6,6 +6,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -38,9 +39,10 @@ class CheckWebTermsTest(unittest.TestCase):
         (self.web / "a.js").write_text(js, encoding="utf-8")
         (self.web / "s.css").write_text(css, encoding="utf-8")
 
-    def run_cli(self, *extra, page=True):
+    def run_cli(self, *extra, page=True, head=None):
+        """head: the --head-repo (default: a directory that is no git repository, so no word is exempt)."""
         args = ["--web", self.web, "--terms", RT / "terms.json", "--config", RT / "public.toml",
-                "--page", self.page if page else self.d / "missing.json", *extra]
+                "--page", self.page if page else self.d / "missing.json", "--head-repo", head or self.d, *extra]
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             try:
@@ -95,6 +97,88 @@ class CheckWebTermsTest(unittest.TestCase):
         self.assertRegex(out, r"web/index\.html:1 term #\d+")
         self.assertNotIn("marmotte", out)
 
+    def git_repo(self, extra=None, commit=True):
+        """A git repository whose HEAD holds this test's web/ files (index.html with `extra`), or no commit at all."""
+        repo = self.d / "repo"
+        (repo / "web").mkdir(parents=True)
+        self.write(extra=extra or "")
+        for f in self.web.iterdir():
+            shutil.copy(f, repo / "web" / f.name)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True, env=env)
+        run("init", "-q")
+        if commit:
+            run("add", "web")
+            run("-c", "user.name=t", "-c", "user.email=t", "commit", "-q", "-m", "web")
+        return repo
+
+    def test_page_code_words_exempt_only_as_committed_at_head(self):
+        """A9 review H1 follow-up: a branch part that is a word of web/ at HEAD does not block a web/ commit; the same
+        word first added by the checked web/ (working tree or staged copy) is reported; no HEAD or no git: reported."""
+        repo = self.git_repo(extra="<p>marmotte</p>")               # (a) already a word of the committed page
+        self.write(extra="<p>marmotte</p>")
+        rc, out = self.run_cli(head=repo)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("clean", out)
+        shutil.rmtree(repo)
+        repo = self.git_repo()                                     # (b) added only in the working tree: self-release
+        self.write(extra="<p>marmotte</p>")
+        rc, out = self.run_cli(head=repo)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("1 hit(s): 1 a private branch part this web/ adds (not in web/ at HEAD)", out)
+        self.assertNotIn("marmotte", out)
+        shutil.rmtree(repo)
+        repo = self.git_repo(extra="<p>marmotte</p>", commit=False)  # (c) a fresh repository, no HEAD
+        self.write(extra="<p>marmotte</p>")
+        for head in (repo, self.d / "not-a-repo"):
+            with self.subTest(str(head.name)):
+                rc, out = self.run_cli(head=head)
+                self.assertEqual(rc, 1, out)
+                self.assertIn("no web/ at HEAD", out)
+
+    def test_head_reader_gives_the_same_words_as_the_files(self):
+        """The HEAD source goes through the same files, filter and words as the working tree; a symbolic link committed
+        as index.html, or a missing file, contributes nothing."""
+        repo = self.git_repo(extra="<p>marmotte route</p>")
+        read = cw.head_reader(repo)
+        self.assertEqual(cw.vp.page_code_words(read=read), cw.vp.page_code_words(self.web))
+        self.assertIsNone(read("missing.js"))
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        (repo / "web" / "index.html").unlink()
+        (repo / "web" / "index.html").symlink_to(repo / "web" / "a.js")
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t",
+                        "commit", "-qam", "link"], check=True, capture_output=True, env=env)
+        self.assertEqual(cw.vp.page_code_words(read=cw.head_reader(repo)), frozenset())
+
+    def test_word_the_gate_refuses_is_labelled_so(self):
+        """A private term (never freed by page code) is a hit the publish gate itself would refuse."""
+        self.assertIn("owl", json.loads((RT / "terms.json").read_text(encoding="utf-8"))["terms"])
+        self.write(js="const owl = 1;\n")
+        rc, out = self.run_cli()
+        self.assertEqual(rc, 1, out)
+        self.assertIn("1 hit(s): 1 the publish gate would refuse", out)
+        self.assertNotIn("owl", out.lower())
+
+    def test_codename_written_into_web_does_not_free_itself(self):
+        """A9 review H1: the gate exempts branch parts that are words of the web/ code, read from web/ itself. A
+        branch-only codename written into web/ markup is then such a word, but this check exempts only the words of
+        web/ at HEAD and still reports it."""
+        self.write(extra="<p>marmotte</p>")
+        self.assertIn("marmotte", cw.vp.page_code_words(self.web))
+        priv = json.loads(self.page.read_text(encoding="utf-8"))
+        orig = cw.vp.WEB_DIR
+        cw.vp.WEB_DIR = self.web
+        try:
+            freed = cw.vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), priv,
+                               cw.vp.load_toml(RT / "public.toml"))
+        finally:
+            cw.vp.WEB_DIR = orig
+        self.assertNotIn("marmotte", freed.names)          # the publish gate alone would let it through
+        rc, out = self.run_cli()
+        self.assertEqual(rc, 1, out)
+        self.assertRegex(out, r"web/index\.html:1 term #\d+")
+        self.assertNotIn("marmotte", out)
+
     def test_inlined_file_names_in_template_not_reported(self):
         """The bundle replaces <script src="x.js"> / <link href="x.css">: a weak word that is a file's stem only
         appears in the template, never in the shipped page."""
@@ -109,10 +193,10 @@ class CheckWebTermsTest(unittest.TestCase):
                          encoding="utf-8")
         rc, out = self.run_cli()
         self.assertEqual(rc, 0, out)
+        self.assertNotIn("icons", cw.vp.page_code_words(self.web))    # A9: a replaced tag's file name does not ship
         index.write_text(index.read_text(encoding="utf-8").replace("<title>t</title>", "<title>icons</title>"),
                          encoding="utf-8")
-        rc, out = self.run_cli()
-        self.assertEqual(rc, 1, out)                       # the same word in markup still counts
+        self.assertIn("icons", cw.vp.page_code_words(self.web))       # in the markup it is a word of the page code
 
     def test_tag_joins_in_the_assembled_document(self):
         """The bundler writes <style>\\n...</style> and <script>\\n...</script>: a word made of a tag name and a file's

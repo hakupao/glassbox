@@ -1,5 +1,5 @@
 """End to end (S11/S12 x lane D): bundle(export(private example)) passes the gate; one tampered
-detail in the same bundle makes it fail. Fabricated data only."""
+detail in the same bundle makes it fail. A9: branch parts that are words of the page code. Fabricated data only."""
 import contextlib
 import copy
 import importlib.util
@@ -78,6 +78,132 @@ class BundleGateTest(unittest.TestCase):
             with self.subTest(name):
                 self.assertNotEqual(text, html)
                 self.assertTrue(self.gate.check_file(self.site(text, name.replace(" ", "-"))))
+
+    def gate_for(self, page):
+        return vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), page, vp.load_toml(self.cfg_path))
+
+    def private_branches(self, repo, *branches):
+        """The example with its private local commit renamed to `repo`, once per branch (local source, no Gitea twin)."""
+        page = copy.deepcopy(EXAMPLE)
+        base = page["activity"][3]
+        self.assertEqual((base["source"], base["public"]), ("local", False))
+        base["repo"] = repo
+        rows = [dict(base, branch=b, hash=f"c0ffee{i}") for i, b in enumerate(branches)]
+        page["activity"][3:4] = rows
+        return page
+
+    def test_branch_parts_that_are_page_code_words_publish(self):
+        """A9: "route" (data-route in the markup), "format" and "preview" (inlined JS; "format" is also a substring of the
+        substring-mode private repo name) are words of the page's own code: not private names, so the bundle publishes.
+        "planner" is no such word and stays private."""
+        words = ex.page_code_words()
+        self.assertTrue({"route", "format", "preview"} <= words)
+        self.assertNotIn("planner", words)
+        page = self.private_branches("geo-transformatics", "feat/route-planner", "wip/format-preview")
+        page["activity"][0]["title"] = "feat: route planner preview"
+        pub, ctx = ex.export(copy.deepcopy(page), ex.load_config(self.cfg_path), self.terms)
+        self.assertFalse({"route", "format", "preview"} & set(ctx["privateNames"]))
+        self.assertIn("planner", ctx["privateNames"])
+        self.assertNotIn("planner", pub["activity"][0]["title"])
+        _, names = vp.derive(page, set())[:2]
+        self.assertFalse({"route", "format", "preview"} & names)
+        self.assertEqual(self.gate_for(page).check_file(self.site(bundle(pub))), [])
+
+    def test_branch_part_outside_the_page_code_stays_private(self):
+        page = self.private_branches("geo-transformatics", "feat/zebrafinch-tuning")
+        page["activity"][0]["title"] = "docs: zebrafinch notes"
+        pub, ctx = ex.export(copy.deepcopy(page), ex.load_config(self.cfg_path), self.terms)
+        self.assertIn("zebrafinch", ctx["privateNames"])
+        self.assertNotIn("zebrafinch", json.dumps(pub))
+        html = bundle(pub)
+        g = self.gate_for(page)
+        self.assertEqual(g.check_file(self.site(html)), [])
+        planted = html.replace("</body>", "<p>zebrafinch</p></body>", 1)
+        self.assertTrue(any("private name" in x for x in g.check_file(self.site(planted, "planted"))))
+
+    def test_page_code_word_in_a_private_name_stays_private(self):
+        """A9 guard: "route" is a component (split on - / _ . space, or a word of a camelCase value) of a private repo,
+        a term or a private project, so it stays a private name although the page code has it. A title loses it; the
+        bundle is refused while such a branch exists (fail closed, no leak)."""
+        terms = json.loads((RT / "terms.json").read_text(encoding="utf-8"))
+        cfg_text = self.cfg_path.read_text(encoding="utf-8")
+        cases = {"repo": ("route-kestrel", [], cfg_text), "camelCase repo": ("RouteKestrel", [], cfg_text),
+                 "term": ("geo-transformatics", ["route-heron"], cfg_text),
+                 "private project": ("geo-transformatics", [], cfg_text.replace('privateProjects = ["', 'privateProjects = ["route-marten", "', 1))}
+        for name, (repo, extra_terms, text) in cases.items():
+            with self.subTest(name):
+                self.assertIn("privateProjects", text)
+                page = self.private_branches(repo, "feat/route-tweaks")
+                page["activity"][0]["title"] = "docs: route notes"
+                cfg_path = self.d / f"{name.replace(' ', '-')}.toml"
+                cfg_path.write_text(text, encoding="utf-8")
+                t = dict(terms, terms=terms["terms"] + extra_terms)
+                tp = self.d / f"{name.replace(' ', '-')}.json"
+                tp.write_text(json.dumps(t), encoding="utf-8")
+                pub, ctx = ex.export(copy.deepcopy(page), ex.load_config(cfg_path), ex.load_terms(tp))
+                self.assertIn("route", ctx["privateNames"])
+                self.assertNotIn("route", pub["activity"][0]["title"])
+                g = vp.Gate(t, page, vp.load_toml(cfg_path))
+                self.assertIn("route", g.names)
+                self.assertTrue(any("private name" in x for x in g.check_file(self.site(bundle(pub), name.replace(" ", "-")))))
+
+    def test_page_code_word_stays_out_of_a_redacted_private_title(self):
+        """A9 review M1: privateTitles = "redacted" keeps a private commit's scrubbed title. A branch part freed only as a
+        page-code word still leaves it (the exporter scrubs private titles with the pre-A9 set), and the gate refuses a
+        private title that holds one; a public title keeps the word."""
+        self.assertIn('privateTitles = "redacted"', self.cfg_path.read_text(encoding="utf-8"))
+        page = self.private_branches("geo-transformatics", "feat/route-preview")
+        page["activity"][0]["title"] = "feat: route preview"
+        page["activity"][3]["title"] = "fix: route preview tweak"
+        pub, ctx = ex.export(copy.deepcopy(page), ex.load_config(self.cfg_path), self.terms)
+        self.assertFalse({"route", "preview"} & set(ctx["privateNames"]))
+        self.assertEqual(pub["activity"][0]["title"], "feat: route preview")
+        private = [a for a in pub["activity"] if a["public"] is False and a["title"].startswith("fix")]
+        self.assertEqual([a["title"] for a in private], ["fix:"])
+        g = self.gate_for(page)
+        self.assertEqual(g.check_file(self.site(bundle(pub))), [])
+        forged = copy.deepcopy(pub)
+        next(a for a in forged["activity"] if a in private)["title"] = "fix: route tweak"
+        self.assertTrue(any("private commit title holds a private branch part" in x
+                            for x in g.check_file(self.site(bundle(forged), "forged"))))
+        forged["activity"][[a["title"] for a in forged["activity"]].index("fix: route tweak")]["title"] = "fix: r\\u006fute"
+        self.assertTrue(any("private branch part" in x for x in g.check_file(self.site(bundle(forged), "forged2"))))
+
+    def test_exporter_and_gate_read_the_same_page_code_words(self):
+        """The exporter keeps its own copy of the gate's page-code words (no import from scripts/): same set on the
+        shipped web/ and on fabricated code with every word-splitting case; replaced tags, unreferenced files and
+        encoded data runs do not count; a symbolic link (a referenced file, or index.html alone) is refused on both sides."""
+        self.assertEqual(ex.page_code_words(), vp.page_code_words())
+        web = self.d / "web"
+        web.mkdir()
+        (web / "index.html").write_text('<html data-route="x"><link rel="stylesheet" href="s.css">'
+                                        '<script src="stemword.js"></script><p>HTTPServer x2y</p></html>', encoding="utf-8")
+        (web / "s.css").write_text(".fooBar_baz{content:'日本語abc Ελλάδα café ﬁle'}\n", encoding="utf-8")
+        (web / "stemword.js").write_text("const camelCaseWord = 'snake_case-kebab';\n", encoding="utf-8")
+        (web / "stray.js").write_text("const strayword = 1;\n", encoding="utf-8")
+        blob = "Qm9hcmRXb3JkcXVpZXRseWZsb2F0aW5nb3ZlcnRoZWxha2V6ZWJyYWZpbmNoYmFzZTY0ZGF0YXJ1bnM="
+        (web / "stemword.js").write_text(f"const camelCaseWord = 'snake_case-kebab';\nconst D = '{blob}';\n", encoding="utf-8")
+        a, b = ex.page_code_words(web), vp.page_code_words(web)
+        self.assertEqual(a, b)
+        self.assertTrue({"route", "http", "server", "foo", "bar", "baz", "camel", "case", "word", "snake", "kebab",
+                         "file"} <= a)
+        self.assertFalse({"stemword", "strayword"} & a)
+        self.assertFalse({"wxha", "zpbm", "zlcn", "jkc"} & a)          # tokens of the encoded data run only
+        self.assertEqual(ex.page_code_words(self.d / "missing"), frozenset())
+        (web / "s.css").unlink()
+        (web / "s.css").symlink_to(web / "stray.js")
+        with self.assertRaises(ex.ExportError):
+            ex.page_code_words(web)
+        with self.assertRaises(vp.SetupError):
+            vp.page_code_words(web)
+        lone = self.d / "lone"                    # index.html itself a link, no referenced file: refused before reading
+        lone.mkdir()
+        (self.d / "elsewhere.html").write_text("<p>zebrafinch</p>", encoding="utf-8")
+        (lone / "index.html").symlink_to(self.d / "elsewhere.html")
+        with self.assertRaises(ex.ExportError):
+            ex.page_code_words(lone)
+        with self.assertRaises(vp.SetupError):
+            vp.page_code_words(lone)
 
     def test_cli_writes_the_publish_directory(self):
         src = self.d / "private.json"

@@ -13,6 +13,13 @@ or across two inlined files, is found too. Rules mirrored from verify_public.py 
 - strong words over the whole document, raw and every vp.decodings() layer (check_text(..., weak=not is_html));
 - weak words (private branch parts) only outside verbatim web code (Gate._without_web_code, then `name_hits(t) &
   self.weak`, the "outside web/ code" pass).
+Branch parts that are words of the web/ code (A9): the gate and the exporter exempt the words of the web/ they ship;
+here only the words of web/ as committed at HEAD are exempt (`git show HEAD:web/<file>` in --head-repo, default this
+repository; same files, data-run filter and words as vp.page_code_words()). So an existing word such as "route" does
+not block an unrelated web/ commit, but a word first added by the checked web/ (the hook: the staged copy) cannot free
+itself (review H1). No HEAD, git failing, or a file missing or a symbolic link at HEAD: that part exempts nothing
+(fail closed, more is reported). The summary line tells hits the publish gate would refuse from hits that pass the
+gate only because this web/ adds the word.
 Per-file passes only place a hit: `web/<file>:<line>`, a span `<a>-<b>` across lines, or `web/index.html:?` when only
 the assembled document has it (tag joins, file joins).
 Limits: the data script is a stand-in (`window.GB = {};`), so a word formed with real page data next to it is not
@@ -33,6 +40,7 @@ import copy
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 import threading
@@ -58,6 +66,25 @@ REFERENCED = re.compile(r'<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"/:]+\.(?:js
 
 class SetupError(Exception):
     pass
+
+
+def head_reader(repo):
+    """name -> text of web/<name> at HEAD in `repo`, or None (no repo, no HEAD, not a regular file there, git error)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}     # a hook's GIT_DIR / GIT_INDEX_FILE
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=20, env=env)
+
+    def read(name):
+        try:
+            ls = git("ls-tree", "HEAD", "--", f"web/{name}")
+            if ls.returncode or not re.match(rb"100(644|755) blob ", ls.stdout):
+                return None
+            r = git("show", f"HEAD:web/{name}")
+            return r.stdout.decode("utf-8") if r.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError, UnicodeDecodeError):
+            return None
+    return read
 
 
 def source_url(arg):
@@ -186,6 +213,7 @@ def _main(argv):
     ap.add_argument("--terms", default=str(ROOT / ".local" / "redact_terms.local.json"))
     ap.add_argument("--config", default=str(ROOT / ".local" / "public.local.toml"))
     ap.add_argument("--page", default=str(CACHE), help="cached private page/1 (derived names)")
+    ap.add_argument("--head-repo", default=str(ROOT), help="git repository whose HEAD web/ words are exempt (A9)")
     r = ap.add_mutually_exclusive_group()
     r.add_argument("--refresh", action="store_true", help="fetch the private page into --page first")
     r.add_argument("--try-refresh", type=float, metavar="SECONDS", help="refresh within SECONDS; on failure use the cache")
@@ -214,10 +242,14 @@ def _main(argv):
     else:
         print("check_web_terms: no cached private page (run with --refresh): word list only, derived names unchecked")
     doc, files = shipped_files(web)
+    head_words = vp.page_code_words(read=head_reader(Path(a.head_repo).expanduser()))
+    if not head_words:
+        print("check_web_terms: no web/ at HEAD (no git, no commit, or git failed): no branch part exempt as a page word")
     orig = vp.WEB_DIR
     vp.WEB_DIR = web
     try:
-        gate = vp.Gate(terms, private, config)
+        gate = vp.Gate(terms, private, config, page_code=head_words)  # only HEAD's words: a new word cannot free itself
+        shipped = set(vp.Gate(terms, private, config).names)          # the publish gate's view of this web/
     finally:
         vp.WEB_DIR = orig
     rest = gate._without_web_code(doc)
@@ -233,7 +265,10 @@ def _main(argv):
         if not placed:
             print(f"web/index.html:? term #{i}")
     total = len(found)
-    print(f"check_web_terms: {len(files)} file(s), {'%d hit(s): the publish gate would refuse this web/' % total if total else 'clean'}")
+    refused = sum(gate.names[i - 1] in shipped for i in found)
+    parts = ([f"{refused} the publish gate would refuse"] if refused else []) + (
+        [f"{total - refused} a private branch part this web/ adds (not in web/ at HEAD)"] if total - refused else [])
+    print(f"check_web_terms: {len(files)} file(s), " + (f"{total} hit(s): " + "; ".join(parts) if total else "clean"))
     return 1 if total else 0
 
 

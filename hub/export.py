@@ -27,7 +27,9 @@ private one: a path not in that table cannot reach the output. On the way:
   snapshot is never refused because of a path. `author` only on public commits and only when it is
   one of the configured `authors` and no private word; otherwise null.
 - Branch parts (R10, D4): a part of a private branch is a private name unless it is listed in
-  `branchFragments` (each entry split on - / _ like a branch) or spells a public repo name.
+  `branchFragments` (each entry split on - / _ like a branch), spells a public repo name, or (A9) is a word of the
+  page's own static code (web/index.html and the .js / .css it inlines, e.g. "route" of data-route). A listed or
+  page-code part that is a component of a private name, term, keyword or private project stays private.
 
 Visibility (review H1): a repo / project name is public only if every occurrence in the page
 (activity, today.byProject, code.*, usageDays[].byProject) is public and not Gitea.
@@ -49,6 +51,7 @@ examples only) means the strictest settings.
 import argparse
 import collections
 import copy
+import functools
 import html
 import json
 import math
@@ -251,6 +254,41 @@ def _vocabulary():
 
 
 VOCAB = _vocabulary()
+WEB = ROOT / "web"
+_REFERENCED = re.compile(r'<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"/:]+\.(?:js|css))"')
+_INLINED_TAG = re.compile(r'<link rel="stylesheet" href="[a-z0-9-]+\.css">|<script src="[a-z0-9-]+\.js"></script>')
+
+
+def page_code_words(web=None):
+    """A9: normalised tokens of the public page's own static code as hub.page.bundle() ships it: web/index.html
+    without the <link> / <script src> tags it replaces, plus every .js / .css that index.html references. Only
+    for branch parts (see export()). The gate keeps its own copy (verify_public.page_code_words(), the files of its
+    web_bodies()); tests/test_bundle_gate.py checks both give the same set. Encoded data runs (DATA_RUN, e.g. the
+    base64-like art data in art.js) are left out. Missing web/: empty; a symbolic link (web/, index.html or a
+    referenced file): ExportError, checked before anything is read (a link could make private data look like page code)."""
+    web = Path(web or WEB)
+    index = web / "index.html"
+    if web.is_symlink() or index.is_symlink():
+        raise ExportError("web/: symbolic links are not allowed in the shipped page code")
+    if not web.is_dir() or not index.is_file():
+        return frozenset()
+    template = index.read_text(encoding="utf-8")
+    texts = set()
+    for n in _REFERENCED.findall(template):
+        f = web / n
+        if f.is_symlink() or index.is_symlink() or web.is_symlink():
+            raise ExportError("web/: symbolic links are not allowed in the shipped page code")
+        if f.is_file():
+            texts.add("\n" + f.read_text(encoding="utf-8"))
+    return _code_words("\n".join([_INLINED_TAG.sub("", template), *sorted(texts)]))
+
+
+DATA_RUN = re.compile(r"[A-Za-z0-9+/=]{64,}")
+
+
+@functools.cache
+def _code_words(text):
+    return frozenset(n for n in map(norm, tokens(DATA_RUN.sub(" ", text))) if n)
 
 
 class Matcher:
@@ -628,25 +666,41 @@ def export(page, cfg, terms):
                  | cfg["privateProjects"]
                  for x in [w, *re.split(r"[-/_.\s]+", w)] if norm(x)}
     listed = branch_parts(cfg["branchFragments"]) - protected
+    # A9: a word of the page's own code ("route" of data-route) reveals nothing and cannot be removed from the page,
+    # under the same guard: a component of a private name, term, keyword or project ("falcon" of falcon-ledger) stays
+    # private even if web/ code has it, so no title shows part of a private name; the gate then refuses the page while
+    # such a branch exists (fail closed). Components only: "format" inside a longer private word is freed. The guard
+    # also takes the tokens() of each value (RouteKestrel: route, kestrel). Parts of commit ids and URL hosts are not
+    # guarded (the whole id or host stays private, review L2); this guard is a little stricter than the gate's (it
+    # counts allowlisted values and allowed terms too, review L3): stricter only cuts more.
+    guard = protected | {norm(x) for w in names | {v for g, v in texts if g not in NAME_FIELDS_SKIP and norm(v) not in pub_norm}
+                         | set(terms["terms"]) | set(cfg["keywords"]) | cfg["privateProjects"]
+                         for x in tokens(w) if norm(x)}
+    pcode = page_code_words() - guard
     frags = {f for f in frags if norm(f) not in VOCAB and f not in allow_all and norm(f) not in shown
              and norm(f) not in listed and not is_code(f, cfg)}
+    # Review M1: private commit titles (privateTitles = "redacted" keeps them) are scrubbed with the pre-A9 set.
+    title_frags = set(frags)
+    frags = {f for f in frags if norm(f) not in pcode}
     modes = dict(terms["match"])
     # Commit ids and branch parts: whole tokens. The stricter substring match of a real name,
     # term or keyword with the same spelling, and explicit match entries, are kept.
     stronger = {x.casefold() for x in names | set(terms["terms"]) | set(cfg["keywords"]) | cfg["privateProjects"]}
-    for h in hashes | frags:
+    for h in hashes | title_frags:
         if h.casefold() not in stronger:
             modes.setdefault(h.casefold(), "word")
     matcher = Matcher(names | hashes | hosts | frags | set(terms["terms"]) | set(cfg["keywords"])
                       | cfg["privateProjects"], modes)
+    title_matcher = Matcher(names | hashes | hosts | title_frags | set(terms["terms"]) | set(cfg["keywords"])
+                            | cfg["privateProjects"], modes)
 
     url_rx = public_url_rx(public_repos, cfg["githubOwners"])
-    matcher.url_rx = url_rx
+    matcher.url_rx = title_matcher.url_rx = url_rx
     branches = set()
     notes = collections.Counter()           # degradations, counted for the context (no names)
     for e in activity:
         title = e.get("title") if isinstance(e.get("title"), str) else ""
-        title = scrub_title(title, matcher)
+        title = scrub_title(title, matcher if is_public(e, "repo") else title_matcher)
         if is_public(e, "repo"):
             if e.get("source") == "local":       # may live only on a private fork or mirror
                 e["branch"] = None

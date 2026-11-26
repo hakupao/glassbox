@@ -159,35 +159,39 @@ class GateCliTest(unittest.TestCase):
             return [b for b in g.check_file(f) if "private name" in b]
 
     def test_branch_fragments_are_exempt_only_inside_verbatim_web_code(self):
-        """S15 / R08: a private branch part such as "zorblax" or "motion" (feat/reduced-motion-zorblax) is a weak word.
+        """S15 / R08: a private branch part such as "zorBlax" (feat/reduced-motion-zorBlax) is a weak word.
         It may appear only inside a <script> / <style> body that is byte-for-byte a web/ file as the bundler inlines it
         (the public repository's own code, comments and licence headers included). Anywhere else (markup, attributes,
         comments, <title>, <noscript>, another script, the data) it is refused; a script or style body that is not a
-        verbatim web/ file counts as markup (fail closed)."""
+        verbatim web/ file counts as markup (fail closed). A9: "reduced" and "motion" are words of that web/ code, so they
+        are no private names at all; "zorBlax" is not (the code's words are "zor" and "blax"), so it stays weak."""
         with tempfile.TemporaryDirectory() as w:
-            art = "/* THIRD-PARTY licence header; built from feat/zorblax */\nconst motion = 'prefers-reduced-motion';\n"
+            art = "/* THIRD-PARTY licence header; built from feat/zorBlax */\nconst motion = 'prefers-reduced-motion';\n"
             css = "@media (prefers-reduced-motion: reduce){.x{animation:none}}\n"
             (Path(w) / "art.js").write_text(art, encoding="utf-8")
             (Path(w) / "styles.css").write_text(css, encoding="utf-8")
             (Path(w) / "index.html").write_text('<link rel="stylesheet" href="styles.css"><script src="art.js"></script>',
                                                 encoding="utf-8")
-            g = self._gate_with_branch("feat/reduced-motion-zorblax", web=w)
+            g = self._gate_with_branch("feat/reduced-motion-zorBlax", web=w)
+            self.assertIn("zorBlax", g.names)
+            self.assertFalse({"reduced", "motion"} & set(g.names))
             ok = lambda x: x
             self.assertEqual(self._page_problems(g, ok), [])
             self.assertEqual(self._page_problems(g, lambda x: x.replace("</head>", f"<style>\n{css}</style></head>", 1)
                                                  .replace("</body>", f"<script>\n{art}</script></body>", 1)), [])
+            self.assertEqual(self._page_problems(g, lambda x: x.replace("<main>", "<main><p>reduced motion</p>", 1)), [])
             rows = {
-                "html comment": lambda x: x.replace("<main>", "<main><!-- built from feat/zorblax -->", 1),
-                "text node": lambda x: x.replace("<main>", "<main><p>zorblax</p>", 1),
-                "attribute": lambda x: x.replace("<main>", '<main><p title="zorblax">a</p>', 1),
-                "title": lambda x: x.replace("<title>glassbox</title>", "<title>glassbox zorblax</title>", 1),
-                "noscript": lambda x: x.replace("<main>", "<main><noscript>zorblax</noscript>", 1),
-                "other script": lambda x: x.replace("</body>", '<script>const b="zorblax"</script></body>', 1),
-                "window.X": lambda x: x.replace("</body>", '<script>window.X={"t":"zorblax"}</script></body>', 1),
+                "html comment": lambda x: x.replace("<main>", "<main><!-- built from feat/zorBlax -->", 1),
+                "text node": lambda x: x.replace("<main>", "<main><p>zorBlax</p>", 1),
+                "attribute": lambda x: x.replace("<main>", '<main><p title="zorBlax">a</p>', 1),
+                "title": lambda x: x.replace("<title>glassbox</title>", "<title>glassbox zorBlax</title>", 1),
+                "noscript": lambda x: x.replace("<main>", "<main><noscript>zorBlax</noscript>", 1),
+                "other script": lambda x: x.replace("</body>", '<script>const b="zorBlax"</script></body>', 1),
+                "window.X": lambda x: x.replace("</body>", '<script>window.X={"t":"zorBlax"}</script></body>', 1),
                 "web file changed": lambda x: x.replace("</body>", f"<script>\n{art}const z = 1;\n</script></body>", 1),
-                "style not a web file": lambda x: x.replace("</head>", "<style>/* motion */</style></head>", 1),
-                "data: public title": lambda x: x.replace("handle empty mapping rule", "handle empty motion rule", 1),
-                "data: escaped": lambda x: x.replace("handle empty mapping rule", "handle empty z\\u006frblax rule", 1),
+                "style not a web file": lambda x: x.replace("</head>", "<style>/* zorBlax */</style></head>", 1),
+                "data: public title": lambda x: x.replace("handle empty mapping rule", "handle empty zorBlax rule", 1),
+                "data: escaped": lambda x: x.replace("handle empty mapping rule", "handle empty zor\\u0042lax rule", 1),
             }
             for name, edit in rows.items():
                 with self.subTest(name):
