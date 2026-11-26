@@ -1,6 +1,6 @@
 {
- "_note": "USD per million tokens. Source: docs/reference/pricing-2026-11-17.md (official pages, queried 2026-11-17). Keys are base model IDs; '<model>:fast' is fast mode. A model missing here, or a token kind with no price, makes the request unpriced (costUsd null) — never guessed. OpenAI cache writes are not published per model; following common practice they are priced at 1.25x input (marked by 'cacheWriteEstimated'). Haiku 5.5 'longContext.over' is compared with the request's whole prompt: input + cacheRead + cacheWrite.",
- "version": "2026-11-17",
+ "_note": "USD per million tokens. Source: docs/reference/pricing-2026-11-17.md (official pages, queried 2026-11-17) and docs/reference/pricing-2026-11-26.md (GPT-6.2, queried 2026-11-26). Keys are base model IDs; '<model>:fast' is fast mode. A model missing here, or a token kind with no price, makes the request unpriced (costUsd null) — never guessed. OpenAI cache writes were not published for older models; following common practice they are priced at 1.25x input (marked by 'cacheWriteEstimated'). Haiku 5.5 'longContext.over' is compared with the request's whole prompt: input + cacheRead + cacheWrite. GPT-6.2 'longContext.over' is 272K input tokens (input + cacheRead + cacheWrite), as published.",
+ "version": "2026-11-26",
  "models": {
   "claude-fable-5-2": {
    "input": 8,
@@ -167,6 +167,32 @@
    "cacheRead": 0.175,
    "cacheWrite5m": 2.1875,
    "cacheWriteEstimated": true
+  },
+  "gpt-6.2-astra": {
+   "input": 8,
+   "output": 40,
+   "cacheRead": 0.4,
+   "cacheWrite5m": 10,
+   "longContext": {
+    "over": 272000,
+    "input": 16,
+    "output": 60,
+    "cacheRead": 0.8,
+    "cacheWrite5m": 20
+   }
+  },
+  "gpt-6.2-sol": {
+   "input": 2,
+   "output": 10,
+   "cacheRead": 0.1,
+   "cacheWrite5m": 2.5,
+   "longContext": {
+    "over": 272000,
+    "input": 4,
+    "output": 15,
+    "cacheRead": 0.2,
+    "cacheWrite5m": 5
+   }
   }
  }
 }
