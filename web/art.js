@@ -2016,8 +2016,8 @@ function tJelly(env, X){
    at its edges, in its fins and where it bends.
    Scene: light shafts from above, a net of light on the sand, stones, blade-leaved and whorled stem plants that sway with a wave travelling up
    them, far plant masses cooled and dimmed by distance, drifting specks; the water round the big fish is kept clear.
-   Data: bubbles = tokens (every bubble is on screen at all times), their colour = split (the exact UI blue and amber); swim pace = 7-day
-   trend; weed sway = cache miss. The fish, light, plants, sand and specks carry no data: fish colours are natural, not a code. */
+   Data: bubbles = tokens (every bubble is on screen at all times), their colour = split (the exact UI blue and amber); how many small fish swim in the school = 7-day
+   trend (3 to 8, phone 2 to 4); weed sway = cache miss. The fish always swim at one calm pace (a busy week no longer hurries them). The fish, light, plants, sand and specks carry no data: fish colours are natural, not a code. */
 function tFish(env, X){
   const SNAP = true;                                                                                /* false: the fish are placed at fractions of a cell (kept for comparison) */
   const {cols, rows, ax, phone} = env, D = X.D, p = X.p, sp = p.speed, PX = env.P, N = cols * rows, U = 5 / PX;   /* U: cells per 5 px, so sizes hold on any grid */
@@ -2031,7 +2031,7 @@ function tFish(env, X){
   const MORPH = [{A: ORG, B: ORG, D: ORGD, fin: ORG, pc: 0}, {A: WHT, B: RED, D: WHTD, fin: WHT, pc: .5}, {A: WHT, B: ORG, D: WHTD, fin: WHT, pc: .12}, {A: WHT, B: RED, D: WHTD, fin: WHT, pc: .45}, {A: SLATE, B: RED, D: KD, fin: WHT, pc: 0}];
   const RL = new Layer(cols, rows, PL, PX), BL = new Layer(cols, rows, PL, PX), FL = new Layer(cols, rows, PL, PX), off = offscreen(env), S = mulberry(mix(p.seed + 11));
   const TOP = phone ? Math.round(10 * U) : Math.round(rows * .48), FLOOR = rows - Math.round((phone ? 21 : 13) * U), band = FLOOR - TOP;   /* TOP..FLOOR: the water the page leaves open */
-  const mg = Math.max(0, (env.W - 1240) / 2 / PX), vel = sp * (.7 + .6 * D.trendK), sway = 1 + D.jitter * .8;   /* mg: side margin beside the content column, in cells */
+  const mg = Math.max(0, (env.W - 1240) / 2 / PX), vel = 1, sway = 1 + D.jitter * .8;   /* mg: side margin beside the content column, in cells */
   const dune = new Float32Array(cols); for(let c = 0; c < cols; c++) dune[c] = FLOOR + U * (1.4 * Math.sin(c * .043 / U + p.off * 3) + 1.2 * (noise(c * .09 / U + 3, 7) - .5));
   const at = x => dune[Math.max(0, Math.min(cols - 1, x | 0))];
   const VX = cols / 2, VY = TOP + band * .5, F = (phone ? 120 : 200) * U;                            /* camera: vanishing point and focal length, in cells */
@@ -2049,7 +2049,7 @@ function tFish(env, X){
      forages), and a loose school of small comets that follows one path (lead): each member keeps its own place beside it and runs a little
      late. sd = how long after the big fish each one startles (nearest first), sl = how far it darts (body lengths), sk = how far it is thrown
      off its heading ---- */
-  const NS = phone ? 3 : 5, tiers = phone ? [2, 1] : [2, 1, 1];
+  const NS = phone ? 2 + Math.round(2 * D.trendK) : 3 + Math.round(5 * D.trendK), tiers = phone ? [2, 1] : [2, 1, 1];
   const home = (sxc, row, cz, axs, ays, az) => { const k0 = F / (F - cz); return {cz, X0: VX + (sxc - VX) / k0, Y0: VY + (row - VY) / k0, AX: axs / k0, AY: ays / k0, AZ: az, k0, hx: sxc}; };
   const HX = cols * (phone ? .52 : .6 + .02 * p.off), HT = 6 / vel, HG = .45, EV = 14 + (.86 - HG) * HT, SPER = 4 * HT;   /* the startle: while the big fish holds station, every fourth beat */
   const lead = Object.assign(home(cols * (phone ? .5 : .28), TOP + band * (phone ? .28 : .36), -62 * U, cols * (phone ? .3 : .22), band * .16, 34 * U), {i: 20, L: 9 * U, T: 5.6 / vel, g0: .2 + 8 * hash2(p.seed, 31), bow: .22, hs: (p.seed % 9973) * 31 + 20011, qo: 1.7, beat: 1});
