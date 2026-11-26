@@ -2056,7 +2056,9 @@ function tFish(env, X){
   const NS = phone ? 2 + Math.round(2 * D.trendK) : 3 + Math.round(5 * D.trendK), tiers = phone ? [2, 1] : [2, 1, 1];
   const home = (sxc, row, cz, axs, ays, az) => { const k0 = F / (F - cz); return {cz, X0: VX + (sxc - VX) / k0, Y0: VY + (row - VY) / k0, AX: axs / k0, AY: ays / k0, AZ: az, k0, hx: sxc}; };
   const HX = cols * (phone ? .52 : .6 + .02 * p.off), HT = 6 / vel, HG = .45, EV = 14 + (.86 - HG) * HT, SPER = 4 * HT;   /* the startle: while the big fish holds station, every fourth beat */
-  const lead = Object.assign(home(cols * (phone ? .5 : .28), TOP + band * (phone ? .28 : .36), -62 * U, cols * (phone ? .3 : .22), band * .16, 34 * U), {i: 20, L: 9 * U, T: 5.6 / vel, g0: .2 + 8 * hash2(p.seed, 31), bow: .22, hs: (p.seed % 9973) * 31 + 20011, qo: 1.7, beat: 1});
+  /* the school's path is sized for its small fish (about a quarter of the big fish's length): a shorter range and a slower beat keep them
+     near one body length a second (about three at the peak of a burst), as the big fish, instead of racing across the tank */
+  const lead = Object.assign(home(cols * (phone ? .5 : .28), TOP + band * (phone ? .28 : .36), -62 * U, cols * (phone ? .18 : .13), band * .1, 20 * U), {i: 20, L: 9 * U, T: 9 / vel, g0: .2 + 8 * hash2(p.seed, 31), bow: .22, hs: (p.seed % 9973) * 31 + 20011, qo: 1.7, beat: 1});
   const fish = [], sdl = hx => .08 + .25 * Math.abs(hx - HX) / cols;                 /* three to six frames after the big fish */
   tiers.forEach((t, i) => { const hero = t === 2, mo = hero ? (hash2(p.seed, 5) < .6 ? 0 : 1) : i === 1 ? 3 : 4;
     const h = hero ? home(HX, TOP + band * (phone ? .56 : .5), (phone ? -22 : -40) * U, cols * (phone ? .2 : .17), band * (phone ? .05 : .08), (phone ? 26 : 50) * U)
