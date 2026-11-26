@@ -96,7 +96,7 @@
   - 按 `(machine, project)` 整体替换，rebase 掉的旧哈希会自然消失。
   - 只计 `.local` 里配置的作者邮箱写的提交；邮箱本身不上报。
   - `nFiles`（S17 R09）：每个仓库只多跑一次 `git log --numstat`，在本机数出每个提交的文件数，只上报数字。这次调用失败或超时时，提交照常上报，只是不带 `nFiles`。旧版探针不发这个字段，hub 照常接收；hub 也忽略提交里它不认识的键，所以 hub 可以先于探针升级。
-- **额度**：`account` 是账号标识（邮箱或组织 ID）加盐后 sha256 的前 8 位。hub 按 `(account, agent, window)` 取最新的样本。页面上的 `quota[].account` 用 `.local` 里配置的代号（例如 `"K"`），一个 agent 有多个账号时访客也能区分。没有配置代号的新账号：私有版里显示哈希，公开版里整条丢弃，并在私有版上提示"有未命名账号"。
+- **额度**：`account` 是账号标识（邮箱或组织 ID）加盐后 sha256 的前 8 位。hub 按 `(account, agent, window)` 取最新的样本；某个窗口已过重置时间、而同一账号同一 agent 之后还在上报别的窗口时，说明套餐已不再有这个窗口（例如没有 5 小时限制的套餐），页面不再显示它，等它再出现新样本时自动恢复。页面上的 `quota[].account` 用 `.local` 里配置的代号（例如 `"K"`），一个 agent 有多个账号时访客也能区分。没有配置代号的新账号：私有版里显示哈希，公开版里整条丢弃，并在私有版上提示"有未命名账号"。
 - **快照过期**：机器离线超过 15 分钟后，它的 `runtimes` 视为过期，页面上标成灰色；`jobs` 保留最后一次的值。
 - 各个部分都可以省略。省略表示"这次没有新数据"，不等于清空。
 
@@ -176,7 +176,7 @@
 - 其余规则（`hub/page.py`）：
   - 切日、切小时按 hub 配置的 `tz`。前后半年内只要有一个偏移不是整点（例如夏令时切成半小时偏移），就拒绝生成。页面里的时间一律换算成这个时区的偏移。
   - `trend` 每一项都有 `claude-code` 和 `codex` 两个键，没有用量的日子为 0。
-  - `quota`：每个 `(account, agent, window)` 取最新样本；`history` 是 `resetsAt - 窗口长度` 之后的样本。代号来自 hub 配置 `[accounts]`，没配的显示哈希，并在 `warnings` 里提示。
+  - `quota`：每个 `(account, agent, window)` 取最新样本（`resetsAt` 早于该账号该 agent 最新样本的窗口不输出）；`history` 是 `resetsAt - 窗口长度` 之后的样本。代号来自 hub 配置 `[accounts]`，没配的显示哈希，并在 `warnings` 里提示。
   - `services`：容器（Beszel 统计 / Docker 状态）和 Kuma 监控按 `(machine, 名字归一化后相等)` 合并；名字不同的用 hub 配置 `[services.merge]`（监控名 → 容器名）指定。没有配置机器的监控，只有在匹配的容器名在所有机器里唯一时才合并；否则单独成一行，`machine` 为 `null`。合并行用监控名，状态取两者中更差的。
   - `runtimes[].stale`：该机器探针超过 15 分钟没有上报。`machines[].online`：Beszel 15 分钟内报告在线，或探针 15 分钟内上报过。
   - `machines[].system` 要么字段齐全，要么为 `null`。当前值取 Beszel 最近一条 1 分钟记录（15 分钟内且字段齐全）；没有时退回最近一个 20 分钟点。`history` 仍是 20 分钟序列。没有探针的机器，`role` / `os` / `label` 来自 hub 配置 `[machines.<代号>]`。

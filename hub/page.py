@@ -196,7 +196,15 @@ def _quota(conn, cfg, iso, warnings):
         "(SELECT account, agent, window, MAX(sampled_at) AS m FROM quota GROUP BY account, agent, window) l "
         "ON q.account = l.account AND q.agent = l.agent AND q.window = l.window AND q.sampled_at = l.m "
         "ORDER BY q.agent, q.account, q.window").fetchall()
+    newest = defaultdict(str)
+    for acct, agent, _w, t, _p, _r in latest:
+        newest[acct, agent] = max(newest[acct, agent], t)
     for acct, agent, win, t, pct, reset in latest:
+        # A window that has reset while the same account kept reporting other windows is no longer reported
+        # (the plan dropped it, e.g. Claude's 5h on a plan without one): hide it. It comes back with its
+        # next sample, so a plan that gains a window shows it without any configuration.
+        if reset < newest[acct, agent]:
+            continue
         start = (_parse(reset) - WINDOW[win]).astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         hist = conn.execute("SELECT sampled_at, used_pct FROM quota WHERE account=? AND agent=? AND window=? "
                             "AND sampled_at >= ? AND sampled_at <= ? ORDER BY sampled_at", (acct, agent, win, start, t))
@@ -471,6 +479,14 @@ def build(conn, cfg, now=None):
     for t, m, kind, detail in conn.execute(
             "SELECT t, machine, kind, detail FROM warnings WHERE t >= ? ORDER BY t DESC LIMIT 50", (now_ts - 7 * 86400,)):
         warnings.append({"t": iso(t), "machine": m, "kind": kind, "detail": detail})
+    unpriced = defaultdict(int)     # a model missing from the probe's price table shows as zero cost otherwise
+    for d in span[-7:]:
+        for (model, _agent), acc in days.get(d, blank).model.items():
+            if acc.unpriced:
+                unpriced[model] += acc.unpriced
+    for model, n in sorted(unpriced.items()):
+        warnings.append({"t": None, "machine": None, "kind": "unpriced-model",
+                         "detail": f"{model}: {n} request(s) in 7 days have no price (probe/pricing.json)"})
     unmapped = int(db.get(conn, "beszel.unmapped") or 0)
     if unmapped:    # a count, not names: warnings can reach the public export
         warnings.append({"t": None, "machine": None, "kind": "machine-config",

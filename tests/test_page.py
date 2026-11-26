@@ -390,6 +390,26 @@ class PageTest(unittest.TestCase):
         self.assertEqual(rows, {("web", None): "monitor", ("web", "C"): "container", ("web", "V"): "container",
                                 ("db", "V"): "both"})
 
+    def test_quota_hides_a_window_the_account_stopped_reporting(self):
+        c = self.conn
+        # the plan used to have a 5h window; after it reset only 7d samples keep coming
+        c.execute("INSERT INTO quota VALUES('a_1', 'claude-code', '5h', '2026-11-15T00:00:00Z', 58, '2026-11-15T03:00:00Z', 'A')")
+        c.execute("INSERT INTO quota VALUES('a_1', 'claude-code', '7d', '2026-11-17T01:00:00Z', 40, '2026-11-20T00:00:00Z', 'A')")
+        # another account's 5h window is still open: kept
+        c.execute("INSERT INTO quota VALUES('a_2', 'codex', '5h', '2026-11-17T00:30:00Z', 5, '2026-11-17T04:00:00Z', 'A')")
+        c.execute("INSERT INTO quota VALUES('a_2', 'codex', '7d', '2026-11-17T01:00:00Z', 9, '2026-11-20T00:00:00Z', 'A')")
+        got = {(q["account"], q["window"]) for q in self.build()["quota"]}
+        self.assertEqual(got, {("a_1", "7d"), ("a_2", "5h"), ("a_2", "7d")})
+        # the 5h window comes back with its next sample (a plan that gains one)
+        c.execute("INSERT INTO quota VALUES('a_1', 'claude-code', '5h', '2026-11-17T01:30:00Z', 2, '2026-11-17T06:00:00Z', 'A')")
+        self.assertIn(("a_1", "5h"), {(q["account"], q["window"]) for q in self.build()["quota"]})
+
+    def test_unpriced_model_is_a_warning(self):
+        usage(self.conn, "2026-11-17T01:00:00Z", 3, agent="codex", model="gpt-new", cost=None)
+        usage(self.conn, "2026-11-17T01:00:00Z", 4, cost=0.4)
+        (w,) = [w for w in self.build()["warnings"] if w["kind"] == "unpriced-model"]
+        self.assertTrue(w["detail"].startswith("gpt-new: 3 request(s)"))
+
     def test_quota_history_window_boundary(self):
         c = self.conn
         for t, pct in (("2026-11-13T00:59:59Z", 1), ("2026-11-13T01:00:00Z", 2), ("2026-11-17T01:00:00Z", 3)):
