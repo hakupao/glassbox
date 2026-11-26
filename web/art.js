@@ -1817,9 +1817,9 @@ const easeS = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
    Every point of a tentacle or arm stays in the water where the margin left it: the strands trail behind along the path, pulled together
    in the wake, and each squeeze sends a kink down them; they sink a little and wander with the water further back.
    So that a coasting animal is calm, each one is placed on whole cells and its dither pattern is fixed to it.
-   Scene: one near animal, three or four far ones dimmed and greyed by the water (a slow layer), light shafts from above, pale plankton specks.
-   Data: marine snow = tokens (every flake always on screen, at three depths), its colour = split (the exact UI blue and amber); pulse rate
-   = 7-day trend; how much the strands wander = cache miss. The animals, plankton and light carry no data. */
+   Scene: one near animal, two to six far ones dimmed and greyed by the water (a slow layer), light shafts from above, pale plankton specks.
+   Data: marine snow = tokens (every flake always on screen, at three depths), its colour = split (the exact UI blue and amber); how many
+   far animals = 7-day trend (2 to 6, phone 1 to 3; the bell keeps one calm pulse every 4 s); how much the strands wander = cache miss. The animals, plankton and light carry no data. */
 function tJelly(env, X){
   const PART = 7;                                                                                   /* what is drawn of each animal: 1 bell, 2 oral arms, 4 tentacles (kept for measuring) */
   const {cols, rows, ax, phone} = env, D = X.D, p = X.p, sp = p.speed, PX = env.P, U = 5 / PX, N = cols * rows;
@@ -1831,7 +1831,7 @@ function tJelly(env, X){
   const mg = Math.max(0, (env.W - 1240) / 2 / PX), TOP = phone ? Math.round(11 * U) : Math.round(rows * .47), BOT = phone ? Math.round(65 * U) : rows, band = BOT - TOP;
   const wob = 1 + D.jitter * .5;
   /* the pulse: PER seconds from squeeze to squeeze; TC of it squeezing, TR reopening, the rest paused */
-  const PER = (4.6 - 1.1 * D.trendK) / sp, TC = .42 / sp / PER, TR = 1.4 / sp / PER, LAGM = .16 / sp / PER;
+  const PER = 4.05, TC = .42 / PER, TR = 1.4 / PER, LAGM = .16 / PER;   /* one calm pulse every 4 s on every day (the middle of the old trend range) */
   const sq = qo => { qo -= Math.floor(qo); return qo < TC ? easeS(qo / TC) : qo < TC + TR ? 1 - easeS((qo - TC) / TR) : 0; };
   /* speed through one pulse, from thrust and drag, and the distance covered (WI, 0..1 over a pulse) */
   const NW = 256, WI = new Float32Array(NW + 1);
@@ -1847,9 +1847,13 @@ function tJelly(env, X){
   const psi0 = phone ? .55 : 1.15;
   const J = [{X: hx, Y: TOP + band * (phone ? .3 : .37), Z: 0, R: Rh, g: 1, q0: .78, psi: psi0, b0: .62, nT: 24, nA: 4}];
   const far = (X_, Y_, k, Z, g, q0, dpsi, i) => J.push({X: X_, Y: Y_, Z, R: Rh * k, g, q0, psi: psi0 + dpsi, b0: -.2 + .7 * hash2(i, 5), nT: 12, nA: 4, far: 1});
-  if(phone){ far(cols * .2, TOP + band * .66, .36, -90, .62, .12, -.3, 1); far(cols * .22, TOP + band * .16, .24, -140, .5, .5, .25, 2); }
-  else { far(cols * (.22 + .03 * p.tilt), TOP + band * .3, .46, -80, .66, .12, -.25, 1); far(cols * (.47 - .02 * p.tilt), TOP + band * .2, .25, -140, .5, .45, .12, 2);
-    far(cols * .9, TOP + band * .74, .33, -110, .56, .3, -.5, 3); if(mg > 10 * U) far(mg * .5, rows * .3, Math.min(.42, mg * .28 / Rh), -120, .56, .85, -1.1, 4); }
+  /* the far animals, in the order they join as the 7-day trend rises: phone 1 to 3, desktop 2 to 6 (plus one in a wide side margin) */
+  const FAR = phone ? [[.2, .66, .36, -90, .62, .12, -.3], [.22, .16, .24, -140, .5, .5, .25], [.86, .84, .2, -150, .48, .7, .4]]
+    : [[.22 + .03 * p.tilt, .3, .46, -80, .66, .12, -.25], [.47 - .02 * p.tilt, .2, .25, -140, .5, .45, .12], [.9, .74, .33, -110, .56, .3, -.5],
+      [.37, .72, .2, -150, .48, .62, .35], [.06, .64, .27, -120, .52, .9, -.6], [.57, .84, .17, -170, .46, .2, .2]];
+  const nFar = phone ? 1 + Math.round(2 * D.trendK) : 2 + Math.round(4 * D.trendK);
+  FAR.slice(0, nFar).forEach((f, i) => far(cols * f[0], TOP + band * f[1], f[2], f[3], f[4], f[5], f[6], i + 1));
+  if(!phone && mg > 10 * U) far(mg * .5, rows * .3, Math.min(.42, mg * .28 / Rh), -120, .56, .85, -1.1, 7);
   J.forEach((j, i) => Object.assign(j, {per: PER * (i ? .92 + .3 * hash2(i, 7) : 1), Sl: j.R * 1.1, rT: (37 + 11 * hash2(i, 8)) / sp, rP: hash2(i, 9) * TAU, bT: (53 + 20 * hash2(i, 10)) / sp, bP: hash2(i, 11) * TAU,
     wT: (47 + 15 * hash2(i, 12)) / sp, wP: hash2(i, 13) * TAU, wA: i ? Math.min(3 * U, j.R * .3) : 2.5 * U, kv: i ? .05 * (hash2(i, 14) - .5) + (hash2(i, 15) < .5 ? -.04 : .04) : .008,
     max: Math.sin(j.psi) * Math.cos(j.b0), may: -Math.cos(j.psi) * Math.cos(j.b0), m1x: Math.cos(j.psi), m1y: Math.sin(j.psi), m2x: -Math.sin(j.b0) * Math.sin(j.psi), m2y: Math.sin(j.b0) * Math.cos(j.psi)}));   /* mean heading: the trail lies along it */
@@ -2383,14 +2387,14 @@ function tFish(env, X){
    the way down; the fluke blade trails each stroke; the flippers are held out and trimmed slowly, swept back in a dive. One cycle (40 s): she
    comes up from the far deep toward the camera, passes close under the surface (the static frame, tm = 14), breaks the surface and blows,
    rolls her back over (the dorsal fin shows), arches the tail stock, lifts the fluke clear and slips under, then goes down and away into the
-   haze and turns back. The events are timed as in footage at the middle pace (the whole clock runs 0.7 to 1.36 times that, by date and trend); the minutes a real dive lasts are cut to seconds. The calf comes up with her,
+   haze and turns back. The events are timed as in footage at the middle pace, on every day; the minutes a real dive lasts are cut to seconds. The calf comes up with her,
    stays near the surface while she is down, breathes more often, and falls in beside her again.
    So that a gliding whale does not shimmer all over, each whale is drawn on the cell grid as a whole (its place is rounded to whole cells) and
    its markings are fixed to the body, so cells change at its edges, where it bends, and where the light net crosses it.
-   Data: glints on the far water = tokens (each one is always lit, and flares), their colour = split (the exact UI blue and amber); pace of the
-   cycle = 7-day trend (15 percent either way); surface chop = cache miss. The whales, the light, the water and the sky carry no data. */
+   Data: glints on the far water = tokens (each one is always lit, and flares), their colour = split (the exact UI blue and amber); surface
+   chop = cache miss. The whales, the light, the water and the sky carry no data. */
 function tWhale(env, X){
-  const {cols, rows, ax, phone} = env, D = X.D, p = X.p, PX = env.P, N = cols * rows, U = 5 / PX, vel = p.speed * (.85 + .3 * D.trendK), chop = .5 + .8 * clamp01(D.jitter * .5);
+  const {cols, rows, ax, phone} = env, D = X.D, p = X.p, PX = env.P, N = cols * rows, U = 5 / PX, vel = 1, chop = .5 + .8 * clamp01(D.jitter * .5);
   /* palette: 0 / 1 the data colours (glints only); 2 deep water; 3-5 dark skin in shadow, in half light, lit; 6-7 pale skin lit and in half light;
      8 water near the surface; 9 light (shafts, the net of light, the skin of the water); 10 wet skin above the water; 11-14 the dusk sky; 15 spray; 16 stars */
   const PW = [BLUE, OR, [48, 62, 112], [64, 94, 140], [96, 142, 168], [154, 202, 208], [224, 238, 230], [150, 188, 204], [56, 124, 150], [122, 206, 214], [92, 106, 128], [240, 186, 146], [214, 128, 134], [120, 104, 176], [66, 70, 128], [242, 236, 218], [214, 222, 240]];
@@ -2843,11 +2847,11 @@ function tFlock(env, X){
    wide; one that moves leaves a thin short streak, as in slow-shutter video.
    Behaviour, from published work on this species: flying males flash in loose unison, one slow pulse every 2 s (western Japan) to 4 s
    (eastern Japan), lit for about two thirds of the beat (1.3 s of 1.9 s was measured in Kyoto; that share of the beat is used here at
-   every pace); females sit in the grass and give single pulses that are not in step. Here a quarter of the fliers keep their own time, and the
-   rest fall out of step and back in: the unison starts at one fly and spreads outward through the others, holds for a while, then loosens.
+   every pace); females sit in the grass and give single pulses that are not in step. Here some of the fliers keep their own time (half on a quiet week, a
+   tenth on a busy one), and the rest fall out of step and back in: the unison starts at one fly and spreads outward through the others, holds for a while, then loosens.
    Flight is a slow wander with spurts and near-hovers; males follow the stream or roam the wood. One fly in five sits on a frond or a blade.
    Data: fireflies = tokens (all of them are in the scene; one that is dark, behind a trunk or past the edge is not seen at that moment);
-   the time between pulses = 7-day trend (4 s down to 2 s); how far the flight wanders = cache miss. Colour carries no data. */
+   how many fliers join the unison = 7-day trend (half to nine in ten; the pulse is always one every 3 s); how far the flight wanders = cache miss. Colour carries no data. */
 function tFly(env, X){
   const PART = 15;                                                                                  /* what is drawn: 1 the flies' own glow, 2 the surfaces they light, 4 their mirror images, 8 water and mist (kept for measuring) */
   const {cols, rows, ax, phone} = env, D = X.D, p = X.p, sp = p.speed, PX = env.P, N = cols * rows, U = 5 / PX;
@@ -2968,7 +2972,7 @@ function tFly(env, X){
       if(z > 6){ const d = mist(xw, z, tq) * sstep(6, 12, z) * (1 - sstep(40, 60, z)) * LM[x] * .9 * v; if(d > WB[k]){ WB[k] = d; WC[k] = 4; } } }
     for(let k = 0; k < N; k++) if(WB[k] > .02) WB[k] = Math.max(0, WB[k] + dith((k / rows) | 0, k % rows)); };
   /* ---- the fireflies ---- */
-  const NF = Math.round(D.nPart * .11), NN = Math.min(7, Math.max(2, Math.round(NF * .06))), CZ = [4.5, 6, 8, 11, 15, 21, 30], nSit = Math.min(perch.length, Math.round(NF * .2)), TB = 4 - 2 * D.trendK, wan = 1 + D.jitter * .35;
+  const NF = Math.round(D.nPart * .11), NN = Math.min(7, Math.max(2, Math.round(NF * .06))), CZ = [4.5, 6, 8, 11, 15, 21, 30], nSit = Math.min(perch.length, Math.round(NF * .2)), TB = 3, LOCK = .5 + .4 * D.trendK, wan = 1 + D.jitter * .35;
   const yTop = z => CAM + (yH - TOP - 5) * z / F;                                                       /* the highest a fly at this distance can be and still be in the open band */
   const flies = Array.from({length: NF}, (_, i) => { const r = () => X.rnd(), sit = i < nSit, near = !sit && i < nSit + NN, roam = !sit && !near && !phone && r() < .22, cz = CZ[Math.floor(r() * CZ.length)], z0 = near ? 2.3 + 1.3 * r() : roam ? 5 + 24 * r() : Math.max(3.8, cz * (1 + .36 * (r() + r() - 1)));               /* a few close to the camera; most gather in loose groups along the stream; some roam the wood */
     const f = {sit, roam, near, z0, za: near ? .5 : 2 + z0 * .06, x0: roam ? (r() * cols - cx) * z0 / F : near ? (r() - .5) * 2.4 : (r() + r() - 1) * 1.1, y0: near ? .8 + .9 * r() : .25 + 1.6 * r() * r(), w: [.1 + .2 * r(), .22 + .25 * r(), .06 + .1 * r(), .25 + .3 * r()], p: [r() * TAU, r() * TAU, r() * TAU, r() * TAU],
@@ -2989,7 +2993,7 @@ function tFly(env, X){
     if(a) flies.forEach((f, i) => { if(f.sit) return; d[i] = Math.hypot((f.roam ? f.x0 : Xc(f.z0) + f.x0 * (hw(f.z0) + 1.1)) - (a.roam ? a.x0 : Xc(a.z0) + a.x0 * (hw(a.z0) + 1.1)), f.z0 - a.z0); if(d[i] > mx) mx = d[i]; });
     r = {d, mx}; sync.set(c, r); if(sync.size > 4) sync.delete(sync.keys().next().value); return r; };
   const glowAt = (f, i, t) => { if(f.sit){ const u = t / f.per + f.o + .5, ph = u - Math.floor(u), w = .62 / f.per; return hash2(i, Math.floor(u)) < .2 ? 0 : .85 * (ph < w ? Math.sin(Math.PI * ph / w) ** 1.5 : 0); }
-    const cu = t / CYC + U0, c = Math.floor(cu), u = cu - c, R = round(c), front = (R.mx + 4) * cl((u - .16) / .25, 0, 1) - 2, lk = f.h > .75 ? 0 : sstep(0, 3, front - R.d[i]) * (1 - sstep(.8 + .1 * f.h, .9 + .1 * f.h, u));
+    const cu = t / CYC + U0, c = Math.floor(cu), u = cu - c, R = round(c), front = (R.mx + 4) * cl((u - .16) / .25, 0, 1) - 2, lk = f.h > LOCK ? 0 : sstep(0, 3, front - R.d[i]) * (1 - sstep(.8 + .1 * f.h, .9 + .1 * f.h, u));
     const qo = t / TB + RISE + .2 - (lk * (.35 * cl((f.z0 - 3) / 30, 0, 1) + .5 * f.jit) + (1 - lk) * f.o), b = Math.floor(qo), a = hash2(i * 31 + 7, b);
     return a < .1 ? 0 : (.66 + .34 * a) * pulse(qo - b); };
   /* per frame: where each fly is, how bright, and its place on screen */
