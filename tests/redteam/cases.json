@@ -234,6 +234,12 @@
   "why": "provisional field usageDays from lane A is not public"
  },
  {
+  "file": "block-provisional-usageDays-byProject.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "provisional field usageDays-byProject from lane A is not public"
+ },
+ {
   "file": "block-provisional-code.json",
   "expect": "block",
   "reason": "field not in public_fields.json",
@@ -256,6 +262,18 @@
   "expect": "block",
   "reason": "field not in public_fields.json",
   "why": "provisional field diskPct from lane A is not public"
+ },
+ {
+  "file": "pass-usage-days.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "a day's totals with its agent and model rows are public (2026-11-27)"
+ },
+ {
+  "file": "block-usage-day-model.json",
+  "expect": "block",
+  "reason": "is not model",
+  "why": "a day's model id outside the price table"
  },
  {
   "file": "pass-nullable-fields.json",

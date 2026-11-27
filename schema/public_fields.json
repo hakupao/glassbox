@@ -23,6 +23,17 @@
 
   "trend[].date": "date", "trend[].costUsd.claude-code": "number", "trend[].costUsd.codex": "number",
 
+  "usageDays[].date": "date", "usageDays[].requests": "number", "usageDays[].sessions": "number",
+  "usageDays[].unpricedRequests": "number", "usageDays[].cacheHitRate": "number", "usageDays[].costUsd": "number",
+  "usageDays[].tokens.input": "number", "usageDays[].tokens.output": "number", "usageDays[].tokens.cacheRead": "number", "usageDays[].tokens.cacheWrite": "number", "usageDays[].tokens.reasoning": "number",
+  "usageDays[].byAgent[].agent": "enum:claude-code|codex", "usageDays[].byAgent[].requests": "number",
+  "usageDays[].byAgent[].sessions": "number", "usageDays[].byAgent[].costUsd": "number",
+  "usageDays[].byAgent[].tokens.input": "number", "usageDays[].byAgent[].tokens.output": "number", "usageDays[].byAgent[].tokens.cacheRead": "number", "usageDays[].byAgent[].tokens.cacheWrite": "number", "usageDays[].byAgent[].tokens.reasoning": "number",
+  "usageDays[].byModel[].model": "model", "usageDays[].byModel[].agent": "enum:claude-code|codex",
+  "usageDays[].byModel[].requests": "number", "usageDays[].byModel[].unpricedRequests": "number",
+  "usageDays[].byModel[].costUsd": "number?",
+  "usageDays[].byModel[].tokens.input": "number", "usageDays[].byModel[].tokens.output": "number", "usageDays[].byModel[].tokens.cacheRead": "number", "usageDays[].byModel[].tokens.cacheWrite": "number", "usageDays[].byModel[].tokens.reasoning": "number",
+
   "quota[].account": "code", "quota[].agent": "enum:claude-code|codex", "quota[].window": "enum:5h|7d",
   "quota[].usedPct": "number", "quota[].resetsAt": "iso", "quota[].sampledAt": "iso",
   "quota[].history[].t": "iso", "quota[].history[].usedPct": "number",

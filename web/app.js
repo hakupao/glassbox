@@ -115,6 +115,7 @@ function normCommit(a){
 function normDay(u){
   return {date: str(u.date) || '', requests: num(u.requests), sessions: num(u.sessions), unpricedRequests: num(u.unpricedRequests),
     tokens: tok(u.tokens), cacheHitRate: num(u.cacheHitRate), costUsd: num(u.costUsd),
+    hasProject: Array.isArray(u.byProject), hasMachine: Array.isArray(u.byMachine),      /* false in the public snapshot, whose days carry no project or machine rows */
     byAgent: arr(u.byAgent).map(a => ({agent: str(a.agent) || 'other', requests: num(a.requests), sessions: num(a.sessions), tokens: tok(a.tokens), costUsd: num(a.costUsd)})),
     byModel: arr(u.byModel).map(m => ({model: str(m.model) || 'other', agent: str(m.agent), requests: num(m.requests), unpricedRequests: num(m.unpricedRequests), tokens: tok(m.tokens), costUsd: numOrNull(m.costUsd)})),
     byProject: arr(u.byProject).map(p => ({project: text(p.project), public: p.public === true, requests: num(p.requests), sessions: num(p.sessions), unpricedRequests: num(p.unpricedRequests), costUsd: num(p.costUsd)})),

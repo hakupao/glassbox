@@ -742,7 +742,22 @@
      ],
      [
       {
-       "date": "2026-11-17"
+       "date": "2026-11-17",
+       "byMachine": [
+        {
+         "machine": "A",
+         "requests": 1,
+         "costUsd": 0.1
+        }
+       ],
+       "byProject": [
+        {
+         "project": "wren-tools",
+         "public": false,
+         "requests": 1,
+         "costUsd": 0.1
+        }
+       ]
       }
      ]
     ],
@@ -786,7 +801,8 @@
     "3f9a1c0e",
     "diskPct",
     "githubOfficialTotal",
-    "usageDays",
+    "byMachine",
+    "wren-tools",
     "warnings"
    ],
    "normProbes": [],

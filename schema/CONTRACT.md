@@ -189,6 +189,8 @@
 
 只在私有版里出现。没有加进 `public_fields.json`，所以导出器默认丢弃它们。
 
+**例外**（2026-11-27 用户决定）：`usageDays` 的每日合计（`date`、`requests`、`sessions`、`unpricedRequests`、`tokens`、`cacheHitRate`、`costUsd`）以及 `byAgent`、`byModel` 两组明细进公开版，全是数字、agent 和模型名（模型名规则同 `today.byModel`：价格表以外的记为 `"other"`）。`byProject`、`byMachine` 不进公开版，公开版的每一天因此不带任何项目名和机器代号；前端看到某天没有这两个键，就不显示按项目、按机器的分组和面板。`usageDays[].byProject` 里的名字仍然算私有名（§3 规则 6）。
+
 ```jsonc
 {
   "usageDays": [{                  // 近 90 天，旧→新，最后一项是今天；没有用量的日子全为 0

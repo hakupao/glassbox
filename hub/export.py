@@ -21,6 +21,8 @@ private one: a path not in that table cannot reach the output. On the way:
 - today.byProject merges private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
 - Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
+- usageDays: each day's totals and its byAgent / byModel rows (numbers, agent and model ids); byProject and
+  byMachine are not in the table, so a day never names a project or a machine.
 - Commit files (S17 R09): `files` only on public, pushed GitHub commits, at most 50, and only when
   every path is a clean repo-relative path that carries no private name, term, branch part, commit
   id or pattern the gate looks for; otherwise that one commit keeps only its count `nFiles`. The
@@ -738,8 +740,9 @@ def export(page, cfg, terms):
     for r in src.get("runtimes") or []:                   # odd versions are dropped, not published
         if isinstance(r, dict) and isinstance(r.get("version"), str) and not SEMVER.fullmatch(r["version"]):
             r["version"] = None
-    for m in today.get("byModel") or []:
-        if m.get("model") not in MODELS:
+    days = src.get("usageDays") if isinstance(src.get("usageDays"), list) else []
+    for m in [m for d in [today, *days] if isinstance(d, dict) for m in d.get("byModel") or [] if isinstance(m, dict)]:
+        if not isinstance(m.get("model"), str) or m["model"] not in MODELS:
             m["model"] = "other"
     if "quota" in src:
         src["quota"] = [q for q in src["quota"] or [] if is_code(q.get("account"), cfg)]

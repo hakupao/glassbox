@@ -404,7 +404,8 @@ P.usage = params => {
   const full = D.usageDays && D.usageDays.length;
   const ranges = full ? [7, 30, 90] : [7, 30];
   let range = parseInt(params.get('range') || '30', 10); if(!ranges.includes(range)) range = 30;
-  const dims = full ? ['agent', 'model', 'project', 'machine'] : ['agent'];
+  const hasProj = full && D.usageDays.some(d => d.hasProject), hasMach = full && D.usageDays.some(d => d.hasMachine);      /* the public snapshot's days have totals, agents and models only */
+  const dims = full ? ['agent', 'model', ...(hasProj ? ['project'] : []), ...(hasMach ? ['machine'] : [])] : ['agent'];
   let dim = params.get('by') || 'agent'; if(!dims.includes(dim)) dim = 'agent';
   const metrics = dim === 'project' ? ['cost', 'requests'] : ['cost', 'requests', 'tokens'];      /* a day's project rows carry no token counts */
   const metric = full && metrics.includes(params.get('m')) ? params.get('m') : 'cost';
@@ -457,10 +458,11 @@ P.usage = params => {
     h += `<div class="grid2 even">` + G.pn('u-agent', G.ph('u-agent', 'term', 'vio', esc(t('usage.byAgent')), esc(t('usage.days', {n: range})), '') + `<table class="tb">${agentRows(A.agents, tt.cost, days)}</table>`) +
       G.pn('u-tok', G.ph('u-tok', 'pie', 'vio', esc(t('usage.tokens')), esc(t('usage.days', {n: range})), '') + `<table class="tb">${tokenRows(tt.tokens)}</table>`) + `</div>`;
     h += `<div class="grid2 even">` + G.pn('u-model', G.ph('u-model', 'chip', 'fg', esc(t('usage.byModel')), esc(t('usage.nModels', {n: A.models.length})), esc(t('detail.hint'))) + `<table class="tb">${modelRows(A.models, true, days)}</table>`) +
-      G.pn('u-proj', G.ph('u-proj', 'list', 'ok', esc(t('usage.byProject')), esc(t('usage.nProjects', {n: A.projects.length})), esc(t('detail.hint'))) + `<table class="tb">${projectRows(A.projects, true, days)}</table>`) + `</div>`;
-    h += G.pn('u-mach', G.ph('u-mach', 'server', 'ok', esc(t('usage.byMachine')), esc(t('usage.nMachines', {n: A.machines.length})), esc(t('detail.hint'))) + `<table class="tb">${machineRows(A.machines, tt.cost, days)}</table>`);
+      (hasProj ? G.pn('u-proj', G.ph('u-proj', 'list', 'ok', esc(t('usage.byProject')), esc(t('usage.nProjects', {n: A.projects.length})), esc(t('detail.hint'))) + `<table class="tb">${projectRows(A.projects, true, days)}</table>`)
+        : G.pn('u-proj', G.ph('u-proj', 'list', 'ok', esc(t('usage.todayProject')), '', '') + `<table class="tb">${projectRows(D.today.byProject, false)}</table>`)) + `</div>`;
+    if(hasMach) h += G.pn('u-mach', G.ph('u-mach', 'server', 'ok', esc(t('usage.byMachine')), esc(t('usage.nMachines', {n: A.machines.length})), esc(t('detail.hint'))) + `<table class="tb">${machineRows(A.machines, tt.cost, days)}</table>`);
   }else{
-    /* public snapshot: only the 30-day cost by agent and today's breakdown exist */
+    /* no per-day rows at all (an older snapshot): only the 30-day cost by agent and today's breakdown exist */
     const tr = D.trend.slice(-range);
     h += G.grpH('01', 'usage.grpDaily');
     h += G.pn('u-daily', G.ph('u-daily', 'bars', 'or', esc(t('usage.dailyCost')), esc(t('usage.days', {n: tr.length})), legend([{label: 'Claude Code', color: C.BLUE}, {label: 'Codex', color: C.OR}])) + ctrl +
@@ -524,7 +526,7 @@ function dayRows(days){
   const mx = max(days.map(d => d.costUsd)) || 1;
   return days.map((d, i) => {
     const key = 'd' + i, tot = G.totTok(d.tokens);
-    if(d.requests > 0) G.detail(key, () => `<div class="xd-grid grid"><div><div class="lab">${esc(t('usage.tokens'))}</div><table class="tb">${tokenRows(d.tokens)}</table></div><div><div class="lab">${esc(t('usage.byModel'))}</div><table class="tb">${modelRows(d.byModel, false)}</table></div><div><div class="lab">${esc(t('usage.byProject'))}</div><table class="tb">${projectRows(d.byProject, false)}</table></div><div><div class="lab">${esc(t('usage.byMachine'))}</div><table class="tb">${machineRows(d.byMachine, d.costUsd, null)}</table></div></div>`);
+    if(d.requests > 0) G.detail(key, () => `<div class="xd-grid grid"><div><div class="lab">${esc(t('usage.tokens'))}</div><table class="tb">${tokenRows(d.tokens)}</table></div><div><div class="lab">${esc(t('usage.byModel'))}</div><table class="tb">${modelRows(d.byModel, false)}</table></div>${d.hasProject ? `<div><div class="lab">${esc(t('usage.byProject'))}</div><table class="tb">${projectRows(d.byProject, false)}</table></div>` : ''}${d.hasMachine ? `<div><div class="lab">${esc(t('usage.byMachine'))}</div><table class="tb">${machineRows(d.byMachine, d.costUsd, null)}</table></div>` : ''}</div>`);
     const attrs = d.requests > 0 ? G.xattrs(key) : '';
     return `<tr ${attrs}${d.requests ? '' : ' style="opacity:.45"'}><td class="k">${d.requests ? '<span class="tw">▸</span>' : '<span class="tw"></span>'}${esc(F.dfull(d.date))}</td><td class="v hide-s">${F.n(d.requests)}</td><td class="v hide-s">${F.n(d.sessions)}</td><td class="v">${F.tok(tot)}</td><td class="v hide-m">${d.requests ? F.pct1(d.cacheHitRate) : '—'}</td><td class="v">${F.usd(d.costUsd)}</td><td class="bar hide-s">${G.bar(d.costUsd / mx, 4)}</td></tr>` +
       (d.requests > 0 ? `<tr class="xd" id="xd-${key}" hidden><td colspan="7"><div class="box" data-slot></div></td></tr>` : '');

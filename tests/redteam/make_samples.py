@@ -82,12 +82,22 @@ js("block-config-hidden-missing", "config hides tailnet but the page does not li
    lambda o: o.__setitem__("hidden", []))
 js("block-local-public-branch", "local commit of a public repo keeps its branch (may be a private fork)", "block", "local commit keeps branch",
    lambda o: o["activity"].append(dict(copy.deepcopy(o["activity"][0]), source="local", url=None)))
-for key, put in (("usageDays", lambda o: o.__setitem__("usageDays", [])), ("code", lambda o: o.__setitem__("code", {})),
+# a public day carries totals, agents and models (CONTRACT 2.2); its project and machine rows stay private
+for key, put in (("usageDays", lambda o: o.__setitem__("usageDays", [{"date": "2026-11-17", "byMachine": [{"machine": "A", "requests": 1, "costUsd": 0.1}]}])),
+                 ("usageDays-byProject", lambda o: o.__setitem__("usageDays", [{"date": "2026-11-17", "byProject": [{"project": {"masked": True}, "public": False, "requests": 1, "costUsd": 0.1}]}])),
+                 ("code", lambda o: o.__setitem__("code", {})),
                  ("warnings", lambda o: o.__setitem__("warnings", ["probe A is late"])),
                  ("githubOfficialTotal", lambda o: o.__setitem__("contributions", {"total": 0, "days": [], "githubOfficialTotal": 9})),
                  ("diskPct", lambda o: o.__setitem__("machines", [{"id": "A", "label": {"masked": True}, "online": True,
                                                                    "history": [{"t": "2026-11-17T10:00:00+09:00", "cpuPct": 1, "memPct": 2, "diskPct": 3}]}]))):
     js(f"block-provisional-{key}", f"provisional field {key} from lane A is not public", "block", "field not in public_fields.json", put)
+js("pass-usage-days", "a day's totals with its agent and model rows are public (2026-11-27)", "pass", None, lambda o: o.__setitem__("usageDays", [{
+   "date": "2026-11-17", "requests": 3, "sessions": 2, "unpricedRequests": 1, "cacheHitRate": 0.5, "costUsd": 0.4,
+   "tokens": {"input": 5, "output": 4, "cacheRead": 3, "cacheWrite": 2, "reasoning": 1},
+   "byAgent": [{"agent": "codex", "requests": 3, "sessions": 2, "costUsd": 0.4, "tokens": {"input": 5, "output": 4, "cacheRead": 3, "cacheWrite": 2, "reasoning": 1}}],
+   "byModel": [{"model": "other", "agent": "codex", "requests": 3, "unpricedRequests": 1, "costUsd": None, "tokens": {"input": 5, "output": 4, "cacheRead": 3, "cacheWrite": 2, "reasoning": 1}}]}]))
+js("block-usage-day-model", "a day's model id outside the price table", "block", "is not model", lambda o: o.__setitem__("usageDays", [{
+   "date": "2026-11-17", "byModel": [{"model": "wren-internal-9", "agent": "codex", "requests": 1, "unpricedRequests": 1, "costUsd": None}]}]))
 js("pass-nullable-fields", "nulls lane A can emit on whitelisted nullable paths", "pass", None, lambda o: o.update(
    machines=[{"id": "A", "label": {"masked": True}, "role": None, "os": None, "online": False, "lastSeen": None}],
    runtimes=[{"machine": "A", "agent": "codex", "version": None, "processes": 0, "activeSessions": 0, "stale": True}],

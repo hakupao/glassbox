@@ -391,7 +391,18 @@ class ExportTest(unittest.TestCase):
         p["tailnet"][0]["lastSeen"] = None
         p["services"][0]["machine"] = None
         p["quota"].append(dict(p["quota"][0], account="a_1f2e3d4c"))         # no code configured: hash
-        p.update(usageDays=[{"date": "2026-11-17", "byMachine": [{"machine": "A", "requests": 1, "costUsd": 0.1}]}],
+        tk = {"input": 5, "output": 4, "cacheRead": 3, "cacheWrite": 2, "reasoning": 1}
+        p.update(usageDays=[{"date": "2026-11-17", "requests": 3, "sessions": 2, "unpricedRequests": 1, "tokens": tk,
+                             "cacheHitRate": 0.3, "costUsd": 0.4,
+                             "byAgent": [{"agent": "claude-code", "requests": 3, "sessions": 2, "tokens": tk, "costUsd": 0.4}],
+                             "byModel": [{"model": "claude-opus-5-5", "agent": "claude-code", "requests": 2,
+                                          "unpricedRequests": 0, "tokens": tk, "costUsd": 0.4},
+                                         {"model": "wren-internal-9", "agent": "claude-code", "requests": 1,
+                                          "unpricedRequests": 1, "tokens": tk, "costUsd": None}],
+                             "byProject": [{"project": "wren-tools", "public": False, "requests": 3, "sessions": 2,
+                                            "unpricedRequests": 1, "costUsd": 0.4}],
+                             "byMachine": [{"machine": "A", "requests": 3, "sessions": 2, "unpricedRequests": 1,
+                                            "tokens": tk, "costUsd": 0.4}]}],
                  code={"repos": []}, warnings=["probe B is late"])
         p["contributions"]["githubOfficialTotal"] = 7000
         cfg = ex.load_config(None)                                     # strictest; tailnet not hidden
@@ -403,19 +414,41 @@ class ExportTest(unittest.TestCase):
         self.assertIsNone(pub["tailnet"][0]["lastSeen"])
         self.assertIsNone(pub["services"][0]["machine"])
         self.assertEqual([q["account"] for q in pub["quota"]], ["K", "L", "L"])
-        for k in ("usageDays", "code", "warnings"):
+        for k in ("code", "warnings"):
             self.assertNotIn(k, pub)
+        # a public day: its totals, agents and models; never a project or a machine, never an unlisted model id
+        day, = pub["usageDays"]
+        self.assertEqual(set(day), {"date", "requests", "sessions", "unpricedRequests", "tokens", "cacheHitRate",
+                                    "costUsd", "byAgent", "byModel"})
+        self.assertEqual((day["requests"], day["costUsd"], day["tokens"]), (3, 0.4, tk))
+        self.assertEqual(set(day["byAgent"][0]), {"agent", "requests", "sessions", "tokens", "costUsd"})
+        self.assertEqual([m["model"] for m in day["byModel"]], ["claude-opus-5-5", "other"])
+        self.assertIsNone(day["byModel"][1]["costUsd"])
+        flat = ex.norm(json.dumps(pub, ensure_ascii=False))
+        for hidden in ("wren-tools", "wren-internal-9"):
+            self.assertNotIn(ex.norm(hidden), flat)
+        self.assertFalse({"byMachine", "byProject"} & set(day))
+        self.assertIn("wren-tools", ctx["privateNames"])
         self.assertNotIn("githubOfficialTotal", pub["contributions"])
         self.assertNotIn("a_1f2e3d4c", json.dumps(pub))
         gate = lambda page: vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.page, {}).check_page(page, "p")
         self.assertEqual(gate(pub), [])
-        for put in (lambda q: q.__setitem__("usageDays", []), lambda q: q.__setitem__("warnings", ["x"]),
+        for put in (lambda q: q["usageDays"][0].__setitem__("byMachine", []),
+                    lambda q: q["usageDays"][0].__setitem__("byProject", []),
+                    lambda q: q["usageDays"][0]["byModel"][0].__setitem__("sessions", 1),
+                    lambda q: q.__setitem__("warnings", ["x"]),
                     lambda q: q.__setitem__("code", {}),
                     lambda q: q["contributions"].__setitem__("githubOfficialTotal", 1),
                     lambda q: q["machines"][0]["history"][0].__setitem__("diskPct", 1.0)):
             q = copy.deepcopy(pub)
             put(q)
             self.assertTrue(any("field not in public_fields.json" in b for b in gate(q)))
+        q = copy.deepcopy(pub)
+        q["usageDays"][0]["byModel"][0]["model"] = "wren-internal-9"
+        self.assertTrue(any("is not model" in b for b in gate(q)))
+        for bad in ({"usageDays": {}}, {"usageDays": ["x"]}, {"usageDays": [{"date": "2026-11-17", "tokens": "x"}]}):
+            with self.assertRaises(ex.ExportError):
+                self.run_export(page=dict(copy.deepcopy(self.page), **bad), cfg=cfg)
         q = copy.deepcopy(pub)
         q["quota"][0]["account"] = "a_1f2e3d4c"
         self.assertTrue(any("is not code" in b for b in gate(q)))

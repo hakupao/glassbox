@@ -96,5 +96,16 @@
  "hidden": [
   "tailnet"
  ],
- "usageDays": []
+ "usageDays": [
+  {
+   "date": "2026-11-17",
+   "byMachine": [
+    {
+     "machine": "A",
+     "requests": 1,
+     "costUsd": 0.1
+    }
+   ]
+  }
+ ]
 }
