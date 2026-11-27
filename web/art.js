@@ -3068,7 +3068,7 @@ function tSnow(env, X){
   const PAL = [BLUE, OR, [50, 58, 94], [84, 94, 128], [78, 98, 146], [116, 136, 182], [172, 176, 196], [222, 206, 186], [248, 226, 190], [255, 244, 220],
                [36, 58, 52], [74, 86, 54], [124, 118, 62], [66, 52, 48], [116, 82, 56], [176, 124, 74], [236, 146, 60], [255, 194, 102], [255, 232, 170],
                [112, 118, 140], [150, 166, 204], [224, 210, 190], [255, 236, 196], [255, 250, 236], [255, 220, 146], [60, 52, 54], [46, 50, 60]];
-  const mg = phone ? 0 : Math.max(0, (env.W - 1240) / 2 / PX), TOP = phone ? Math.round(rows * .145) : Math.round(rows * .47), BOT = phone ? Math.round(rows * .84) : rows, Hb = BOT - TOP;
+  const mg = phone ? 0 : Math.max(0, (env.W - 1240) / 2 / PX), TOP = phone ? Math.round(rows * .145) : Math.round(rows * .47), BOT = phone ? Math.max(TOP + 24, rows - Math.ceil(env.tab / PX) - 1) : rows, Hb = BOT - TOP;
   /* the camera: a little above eye level on a desktop, the height of an upstairs window on a phone, looking level; the lamp stands low in the
      picture, below the part the page fades most. yH = the row of the horizon, F = cells per metre at one metre, U = size of this window against
      the 1440 one */
@@ -3080,9 +3080,9 @@ function tSnow(env, X){
   for(let x = 0; x < cols; x++){ const inCol = phone || (x >= mg - 1 && x <= cols - mg), ed = TOP + 4 + 5 * noise(x * .09, 61.5); for(let y = 0; y < rows; y++){ const u = 1 - (y + .5) / rows, mk = u < .14 ? 1 : u < .46 ? 1 - .45 * (u - .14) / .32 : .55 * (1 - (u - .46) / .54);
     let v = Math.min(2.1, 1 / Math.max(.05, mk)); if(inCol) v *= y < TOP - 1 ? 0 : y > ed ? 1 : sstep(TOP - 1, ed, y); if(phone) v *= 1 - sstep(BOT - 1, BOT + 7, y); vis[x * rows + y] = v; } }
   /* ---- where things stand (metres: X to the right, Y up, Z away from the camera) ---- */
-  const Xl = Xat(phone ? -.22 : .16, Zl), Yl = phone ? 3.4 : 3, I0 = phone ? 12 : 10;                                          /* the lamp */
+  const Xl = Xat(phone ? .2 : .16, Zl), Yl = phone ? 3.4 : 3, I0 = phone ? 12 : 10;                                          /* the lamp */
   /* the cabin stands three-quarters on, its gable end toward the camera: cE = the way its ridge runs toward that end, cW = across it */
-  const Zc = phone ? 24 : 18.5, Xc = Xat(phone ? -.62 : -.38, phone ? 21 : 15), PHI = -.18, cE = [Math.sin(PHI), -Math.cos(PHI)], cW = [Math.cos(PHI), Math.sin(PHI)], LC = 7, WC = 6, RIDGE = 4.4, EAVE = 2.4, OV = .5;
+  const Zc = phone ? 17.5 : 18.5, Xc = Xat(phone ? -.4 : -.38, phone ? 16 : 15), PHI = -.18, cE = [Math.sin(PHI), -Math.cos(PHI)], cW = [Math.cos(PHI), Math.sin(PHI)], LC = 7, WC = 6, RIDGE = 4.4, EAVE = 2.4, OV = .5;
   const cab = (l, w) => [Xc + cE[0] * l + cW[0] * w, Zc + cE[1] * l + cW[1] * w], wn = (l, w, y, nx, nz) => { const qo = cab(l, w); return {X: qo[0], Y: y, Z: qo[1], nx, nz, l, w}; };
   const WIN = [wn(LC / 2 + .05, -1.9, 1.5, cE[0], cE[1]), wn(LC / 2 + .05, 1.9, 1.5, cE[0], cE[1]), wn(.4, WC / 2 + .05, 1.5, cW[0], cW[1])], IW = 4, chm = cab(-1.6, .7), Xch = chm[0], Zch = chm[1], Ych = RIDGE + 1.05;
   /* the lane: from under the camera past the lamp, then across to the cabin door. laneD gives, for a place on the ground, how far it is from the
@@ -3090,10 +3090,10 @@ function tSnow(env, X){
   const door = cab(LC / 2 + 2.2, 0), LP = [[Xl - 1.8, 4], [Xl - 2.5, Zl - .3], [(Xl - 2.5 + door[0]) / 2 + .6, (Zl - .3 + door[1]) / 2 + 1.3], door];
   const laneD = (Xw, Z, o) => { let best = 1e9, acc = 0; for(let i = 0; i < LP.length - 1; i++){ const ax_ = LP[i][0], az = LP[i][1], dx = LP[i + 1][0] - ax_, dz = LP[i + 1][1] - az, L = Math.hypot(dx, dz), u = cl(((Xw - ax_) * dx + (Z - az) * dz) / (L * L), 0, 1), px = Xw - ax_ - dx * u, pz = Z - az - dz * u, d = Math.hypot(px, pz);
       if(d < best){ best = d; o[1] = acc + u * L; o[2] = (px * dz - pz * dx) / L; } acc += L; } o[0] = best; };
-  const TREES = phone ? [{Z: 11.5, H: 7, R: 3, hero: 1}, {fx: -.55, Z: 26, H: 10, R: 2.8}, {fx: .12, Z: 27, H: 11, R: 3}, {fx: .65, Z: 30, H: 12, R: 3}, {fx: -.98, Z: 13, H: 8, R: 2.5}, {fx: .35, Z: 38, H: 12, R: 3}]
+  const TREES = phone ? [{Z: 11.5, H: 7, R: 3, hero: 1}, {fx: -.95, Z: 27, H: 11, R: 2.8}, {fx: .1, Z: 28, H: 11, R: 3}, {fx: .6, Z: 26, H: 11, R: 3}, {fx: -.35, Z: 31, H: 12, R: 3}, {fx: .95, Z: 32, H: 12, R: 3}]
     : [{Z: 10.5, H: 8.5, R: 3.2, hero: 1}, {fx: .05, Z: 17, H: 8.5, R: 2.6}, {fx: .88, Z: 8.5, H: 9, R: 2.6}, {fx: -.92, Z: 9, H: 9.5, R: 2.7}, {fx: -.55, Z: 24, H: 11, R: 3}, {fx: -.2, Z: 26, H: 9.5, R: 2.8},
        {fx: -.38, Z: 29, H: 12, R: 3}, {fx: -.74, Z: 15, H: 7, R: 2.3}, {fx: .62, Z: 15, H: 6.5, R: 2.2}, {fx: .74, Z: 23, H: 11, R: 3}, {fx: .98, Z: 15, H: 8, R: 2.5}, {fx: .22, Z: 27, H: 11, R: 3}, {fx: -.06, Z: 31, H: 12, R: 2.9}, {fx: .5, Z: 31, H: 12, R: 2.9}];
-  TREES.forEach((t, i) => { t.X = i ? Xat(t.fx, t.Z) + (S() - .5) * 1.5 : Xl + (phone ? 2.7 : 3); t.H *= .9 + .2 * S(); t.id = mix(p.seed + i * 977); });
+  TREES.forEach((t, i) => { t.X = i ? Xat(t.fx, t.Z) + (S() - .5) * 1.5 : Xl + (phone ? 3.7 : 3); t.H *= .9 + .2 * S(); t.id = mix(p.seed + i * 977); });
   const POSTS = [], PH = 1.3; { let left = 6.5, a = .7; for(let i = 1; i < LP.length - 1 && left > 0; i++){ const ax_ = LP[i][0], az = LP[i][1], dx = LP[i + 1][0] - ax_, dz = LP[i + 1][1] - az, L = Math.hypot(dx, dz), sg = dx < 0 ? 1 : -1;
       for(; a < L && left > 0; a += 1.8, left -= 1.8) POSTS.push({X: ax_ + dx * a / L + sg * dz / L * 1.1, Z: az + dz * a / L - sg * dx / L * 1.1}); a -= L; } }                 /* the fence follows the lane on its far side */
   const OCC = POSTS.map(qo => ({X: qo.X, Z: qo.Z, r: .09, h: PH + .15, cone: 0})).concat(TREES.filter(t => t.Z < 26).map(t => ({X: t.X, Z: t.Z, r: t.R * .8, h: t.H, cone: 1})));
@@ -4515,7 +4515,9 @@ function create(cv, inputs, o){
        the memory of a frame stay bounded on 4K and ultra-wide screens */
     const dpr = W * H > 3e6 ? 1 : Math.min(devicePixelRatio || 1, 2); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     let cell = t.cell || P; while(Math.floor(W / cell) * Math.floor(H / cell) > 150000) cell++;
-    env = {cv, ax, W, H, dpr, cols: Math.floor(W / cell), rows: Math.floor(H / cell), P: cell, phone: W < 640};
+    const tb = document.getElementById('tabs');
+    /* tab = the height of the phone tab bar that lies over the foot of the canvas (56px, more with a home indicator); 0 when there is none */
+    env = {cv, ax, W, H, dpr, cols: Math.floor(W / cell), rows: Math.floor(H / cell), P: cell, phone: W < 640, tab: tb ? tb.offsetHeight : 0};
     /* a canvas too small for a scene (a phone on its side, a very short window): no art, rather than a piece working outside the sizes it was built for */
     if(env.cols < 60 || env.rows < 48){ draw = () => {}; return; }
     D = data; nT = data.curve.length;
