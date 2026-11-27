@@ -778,7 +778,8 @@ class Gate:
             bad.append(f"{where}: config hides {h} but the page does not")
         for h in (h for h in hidden if isinstance(h, str)):
             block = today.get("byProject") if h == "byProject" else page.get(h)
-            if block not in ([], None) or (h == "byProject" and any(d.get("byProject") not in ([], None) for d in days)):
+            if block not in ([], None) or (h == "byProject" and any(d.get("byProject") not in ([], None) for d in days)) or (
+                    h == "machines" and any(d.get("byMachine") not in ([], None) for d in days)):
                 bad.append(f"{where}: hidden block {h} is not []")
         return bad
 

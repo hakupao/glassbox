@@ -312,6 +312,12 @@
   "why": "rule 7: hidden byProject, but a day still has project rows"
  },
  {
+  "file": "block-hidden-machines-days.json",
+  "expect": "block",
+  "reason": "hidden block machines",
+  "why": "rule 7: hidden machines, but a day still has machine rows"
+ },
+ {
   "file": "block-today-by-agent-key.json",
   "expect": "block",
   "reason": "field not in public_fields.json",

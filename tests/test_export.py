@@ -377,12 +377,19 @@ class ExportTest(unittest.TestCase):
                                    "resetsAt": "2026-11-20T00:00:00+09:00", "sampledAt": "2026-11-17T10:00:00+09:00",
                                    "history": []})
         self.page["today"]["byModel"].append({"model": "internal-x", "agent": "codex", "requests": 1, "costUsd": None})
+        row = {"requests": 1, "sessions": 1, "unpricedRequests": 0, "costUsd": 0.5}
+        self.page["usageDays"] = [{"date": "2026-11-17", "byProject": [dict(row, project="sdtm-pedia", public=True)],
+                                   "byMachine": [dict(row, machine="A")]}]
+        cfgm = write_cfg(self.tmp.name, CFG_TEXT.replace('hidden = ["tailnet"]', 'hidden = ["tailnet", "machines"]'))
+        pubm, _ = self.run_export(cfg=cfgm)
+        self.assertEqual((pubm["machines"], pubm["usageDays"][0]["byMachine"]), ([], []))
+        self.assertEqual(len(pubm["usageDays"][0]["byProject"]), 1)
         cfg = write_cfg(self.tmp.name, CFG_TEXT.replace('hidden = ["tailnet"]', 'hidden = ["tailnet", "byProject", "jobs"]'))
         pub, ctx = self.run_export(cfg=cfg)
         self.assertEqual([q["account"] for q in pub["quota"]], ["K", "L", "L"])
         self.assertEqual(pub["today"]["byModel"][-1]["model"], "other")
         self.assertEqual((pub["today"]["byProject"], pub["jobs"], pub["tailnet"]), ([], [], []))
-        self.assertTrue(all(d.get("byProject", []) == [] for d in pub.get("usageDays", [])))
+        self.assertEqual((pub["usageDays"][0]["byProject"], len(pub["usageDays"][0]["byMachine"])), ([], 1))
         self.assertEqual(pub["hidden"], ["byProject", "jobs", "tailnet"])
         self.assertEqual(self.gate(pub, ctx), [])
 

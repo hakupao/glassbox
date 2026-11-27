@@ -775,6 +775,10 @@ def export(page, cfg, terms):
                     d["byProject"] = []
         else:
             src[h] = []
+            if h == "machines":                  # hidden machines: no machine rows on any day either
+                for d in days:
+                    if "byMachine" in d:
+                        d["byMachine"] = []
     src["hidden"] = hidden
     src["view"] = "public"
 

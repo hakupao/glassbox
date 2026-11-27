@@ -108,6 +108,9 @@ js("block-usage-day-project-key", "a day's project row carries only the whitelis
 js("block-hidden-byproject-days", "rule 7: hidden byProject, but a day still has project rows", "block", "hidden block byProject", lambda o: (
    o["today"].__setitem__("byProject", []), o["hidden"].append("byProject"),
    o.__setitem__("usageDays", [{"date": "2026-11-17", "byProject": [{"project": "sdtm-pedia", "public": True, "requests": 1, "costUsd": 0.1}]}])))
+js("block-hidden-machines-days", "rule 7: hidden machines, but a day still has machine rows", "block", "hidden block machines", lambda o: (
+   o.__setitem__("machines", []), o["hidden"].append("machines"),
+   o.__setitem__("usageDays", [{"date": "2026-11-17", "byMachine": [{"machine": "A", "requests": 1, "costUsd": 0.1}]}])))
 js("block-today-by-agent-key", "a machine's usage today carries only the whitelisted keys", "block", "field not in public_fields.json", lambda o: o.__setitem__("machines", [
    {"id": "A", "label": {"masked": True}, "online": True, "todayByAgent": [{"agent": "codex", "requests": 7, "costUsd": 1.5, "project": {"masked": True}}]}]))
 js("pass-usage-days", "a day's totals with its agent and model rows are public (2026-11-27)", "pass", None, lambda o: o.__setitem__("usageDays", [{
