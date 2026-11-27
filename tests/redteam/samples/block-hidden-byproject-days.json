@@ -24,23 +24,7 @@
     "costUsd": null
    }
   ],
-  "byProject": [
-   {
-    "project": "sdtm-pedia",
-    "public": true,
-    "requests": 70,
-    "costUsd": 2.5
-   },
-   {
-    "project": {
-     "masked": true,
-     "group": "private"
-    },
-    "public": false,
-    "requests": 50,
-    "costUsd": 1.7
-   }
-  ]
+  "byProject": []
  },
  "activity": [
   {
@@ -94,14 +78,16 @@
  ],
  "tailnet": [],
  "hidden": [
-  "tailnet"
+  "tailnet",
+  "byProject"
  ],
  "usageDays": [
   {
    "date": "2026-11-17",
-   "byMachine": [
+   "byProject": [
     {
-     "machine": "A",
+     "project": "sdtm-pedia",
+     "public": true,
      "requests": 1,
      "costUsd": 0.1
     }

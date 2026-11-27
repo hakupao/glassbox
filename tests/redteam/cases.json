@@ -18,10 +18,16 @@
   "why": "rule 1: reviewer on a commit (author is public since S17 R09)"
  },
  {
-  "file": "block-hourly.json",
+  "file": "pass-hourly.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "today.hourly is public since 2026-11-27: hour, requests, cost"
+ },
+ {
+  "file": "block-hourly-extra-key.json",
   "expect": "block",
   "reason": "field not in public_fields.json",
-  "why": "rule 7: today.hourly never public"
+  "why": "an hour row carries only hour, requests and cost"
  },
  {
   "file": "block-masked-extra-key.json",
@@ -228,18 +234,6 @@
   "why": "local commit of a public repo keeps its branch (may be a private fork)"
  },
  {
-  "file": "block-provisional-usageDays.json",
-  "expect": "block",
-  "reason": "field not in public_fields.json",
-  "why": "provisional field usageDays from lane A is not public"
- },
- {
-  "file": "block-provisional-usageDays-byProject.json",
-  "expect": "block",
-  "reason": "field not in public_fields.json",
-  "why": "provisional field usageDays-byProject from lane A is not public"
- },
- {
   "file": "block-provisional-code.json",
   "expect": "block",
   "reason": "field not in public_fields.json",
@@ -252,16 +246,76 @@
   "why": "provisional field warnings from lane A is not public"
  },
  {
-  "file": "block-provisional-githubOfficialTotal.json",
-  "expect": "block",
-  "reason": "field not in public_fields.json",
-  "why": "provisional field githubOfficialTotal from lane A is not public"
+  "file": "pass-public-numbers.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "disk history, the official GitHub total and a machine's usage today are plain numbers"
  },
  {
-  "file": "block-provisional-diskPct.json",
+  "file": "pass-usage-day-rows.json",
+  "expect": "pass",
+  "reason": null,
+  "why": "a day's machine rows carry codes; its project rows are public repos and one merged private row"
+ },
+ {
+  "file": "block-usage-day-machine.json",
+  "expect": "block",
+  "reason": "is not code",
+  "why": "a day's machine row names a machine that has no public code"
+ },
+ {
+  "file": "block-usage-day-machine-key.json",
   "expect": "block",
   "reason": "field not in public_fields.json",
-  "why": "provisional field diskPct from lane A is not public"
+  "why": "a day's machine row carries only the whitelisted keys"
+ },
+ {
+  "file": "block-usage-day-project-unmerged.json",
+  "expect": "block",
+  "reason": "merged private row",
+  "why": "a day's private project row is not the merged row"
+ },
+ {
+  "file": "block-usage-day-project-masked-public.json",
+  "expect": "block",
+  "reason": "a public row must show its name",
+  "why": "masked rows marked public would publish each private project's cost on its own"
+ },
+ {
+  "file": "block-byproject-masked-public.json",
+  "expect": "block",
+  "reason": "a public row must show its name",
+  "why": "the same for today"
+ },
+ {
+  "file": "block-usage-day-project-twice.json",
+  "expect": "block",
+  "reason": "more than one merged private row",
+  "why": "a day has two merged private rows"
+ },
+ {
+  "file": "block-usage-day-project-name.json",
+  "expect": "block",
+  "reason": "is not text",
+  "why": "a day's project row shows a name that is not a public repo"
+ },
+ {
+  "file": "block-usage-day-project-key.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "a day's project row carries only the whitelisted keys"
+ },
+ {
+  "file": "block-hidden-byproject-days.json",
+  "expect": "block",
+  "reason": "hidden block byProject",
+  "why": "rule 7: hidden byProject, but a day still has project rows"
+ },
+ {
+  "file": "block-today-by-agent-key.json",
+  "expect": "block",
+  "reason": "field not in public_fields.json",
+  "why": "a machine's usage today carries only the whitelisted keys"
  },
  {
   "file": "pass-usage-days.json",

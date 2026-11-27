@@ -20,6 +20,7 @@
   "today.byModel[].requests": "number", "today.byModel[].costUsd": "number?",
   "today.byProject[].project": "text", "today.byProject[].public": "bool",
   "today.byProject[].requests": "number", "today.byProject[].costUsd": "number",
+  "today.hourly[].hour": "number", "today.hourly[].requests": "number", "today.hourly[].costUsd": "number",
 
   "trend[].date": "date", "trend[].costUsd.claude-code": "number", "trend[].costUsd.codex": "number",
 
@@ -32,13 +33,20 @@
   "usageDays[].byModel[].model": "model", "usageDays[].byModel[].agent": "enum:claude-code|codex",
   "usageDays[].byModel[].requests": "number", "usageDays[].byModel[].unpricedRequests": "number",
   "usageDays[].byModel[].costUsd": "number?",
+  "usageDays[].byProject[].project": "text", "usageDays[].byProject[].public": "bool",
+  "usageDays[].byProject[].requests": "number", "usageDays[].byProject[].sessions": "number",
+  "usageDays[].byProject[].unpricedRequests": "number", "usageDays[].byProject[].costUsd": "number",
+  "usageDays[].byMachine[].machine": "code", "usageDays[].byMachine[].requests": "number",
+  "usageDays[].byMachine[].sessions": "number", "usageDays[].byMachine[].unpricedRequests": "number",
+  "usageDays[].byMachine[].costUsd": "number",
+  "usageDays[].byMachine[].tokens.input": "number", "usageDays[].byMachine[].tokens.output": "number", "usageDays[].byMachine[].tokens.cacheRead": "number", "usageDays[].byMachine[].tokens.cacheWrite": "number", "usageDays[].byMachine[].tokens.reasoning": "number",
   "usageDays[].byModel[].tokens.input": "number", "usageDays[].byModel[].tokens.output": "number", "usageDays[].byModel[].tokens.cacheRead": "number", "usageDays[].byModel[].tokens.cacheWrite": "number", "usageDays[].byModel[].tokens.reasoning": "number",
 
   "quota[].account": "code", "quota[].agent": "enum:claude-code|codex", "quota[].window": "enum:5h|7d",
   "quota[].usedPct": "number", "quota[].resetsAt": "iso", "quota[].sampledAt": "iso",
   "quota[].history[].t": "iso", "quota[].history[].usedPct": "number",
 
-  "contributions.total": "number", "contributions.days[].date": "date", "contributions.days[].count": "number",
+  "contributions.total": "number", "contributions.githubOfficialTotal": "number?", "contributions.days[].date": "date", "contributions.days[].count": "number",
 
   "activity[].t": "iso", "activity[].source": "enum:github|gitea|local", "activity[].repo": "text",
   "activity[].public": "bool", "activity[].title": "title", "activity[].branch": "text?",
@@ -54,6 +62,10 @@
   "machines[].system.cpuPct": "number", "machines[].system.memUsed": "number", "machines[].system.memTotal": "number",
   "machines[].system.diskUsed": "number", "machines[].system.diskTotal": "number", "machines[].system.uptimeSec": "number",
   "machines[].history[].t": "iso", "machines[].history[].cpuPct": "number", "machines[].history[].memPct": "number",
+  "machines[].history[].diskPct": "number?",
+  "machines[].todayByAgent[].agent": "enum:claude-code|codex", "machines[].todayByAgent[].requests": "number",
+  "machines[].todayByAgent[].unpricedRequests": "number", "machines[].todayByAgent[].costUsd": "number",
+  "machines[].todayByAgent[].sessions": "number",
 
   "services[].name": "text", "services[].kind": "enum:container|monitor|both", "services[].machine": "code?",
   "services[].status": "enum:up|down|paused|pending|maintenance|unknown", "services[].uptimePct24h": "number?",

@@ -80,14 +80,18 @@ class ExportTest(unittest.TestCase):
         with self.assertRaises(ex.ExportError):
             self.run_export(page)
 
-    def test_machine_today_by_agent_stays_private(self):
+    def test_machine_today_by_agent_is_numbers_only(self):
+        # public since 2026-11-27 (owner): agent, requests, cost, sessions; nothing else a row might carry
         page = copy.deepcopy(EXAMPLE)
+        row = {"agent": "claude-code", "requests": 7, "unpricedRequests": 0, "costUsd": 1.5, "sessions": 2}
         for m in page["machines"]:
-            m["todayByAgent"] = [{"agent": "claude-code", "requests": 7, "unpricedRequests": 0, "costUsd": 1.5, "sessions": 2}]
+            m["todayByAgent"] = [dict(row, project="wren-tools", account="a_1f2e3d4c")]
         pub, _ = self.run_export(page)
         self.assertTrue(pub["machines"])
-        self.assertTrue(all("todayByAgent" not in m for m in pub["machines"]))
-        self.assertNotIn("todayByAgent", json.dumps(pub))
+        self.assertTrue(all(m["todayByAgent"] == [row] for m in pub["machines"]))
+        self.assertNotIn("wren", json.dumps(pub))
+        self.assertNotIn("a_1f2e3d4c", json.dumps(pub))
+        self.assertEqual(self.gate(pub), [])
 
     def test_example_export_passes_gate_as_json_and_html(self):
         pub, ctx = self.run_export()
@@ -110,7 +114,7 @@ class ExportTest(unittest.TestCase):
         self.page["extraBlock"] = [{"a": 1}]
         pub, _ = self.run_export()
         self.assertNotIn("secretNote", pub["today"])
-        self.assertNotIn("hourly", pub["today"])
+        self.assertTrue(all(set(h) == {"hour", "requests", "costUsd"} for h in pub["today"].get("hourly", [])))   # public since 2026-11-27
         self.assertNotIn("reviewer", pub["activity"][0])
         self.assertNotIn("extraBlock", pub)
         self.assertEqual(pub["view"], "public")
@@ -378,6 +382,7 @@ class ExportTest(unittest.TestCase):
         self.assertEqual([q["account"] for q in pub["quota"]], ["K", "L", "L"])
         self.assertEqual(pub["today"]["byModel"][-1]["model"], "other")
         self.assertEqual((pub["today"]["byProject"], pub["jobs"], pub["tailnet"]), ([], [], []))
+        self.assertTrue(all(d.get("byProject", []) == [] for d in pub.get("usageDays", [])))
         self.assertEqual(pub["hidden"], ["byProject", "jobs", "tailnet"])
         self.assertEqual(self.gate(pub, ctx), [])
 
@@ -402,56 +407,86 @@ class ExportTest(unittest.TestCase):
                              "byProject": [{"project": "wren-tools", "public": False, "requests": 3, "sessions": 2,
                                             "unpricedRequests": 1, "costUsd": 0.4}],
                              "byMachine": [{"machine": "A", "requests": 3, "sessions": 2, "unpricedRequests": 1,
-                                            "tokens": tk, "costUsd": 0.4}]}],
+                                            "tokens": tk, "costUsd": 0.4},
+                                           {"machine": "warehouse-box", "requests": 1, "sessions": 1,
+                                            "unpricedRequests": 0, "tokens": tk, "costUsd": 0.1}]}],
                  code={"repos": []}, warnings=["probe B is late"])
         p["contributions"]["githubOfficialTotal"] = 7000
         cfg = ex.load_config(None)                                     # strictest; tailnet not hidden
         pub, ctx = self.run_export(cfg=cfg)
         m = pub["machines"][0]
         self.assertEqual((m["role"], m["os"]), (None, None))
-        self.assertNotIn("diskPct", m["history"][0])
+        self.assertEqual(m["history"][0]["diskPct"], 40.0)                 # public since 2026-11-27
         self.assertIsNone(pub["runtimes"][0]["version"])
         self.assertIsNone(pub["tailnet"][0]["lastSeen"])
         self.assertIsNone(pub["services"][0]["machine"])
         self.assertEqual([q["account"] for q in pub["quota"]], ["K", "L", "L"])
         for k in ("code", "warnings"):
             self.assertNotIn(k, pub)
-        # a public day: its totals, agents and models; never a project or a machine, never an unlisted model id
+        # a public day: totals, agents, models, machine codes, and projects as today.byProject shows them;
+        # never a private project name, a machine without a code or an unlisted model id
         day, = pub["usageDays"]
         self.assertEqual(set(day), {"date", "requests", "sessions", "unpricedRequests", "tokens", "cacheHitRate",
-                                    "costUsd", "byAgent", "byModel"})
+                                    "costUsd", "byAgent", "byModel", "byProject", "byMachine"})
+        self.assertEqual(day["byProject"], [{"project": {"masked": True, "group": "private"}, "public": False,
+                                             "requests": 3, "costUsd": 0.4, "sessions": 2, "unpricedRequests": 1}])
+        self.assertEqual([r["machine"] for r in day["byMachine"]], ["A"])
         self.assertEqual((day["requests"], day["costUsd"], day["tokens"]), (3, 0.4, tk))
         self.assertEqual(set(day["byAgent"][0]), {"agent", "requests", "sessions", "tokens", "costUsd"})
         self.assertEqual([m["model"] for m in day["byModel"]], ["claude-opus-5-5", "other"])
         self.assertIsNone(day["byModel"][1]["costUsd"])
         flat = ex.norm(json.dumps(pub, ensure_ascii=False))
-        for hidden in ("wren-tools", "wren-internal-9"):
+        for hidden in ("wren-tools", "wren-internal-9", "warehouse-box"):
             self.assertNotIn(ex.norm(hidden), flat)
-        self.assertFalse({"byMachine", "byProject"} & set(day))
         self.assertIn("wren-tools", ctx["privateNames"])
-        self.assertNotIn("githubOfficialTotal", pub["contributions"])
+        self.assertEqual(pub["contributions"]["githubOfficialTotal"], 7000)
         self.assertNotIn("a_1f2e3d4c", json.dumps(pub))
         gate = lambda page: vp.Gate(json.loads((RT / "terms.json").read_text(encoding="utf-8")), self.page, {}).check_page(page, "p")
         self.assertEqual(gate(pub), [])
-        for put in (lambda q: q["usageDays"][0].__setitem__("byMachine", []),
-                    lambda q: q["usageDays"][0].__setitem__("byProject", []),
+        for put in (lambda q: q["usageDays"][0]["byMachine"][0].__setitem__("host", "x"),
+                    lambda q: q["usageDays"][0]["byProject"][0].__setitem__("path", "x"),
                     lambda q: q["usageDays"][0]["byModel"][0].__setitem__("sessions", 1),
                     lambda q: q.__setitem__("warnings", ["x"]),
                     lambda q: q.__setitem__("code", {}),
-                    lambda q: q["contributions"].__setitem__("githubOfficialTotal", 1),
-                    lambda q: q["machines"][0]["history"][0].__setitem__("diskPct", 1.0)):
+                    lambda q: q["contributions"].__setitem__("note", 1),
+                    lambda q: q["machines"][0]["history"][0].__setitem__("netPct", 1.0)):
             q = copy.deepcopy(pub)
             put(q)
             self.assertTrue(any("field not in public_fields.json" in b for b in gate(q)))
         q = copy.deepcopy(pub)
         q["usageDays"][0]["byModel"][0]["model"] = "wren-internal-9"
         self.assertTrue(any("is not model" in b for b in gate(q)))
+        q = copy.deepcopy(pub)
+        q["usageDays"][0]["byMachine"][0]["machine"] = "warehouse-box"
+        self.assertTrue(any("is not code" in b for b in gate(q)))
+        q = copy.deepcopy(pub)
+        q["usageDays"][0]["byProject"][0]["project"] = {"masked": True}
+        self.assertTrue(any("merged private row" in b for b in gate(q)))
         for bad in ({"usageDays": {}}, {"usageDays": ["x"]}, {"usageDays": [{"date": "2026-11-17", "tokens": "x"}]}):
             with self.assertRaises(ex.ExportError):
                 self.run_export(page=dict(copy.deepcopy(self.page), **bad), cfg=cfg)
         q = copy.deepcopy(pub)
         q["quota"][0]["account"] = "a_1f2e3d4c"
         self.assertTrue(any("is not code" in b for b in gate(q)))
+
+    def test_public_project_spelling_a_private_word_joins_the_merged_row(self):
+        # "ledgerx" is a part of a private branch, so a private word; a public project whose name contains it
+        # would make the gate refuse the page. Its rows join the merged private row, today and on every day.
+        p = self.page
+        p["activity"] = [a for a in p["activity"] if a.get("repo") != "shuttle-path"]
+        p["code"] = {"repos": [], "commits": [{"repo": "falcon-ledger", "public": False, "hash": "abcdef1", "title": "x",
+                                               "branch": "wip/ledgerx-sync", "source": "local", "t": "2026-11-17T09:00:00+09:00"}]}
+        row = lambda name, pub: {"project": name, "public": pub, "requests": 1, "sessions": 1, "unpricedRequests": 0, "costUsd": 0.5}
+        p["today"]["byProject"] = [row("sdtm-pedia", True), row("ledgerx-tools", True)]
+        p["usageDays"] = [{"date": "2026-11-17", "byProject": [row("sdtm-pedia", True), row("ledgerx-tools", True), row("falcon-ledger", False)]}]
+        pub, ctx = self.run_export()
+        merged = {"masked": True, "group": "private"}
+        self.assertEqual([r["project"] for r in pub["today"]["byProject"]], ["sdtm-pedia", merged])
+        day = pub["usageDays"][0]["byProject"]
+        self.assertEqual([(r["project"], r["requests"], r["costUsd"]) for r in day], [("sdtm-pedia", 1, 0.5), (merged, 2, 1.0)])
+        self.assertNotIn("ledgerx", ex.norm(json.dumps(pub)))
+        self.assertEqual(ctx["degraded"]["projectsMerged"], 2)
+        self.assertEqual(self.gate(pub, ctx), [])
 
     def test_label_equal_to_code_is_not_a_private_name(self):
         for m in self.page["machines"]:

@@ -44,7 +44,8 @@ def title(t): return lambda o: act(o).__setitem__("title", t)
 js("pass-minimal", "valid public page: merged private row, model other, private commit done right, 'owl' only inside 'bowling'", "pass", None)
 js("block-unknown-top-key", "rule 1: key not in the table", "block", "field not in public_fields.json", lambda o: o.__setitem__("notes", "x"))
 js("block-unknown-nested-key", "rule 1: reviewer on a commit (author is public since S17 R09)", "block", "field not in public_fields.json", lambda o: act(o).__setitem__("reviewer", "someone"))
-js("block-hourly", "rule 7: today.hourly never public", "block", "field not in public_fields.json", lambda o: o["today"].__setitem__("hourly", [{"hour": 9, "requests": 3, "costUsd": 0.1}]))
+js("pass-hourly", "today.hourly is public since 2026-11-27: hour, requests, cost", "pass", None, lambda o: o["today"].__setitem__("hourly", [{"hour": 9, "requests": 3, "costUsd": 0.1}]))
+js("block-hourly-extra-key", "an hour row carries only hour, requests and cost", "block", "field not in public_fields.json", lambda o: o["today"].__setitem__("hourly", [{"hour": 9, "requests": 3, "costUsd": 0.1, "project": {"masked": True}}]))
 js("block-masked-extra-key", "placeholder carrying a length hint", "block", "placeholder must be exactly", lambda o: o["services"][1].__setitem__("name", {"masked": True, "len": 13}))
 js("block-group-outside-byproject", "merged-row placeholder only allowed in today.byProject", "block", "placeholder must be exactly", lambda o: o["services"][1].__setitem__("name", {"masked": True, "group": "private"}))
 js("block-text-not-allowlisted", "rule 2: service name not on the allowlist", "block", "is not text", lambda o: o["services"][1].__setitem__("name", "warehouse-sync"))
@@ -82,15 +83,33 @@ js("block-config-hidden-missing", "config hides tailnet but the page does not li
    lambda o: o.__setitem__("hidden", []))
 js("block-local-public-branch", "local commit of a public repo keeps its branch (may be a private fork)", "block", "local commit keeps branch",
    lambda o: o["activity"].append(dict(copy.deepcopy(o["activity"][0]), source="local", url=None)))
-# a public day carries totals, agents and models (CONTRACT 2.2); its project and machine rows stay private
-for key, put in (("usageDays", lambda o: o.__setitem__("usageDays", [{"date": "2026-11-17", "byMachine": [{"machine": "A", "requests": 1, "costUsd": 0.1}]}])),
-                 ("usageDays-byProject", lambda o: o.__setitem__("usageDays", [{"date": "2026-11-17", "byProject": [{"project": {"masked": True}, "public": False, "requests": 1, "costUsd": 0.1}]}])),
-                 ("code", lambda o: o.__setitem__("code", {})),
-                 ("warnings", lambda o: o.__setitem__("warnings", ["probe A is late"])),
-                 ("githubOfficialTotal", lambda o: o.__setitem__("contributions", {"total": 0, "days": [], "githubOfficialTotal": 9})),
-                 ("diskPct", lambda o: o.__setitem__("machines", [{"id": "A", "label": {"masked": True}, "online": True,
-                                                                   "history": [{"t": "2026-11-17T10:00:00+09:00", "cpuPct": 1, "memPct": 2, "diskPct": 3}]}]))):
+for key, put in (("code", lambda o: o.__setitem__("code", {})),
+                 ("warnings", lambda o: o.__setitem__("warnings", ["probe A is late"]))):
     js(f"block-provisional-{key}", f"provisional field {key} from lane A is not public", "block", "field not in public_fields.json", put)
+# public since 2026-11-27 (CONTRACT 2.2): day rows by machine code and by project, and a few plain numbers
+day = lambda **kw: lambda o: o.__setitem__("usageDays", [dict({"date": "2026-11-17"}, **kw)])
+js("pass-public-numbers", "disk history, the official GitHub total and a machine's usage today are plain numbers", "pass", None, lambda o: o.update(
+   contributions={"total": 0, "days": [], "githubOfficialTotal": 9},
+   machines=[{"id": "A", "label": {"masked": True}, "online": True,
+              "history": [{"t": "2026-11-17T10:00:00+09:00", "cpuPct": 1, "memPct": 2, "diskPct": 3}],
+              "todayByAgent": [{"agent": "codex", "requests": 7, "unpricedRequests": 0, "costUsd": 1.5, "sessions": 2}]}]))
+js("pass-usage-day-rows", "a day's machine rows carry codes; its project rows are public repos and one merged private row", "pass", None, day(
+   byMachine=[{"machine": "A", "requests": 1, "sessions": 1, "unpricedRequests": 0, "costUsd": 0.1, "tokens": {"input": 5, "output": 4, "cacheRead": 3, "cacheWrite": 2, "reasoning": 1}}],
+   byProject=[{"project": "sdtm-pedia", "public": True, "requests": 1, "sessions": 1, "unpricedRequests": 0, "costUsd": 0.1},
+              {"project": {"masked": True, "group": "private"}, "public": False, "requests": 2, "sessions": 1, "unpricedRequests": 0, "costUsd": 0.2}]))
+js("block-usage-day-machine", "a day's machine row names a machine that has no public code", "block", "is not code", day(byMachine=[{"machine": "warehouse-box", "requests": 1, "costUsd": 0.1}]))
+js("block-usage-day-machine-key", "a day's machine row carries only the whitelisted keys", "block", "field not in public_fields.json", day(byMachine=[{"machine": "A", "requests": 1, "costUsd": 0.1, "host": "x"}]))
+js("block-usage-day-project-unmerged", "a day's private project row is not the merged row", "block", "merged private row", day(byProject=[{"project": {"masked": True}, "public": False, "requests": 1, "costUsd": 0.1}]))
+js("block-usage-day-project-masked-public", "masked rows marked public would publish each private project's cost on its own", "block", "a public row must show its name", day(byProject=[{"project": {"masked": True}, "public": True, "requests": 1, "costUsd": 0.1}] * 2))
+js("block-byproject-masked-public", "the same for today", "block", "a public row must show its name", lambda o: o["today"]["byProject"].append({"project": {"masked": True}, "public": True, "requests": 1, "costUsd": 0.1}))
+js("block-usage-day-project-twice", "a day has two merged private rows", "block", "more than one merged private row", day(byProject=[{"project": {"masked": True, "group": "private"}, "public": False, "requests": 1, "costUsd": 0.1}] * 2))
+js("block-usage-day-project-name", "a day's project row shows a name that is not a public repo", "block", "is not text", day(byProject=[{"project": "warehouse-sync", "public": True, "requests": 1, "costUsd": 0.1}]))
+js("block-usage-day-project-key", "a day's project row carries only the whitelisted keys", "block", "field not in public_fields.json", day(byProject=[{"project": "sdtm-pedia", "public": True, "requests": 1, "costUsd": 0.1, "path": "x"}]))
+js("block-hidden-byproject-days", "rule 7: hidden byProject, but a day still has project rows", "block", "hidden block byProject", lambda o: (
+   o["today"].__setitem__("byProject", []), o["hidden"].append("byProject"),
+   o.__setitem__("usageDays", [{"date": "2026-11-17", "byProject": [{"project": "sdtm-pedia", "public": True, "requests": 1, "costUsd": 0.1}]}])))
+js("block-today-by-agent-key", "a machine's usage today carries only the whitelisted keys", "block", "field not in public_fields.json", lambda o: o.__setitem__("machines", [
+   {"id": "A", "label": {"masked": True}, "online": True, "todayByAgent": [{"agent": "codex", "requests": 7, "costUsd": 1.5, "project": {"masked": True}}]}]))
 js("pass-usage-days", "a day's totals with its agent and model rows are public (2026-11-27)", "pass", None, lambda o: o.__setitem__("usageDays", [{
    "date": "2026-11-17", "requests": 3, "sessions": 2, "unpricedRequests": 1, "cacheHitRate": 0.5, "costUsd": 0.4,
    "tokens": {"input": 5, "output": 4, "cacheRead": 3, "cacheWrite": 2, "reasoning": 1},

@@ -18,11 +18,13 @@ private one: a path not in that table cannot reach the output. On the way:
   joins into a name becomes ****** (A6). A public branch that joins into a name becomes null (A6). The same
   happens when a title or branch forms one of the gate's patterns only once serialised or decoded (A8: "\\r\\n"
   is "\\\\r\\\\n" in JSON, a \\\\host\\ path to the gate).
-- today.byProject merges private projects into one {"masked": true, "group": "private"} row.
+- today.byProject and each usageDays[].byProject merge private projects into one {"masked": true, "group": "private"} row.
 - Quota rows without an account code are dropped; unknown models become "other".
-- Hidden blocks are [] (rule 7); today.hourly is not in the table, so it never appears.
-- usageDays: each day's totals and its byAgent / byModel rows (numbers, agent and model ids); byProject and
-  byMachine are not in the table, so a day never names a project or a machine.
+- Hidden blocks are [] (rule 7).
+- usageDays: each day's totals and its byAgent / byModel / byMachine rows (numbers, agent and model ids, machine
+  codes; a machine without a public code is left out); byProject follows today.byProject, one merged private row a day.
+- Numbers the owner made public on 2026-11-27: today.hourly, machines[].todayByAgent, machines[].history[].diskPct,
+  contributions.githubOfficialTotal.
 - Commit files (S17 R09): `files` only on public, pushed GitHub commits, at most 50, and only when
   every path is a clean repo-relative path that carries no private name, term, branch part, commit
   id or pattern the gate looks for; otherwise that one commit keeps only its count `nFiles`. The
@@ -554,6 +556,7 @@ def _hour(t):
     return s[:-6] + "Z" if t.endswith("Z") and s.endswith("+00:00") else s
 
 
+PROJECT_FIELDS = ("today.byProject[].project", "usageDays[].byProject[].project")     # public repo names, or the merged private row
 VISIBILITY_SITES = (("activity", "repo"), ("today.byProject", "project"), ("code.commits", "repo"),
                     ("code.repos", "repo"), ("usageDays[].byProject", "project"))
 
@@ -633,7 +636,7 @@ def export(page, cfg, terms):
             kept.append((g, v))
     texts = kept
     names = {v for g, v in texts if g not in NAME_FIELDS_SKIP and v not in cfg["allow"].get(g, ())
-             and not (g in ("activity[].repo", "today.byProject[].project") and v in public_repos)}
+             and not (g in ("activity[].repo", *PROJECT_FIELDS) and v in public_repos)}
     names |= {e[k] for e, k in visibility_sites(src) if isinstance(e.get(k), str) and not is_public(e, k)}
     private_keys = {k for k, v in verdict.items() if not v}
     allow_all = {a for a in allow_all if norm(a) not in private_keys}
@@ -729,19 +732,35 @@ def export(page, cfg, terms):
         e["title"] = title
         _files_and_author(e, is_public(e, "repo"), matcher, cfg, notes)
 
-    if by_project:
-        pub_rows = [p for p in by_project if is_public(p, "project")]
-        priv_rows = [p for p in by_project if not is_public(p, "project")]
+    days = [d for d in (src.get("usageDays") if isinstance(src.get("usageDays"), list) else []) if isinstance(d, dict)]
+    for holder in [today, *days]:               # today and every day: private projects become one merged row
+        rows = holder.get("byProject")
+        if not (isinstance(rows, list) and rows):
+            continue
+        rows = [p for p in rows if isinstance(p, dict)]
+        # A public name that spells a private word (say a part of a private branch) would make the gate refuse the
+        # whole page: such a row joins the merged private row instead. Judged with the stricter title set and on every
+        # layer the gate decodes, so this is never looser than the gate; it may merge a row the gate would have let by.
+        shown = lambda p: is_public(p, "project") and not any(title_matcher.hit(t) for t in (p["project"], *gate_layers(p["project"])))
+        pub_rows = [p for p in rows if shown(p)]
+        priv_rows = [p for p in rows if not shown(p)]
+        notes["projectsMerged"] += sum(1 for p in priv_rows if is_public(p, "project"))
         if priv_rows:
-            pub_rows.append({"project": _PRIVATE_GROUP, "public": False,
-                             "requests": sum(p.get("requests") or 0 for p in priv_rows),
-                             "costUsd": round(sum(p.get("costUsd") or 0 for p in priv_rows), 2)})
-        today["byProject"] = pub_rows
+            merged = {"project": _PRIVATE_GROUP, "public": False,
+                      "requests": sum(p.get("requests") or 0 for p in priv_rows),
+                      "costUsd": round(sum(p.get("costUsd") or 0 for p in priv_rows), 2)}
+            if holder is not today:
+                merged.update(sessions=sum(p.get("sessions") or 0 for p in priv_rows),
+                              unpricedRequests=sum(p.get("unpricedRequests") or 0 for p in priv_rows))
+            pub_rows.append(merged)
+        holder["byProject"] = pub_rows
+    for d in days:                              # a machine without a public code is left out of the day
+        if isinstance(d.get("byMachine"), list):
+            d["byMachine"] = [m for m in d["byMachine"] if isinstance(m, dict) and is_code(m.get("machine"), cfg)]
     for r in src.get("runtimes") or []:                   # odd versions are dropped, not published
         if isinstance(r, dict) and isinstance(r.get("version"), str) and not SEMVER.fullmatch(r["version"]):
             r["version"] = None
-    days = src.get("usageDays") if isinstance(src.get("usageDays"), list) else []
-    for m in [m for d in [today, *days] if isinstance(d, dict) for m in d.get("byModel") or [] if isinstance(m, dict)]:
+    for m in [m for d in [today, *days] for m in d.get("byModel") or [] if isinstance(m, dict)]:
         if not isinstance(m.get("model"), str) or m["model"] not in MODELS:
             m["model"] = "other"
     if "quota" in src:
@@ -751,6 +770,9 @@ def export(page, cfg, terms):
     for h in hidden:
         if h == "byProject":
             src.setdefault("today", {})["byProject"] = []
+            for d in days:
+                if "byProject" in d:
+                    d["byProject"] = []
         else:
             src[h] = []
     src["hidden"] = hidden
@@ -758,7 +780,7 @@ def export(page, cfg, terms):
 
     def allowed(g):
         a = set(cfg["allow"].get(g, ()))
-        if g in ("activity[].repo", "today.byProject[].project"):
+        if g in ("activity[].repo", *PROJECT_FIELDS):
             a |= public_repos
         if g == "activity[].branch":
             a |= branches
@@ -773,7 +795,7 @@ def export(page, cfg, terms):
     ctx = {"privateNames": sorted(names | hashes | hosts | frags), "publicRepos": sorted(public_repos),
            "publicBranches": sorted(branches),
            "degraded": {k: notes[k] for k in ("filesDropped", "filesJoined", "branchesJoined", "titlesJoined",
-                                               "linksDropped", "authorsDropped")}}
+                                               "linksDropped", "authorsDropped", "projectsMerged")}}
     return pub, ctx
 
 

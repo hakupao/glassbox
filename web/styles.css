@@ -225,7 +225,7 @@ button{font:inherit;color:inherit}
 .xd>td{border-top:0;padding:var(--s1) 0 var(--s3) var(--s4)}
 .xd .box,.act .xd{border-left:2px solid var(--line);padding:var(--s1) 0 var(--s1) 14px}
 .act li.xd{display:block;border-top:0;padding:0 0 10px 0}
-.xd .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s3) 22px}
+.xd .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s3) 22px}
 
 /* filters */
 .bar-f{display:flex;flex-wrap:wrap;gap:var(--s2) 14px;align-items:center;margin:-4px 0 var(--s3)}

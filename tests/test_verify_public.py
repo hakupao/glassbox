@@ -278,7 +278,7 @@ class GateCliTest(unittest.TestCase):
                       "--private", RT / "context" / "private.json")
         self.assertEqual(rc, 1)
         self.assertIn("view must be 'public'", out)
-        self.assertIn("field not in public_fields.json", out)          # today.hourly, its key masked
+        self.assertIn("private name #", out)                           # names are numbered, never spelled
         self.assertNotRegex(out, r"[A-Za-z]\*{3,}")                   # L7: no first letters or lengths
 
     def test_default_config_requires_prefix_only_private_titles(self):

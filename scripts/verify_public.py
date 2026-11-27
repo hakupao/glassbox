@@ -73,7 +73,7 @@ FIELDS = json.loads((ROOT / "schema" / "public_fields.json").read_text(encoding=
 MODELS = set(json.loads((ROOT / "probe" / "pricing.json").read_text(encoding="utf-8"))["models"])
 MASK = {"masked": True}
 MASK_PRIVATE = {"masked": True, "group": "private"}
-GROUP_FIELD = "today.byProject[].project"
+GROUP_FIELDS = ("today.byProject[].project", "usageDays[].byProject[].project")     # where the merged private row may stand
 FILES_MAX = 50
 PATH_MAX = 300
 LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}")
@@ -520,7 +520,7 @@ class Gate:
         # Review 2: the snapshot must come from this private page: same generatedAt (copied as is).
         self.private_generated = None if private is None else (private.get("generatedAt") or "(missing)")
         self.public_repos = public
-        for f in ("activity[].repo", GROUP_FIELD):
+        for f in ("activity[].repo", *GROUP_FIELDS):
             self.allow.setdefault(f, set()).update(public)
         self.allow.setdefault("activity[].branch", set()).update(branches)
         self.codes = set(config.get("codes", []))
@@ -554,7 +554,7 @@ class Gate:
         # A name both public and private is a contradiction the exporter must not have resolved
         # towards public (review H1): allowlists or visibility flags disagree.
         private_keys = {norm(n) for n in set(words) | set(derived) | set(self.keywords) | self.private_projects}
-        shown = {v for f in ("activity[].repo", GROUP_FIELD) for v in self.allow.get(f, ())}
+        shown = {v for f in ("activity[].repo", *GROUP_FIELDS) for v in self.allow.get(f, ())}
         self.conflicts = sorted(v for v in shown if norm(v) in private_keys)
 
     def _compile(self, names):
@@ -631,7 +631,7 @@ class Gate:
         if kind == "null":
             return v is None
         if kind == "text":
-            return is_mask(v) or (g == GROUP_FIELD and is_group(v)) or (
+            return is_mask(v) or (g in GROUP_FIELDS and is_group(v)) or (
                 isinstance(v, str) and v in self.allow.get(g, ()))
         if not isinstance(v, str):
             return False
@@ -678,7 +678,7 @@ class Gate:
                     why = " — contains " + ", ".join(self.title_problems(node))
                 elif isinstance(node, dict):
                     why = " — placeholder must be exactly {\"masked\": true}" + (
-                        " or the merged private row" if g == GROUP_FIELD else "")
+                        " or the merged private row" if g in GROUP_FIELDS else "")
                 bad.append(f"{path}: value ({type(node).__name__}, {hide(node) if isinstance(node, str) else ''}) "
                            f"is not {typ}{why}")
             return
@@ -761,20 +761,24 @@ class Gate:
                 if not (isinstance(n, int) and not isinstance(n, bool) and n >= len(files)):
                     bad.append(f"{p}: nFiles is missing or smaller than the file list")
         today = page.get("today") if isinstance(page.get("today"), dict) else {}
-        rows = today.get("byProject") if isinstance(today.get("byProject"), list) else []
-        for i, r in enumerate(rows):
-            if isinstance(r, dict) and r.get("public") is not True and not is_group(r.get("project")):
-                bad.append(f"{where}: today.byProject[{i}]: private usage must be the merged private row")
-            if isinstance(r, dict) and is_group(r.get("project")) and r.get("public") is not False:
-                bad.append(f"{where}: today.byProject[{i}]: merged private row must have public false")
-        if sum(1 for r in rows if isinstance(r, dict) and is_group(r.get("project"))) > 1:
-            bad.append(f"{where}: today.byProject: more than one merged private row")
+        days = [d for d in (page.get("usageDays") if isinstance(page.get("usageDays"), list) else []) if isinstance(d, dict)]
+        for name, holder in [("today", today), *((f"usageDays[{n}]", d) for n, d in enumerate(days))]:
+            rows = holder.get("byProject") if isinstance(holder.get("byProject"), list) else []
+            for i, r in enumerate(rows):
+                if isinstance(r, dict) and r.get("public") is not True and not is_group(r.get("project")):
+                    bad.append(f"{where}: {name}.byProject[{i}]: private usage must be the merged private row")
+                if isinstance(r, dict) and is_group(r.get("project")) and r.get("public") is not False:
+                    bad.append(f"{where}: {name}.byProject[{i}]: merged private row must have public false")
+                if isinstance(r, dict) and r.get("public") is True and not isinstance(r.get("project"), str):
+                    bad.append(f"{where}: {name}.byProject[{i}]: a public row must show its name")       # no per-project masked rows
+            if sum(1 for r in rows if isinstance(r, dict) and is_group(r.get("project"))) > 1:
+                bad.append(f"{where}: {name}.byProject: more than one merged private row")
         hidden = page.get("hidden") if isinstance(page.get("hidden"), list) else []
         for h in sorted(self.hidden - set(h for h in hidden if isinstance(h, str))):
             bad.append(f"{where}: config hides {h} but the page does not")
         for h in (h for h in hidden if isinstance(h, str)):
             block = today.get("byProject") if h == "byProject" else page.get(h)
-            if block not in ([], None):
+            if block not in ([], None) or (h == "byProject" and any(d.get("byProject") not in ([], None) for d in days)):
                 bad.append(f"{where}: hidden block {h} is not []")
         return bad
 

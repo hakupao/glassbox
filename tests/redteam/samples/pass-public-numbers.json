@@ -100,5 +100,31 @@
   "total": 0,
   "days": [],
   "githubOfficialTotal": 9
- }
+ },
+ "machines": [
+  {
+   "id": "A",
+   "label": {
+    "masked": true
+   },
+   "online": true,
+   "history": [
+    {
+     "t": "2026-11-17T10:00:00+09:00",
+     "cpuPct": 1,
+     "memPct": 2,
+     "diskPct": 3
+    }
+   ],
+   "todayByAgent": [
+    {
+     "agent": "codex",
+     "requests": 7,
+     "unpricedRequests": 0,
+     "costUsd": 1.5,
+     "sessions": 2
+    }
+   ]
+  }
+ ]
 }

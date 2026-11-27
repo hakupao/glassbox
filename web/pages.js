@@ -472,7 +472,7 @@ P.usage = params => {
       G.pn('u-proj', G.ph('u-proj', 'list', 'ok', esc(t('usage.todayProject')), '', '') + `<table class="tb">${projectRows(D.today.byProject, false)}</table>`) + `</div>`;
   }
 
-  /* today by hour (private only) */
+  /* today by hour */
   const n0 = full ? 4 : 3;
   if(D.today.hourly && D.today.hourly.length){
     const hr = D.today.hourly.slice().sort((a, b) => a.hour - b.hour), reqs = hr.map(x => x.requests), cost = hr.map(x => x.costUsd);

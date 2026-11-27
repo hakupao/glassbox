@@ -327,7 +327,6 @@ _DROP = object()
 
 src = json.loads(json.dumps(page))
 src["view"] = "public"
-src["today"].pop("hourly")                                         # rule 7
 priv = [p for p in src["today"]["byProject"] if not p["public"]]
 src["today"]["byProject"] = [p for p in src["today"]["byProject"] if p["public"]] + [{
     "project": {"masked": True, "group": "private"}, "public": False,
@@ -375,7 +374,7 @@ leaks = [s for s in PRIVATE_NAMES if norm(s) in text]
 assert not leaks, f"public example leaks: {leaks}"
 assert all(a["hash"] is None and a["url"] is None and a["machine"] is None
            for a in pub["activity"] if not a["public"]), "private activity keeps identifiers"
-assert "hourly" not in pub["today"] and pub["tailnet"] == [], "rule 7"
+assert pub["tailnet"] == [], "rule 7"
 assert pub["contributions"]["total"] == sum(x["count"] for x in pub["contributions"]["days"])
 assert pub["contributions"]["days"][0]["date"] == start.isoformat() and date.fromisoformat(start.isoformat()).isoweekday() == 7
 assert page["trend"][-1]["date"] == today_d.isoformat()

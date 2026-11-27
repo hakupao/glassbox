@@ -39,6 +39,14 @@
     "public": false,
     "requests": 50,
     "costUsd": 1.7
+   },
+   {
+    "project": {
+     "masked": true
+    },
+    "public": true,
+    "requests": 1,
+    "costUsd": 0.1
    }
   ]
  },
@@ -95,22 +103,5 @@
  "tailnet": [],
  "hidden": [
   "tailnet"
- ],
- "machines": [
-  {
-   "id": "A",
-   "label": {
-    "masked": true
-   },
-   "online": true,
-   "history": [
-    {
-     "t": "2026-11-17T10:00:00+09:00",
-     "cpuPct": 1,
-     "memPct": 2,
-     "diskPct": 3
-    }
-   ]
-  }
  ]
 }
