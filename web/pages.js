@@ -406,10 +406,11 @@ P.usage = params => {
   let range = parseInt(params.get('range') || '30', 10); if(!ranges.includes(range)) range = 30;
   const dims = full ? ['agent', 'model', 'project', 'machine'] : ['agent'];
   let dim = params.get('by') || 'agent'; if(!dims.includes(dim)) dim = 'agent';
-  const metric = full && params.get('m') === 'requests' ? 'requests' : 'cost';
+  const metrics = dim === 'project' ? ['cost', 'requests'] : ['cost', 'requests', 'tokens'];      /* a day's project rows carry no token counts */
+  const metric = full && metrics.includes(params.get('m')) ? params.get('m') : 'cost';
   const link = o => G.href('usage', {range, by: dim, m: metric === 'cost' ? null : metric, ...o});
   let h = '';
-  const ctrl = `<div class="bar-f"><span class="flab">${esc(t('usage.range'))}</span>${seg(ranges.map(r => [r, esc(t('usage.days', {n: r}))]), range, v => link({range: v}))}</div>`;
+  const ctrl = `<div class="bar-f"><span class="flab">${esc(t('usage.range'))}</span>${seg(ranges.map(r => [r, esc(t('usage.days', {n: r}))]), range, v => link({range: v}))}${full ? G.more(link({sec: 'days'}), 'usage.toDays') : ''}</div>`;
 
   if(full){
     const days = D.usageDays.slice(-range), A = aggregate(days), tt = A.tot, totTok = G.totTok(tt.tokens), den = tt.tokens.input + tt.tokens.cacheRead + tt.tokens.cacheWrite;
@@ -426,7 +427,7 @@ P.usage = params => {
 
     /* stacked daily chart */
     let series, partOf;
-    const val = x => metric === 'cost' ? (x.costUsd || 0) : x.requests;
+    const val = x => metric === 'cost' ? (x.costUsd || 0) : metric === 'tokens' ? (x.tokens ? G.totTok(x.tokens) : 0) : x.requests;
     if(dim === 'agent'){
       series = [{key: 'codex', label: 'Codex', color: C.OR}, {key: 'claude-code', label: 'Claude Code', color: C.BLUE}];
       partOf = d => Object.fromEntries(d.byAgent.map(a => [a.agent, val(a)]));
@@ -445,11 +446,11 @@ P.usage = params => {
       series.reverse();
       partOf = d => { const o = {}; for(const x of (dim === 'model' ? d.byModel : d.byProject)){ const k = keys.has(keyOf(x)) ? keyOf(x) : '\u0000rest'; o[k] = (o[k] || 0) + val(x); } return o; };
     }
-    const fmt = metric === 'cost' ? F.usd : F.n;
+    const fmt = metric === 'cost' ? F.usd : metric === 'tokens' ? F.tok : F.n;
     h += G.grpH('02', 'usage.grpDaily');
-    h += G.pn('u-daily', G.ph('u-daily', 'bars', 'or', esc(t(metric === 'cost' ? 'usage.dailyCost' : 'usage.dailyReq')), esc(t('usage.days', {n: range})), legend(series.slice().reverse())) +
+    h += G.pn('u-daily', G.ph('u-daily', 'bars', 'or', esc(t(metric === 'cost' ? 'usage.dailyCost' : metric === 'tokens' ? 'usage.dailyTok' : 'usage.dailyReq')), esc(t('usage.days', {n: range})), legend(series.slice().reverse())) +
       `<div class="bar-f"><span class="flab">${esc(t('usage.by'))}</span>${seg(dims.map(d => [d, esc(t('usage.by.' + d))]), dim, v => link({by: v}))}
-        <span class="flab">${esc(t('usage.metric'))}</span>${seg([['cost', esc(t('kpi.cost'))], ['requests', esc(t('kpi.requests'))]], metric, v => link({m: v === 'cost' ? null : v}))}</div>` +
+        <span class="flab">${esc(t('usage.metric'))}</span>${seg(metrics.map(m => [m, esc(t('kpi.' + m))]), metric, v => link({m: v === 'cost' ? null : v}))}</div>` +
       `<div class="chart">${G.fit('u-chart', w => stackChart(w, days.map(d => ({date: d.date, parts: partOf(d)})), series, fmt))}</div>` + xLabels(days.map(d => d.date)));
 
     h += G.grpH('03', 'usage.grpBreakdown');
@@ -493,11 +494,11 @@ P.usage = params => {
   if(full){
     const days = D.usageDays.slice(-range).slice().reverse();
     h += G.grpH('0' + (n0 + 1 + (D.today.hourly && D.today.hourly.length ? 1 : 0)), 'usage.grpDays');
-    h += G.pn('u-days', G.ph('u-days', 'list', 'fg', esc(t('usage.dayTable')), esc(t('usage.days', {n: range})), esc(t('detail.hint'))) + `<div class="tbw"><table class="tb">
-      <tr><th>${esc(t('usage.date'))}</th><th class="v">${esc(t('kpi.requests'))}</th><th class="v hide-s">${esc(t('kpi.sessions'))}</th><th class="v hide-s">${esc(t('kpi.tokens'))}</th><th class="v hide-m">${esc(t('kpi.hit'))}</th><th class="v">${esc(t('kpi.cost'))}</th><th class="bar hide-s"></th></tr>
+    h += `<div id="sec-days"></div>` + G.pn('u-days', G.ph('u-days', 'list', 'fg', esc(t('usage.dayTable')), esc(t('usage.days', {n: range})), esc(t('detail.hint'))) + `<div class="tbw"><table class="tb">
+      <tr><th>${esc(t('usage.date'))}</th><th class="v hide-s">${esc(t('kpi.requests'))}</th><th class="v hide-s">${esc(t('kpi.sessions'))}</th><th class="v">${esc(t('kpi.tokens'))}</th><th class="v hide-m">${esc(t('kpi.hit'))}</th><th class="v">${esc(t('kpi.cost'))}</th><th class="bar hide-s"></th></tr>
       ${dayRows(days)}</table></div>`);
   }
-  if(params.get('sec') === 'quota') G.after(() => { const el = G.$('sec-quota'); if(el) el.scrollIntoView({block: 'start'}); });
+  if(['quota', 'days'].includes(params.get('sec'))) G.after(() => { const el = G.$('sec-' + params.get('sec')); if(el) el.scrollIntoView({block: 'start'}); });
   return h;
 };
 function agentRows(list, totCost, days){
@@ -523,9 +524,9 @@ function dayRows(days){
   const mx = max(days.map(d => d.costUsd)) || 1;
   return days.map((d, i) => {
     const key = 'd' + i, tot = G.totTok(d.tokens);
-    if(d.requests > 0) G.detail(key, () => `<div class="xd-grid grid"><div><div class="lab">${esc(t('usage.byModel'))}</div><table class="tb">${modelRows(d.byModel, false)}</table></div><div><div class="lab">${esc(t('usage.byProject'))}</div><table class="tb">${projectRows(d.byProject, false)}</table></div><div><div class="lab">${esc(t('usage.byMachine'))}</div><table class="tb">${machineRows(d.byMachine, d.costUsd, null)}</table></div></div>`);
+    if(d.requests > 0) G.detail(key, () => `<div class="xd-grid grid"><div><div class="lab">${esc(t('usage.tokens'))}</div><table class="tb">${tokenRows(d.tokens)}</table></div><div><div class="lab">${esc(t('usage.byModel'))}</div><table class="tb">${modelRows(d.byModel, false)}</table></div><div><div class="lab">${esc(t('usage.byProject'))}</div><table class="tb">${projectRows(d.byProject, false)}</table></div><div><div class="lab">${esc(t('usage.byMachine'))}</div><table class="tb">${machineRows(d.byMachine, d.costUsd, null)}</table></div></div>`);
     const attrs = d.requests > 0 ? G.xattrs(key) : '';
-    return `<tr ${attrs}${d.requests ? '' : ' style="opacity:.45"'}><td class="k">${d.requests ? '<span class="tw">▸</span>' : '<span class="tw"></span>'}${esc(F.dfull(d.date))}</td><td class="v">${F.n(d.requests)}</td><td class="v hide-s">${F.n(d.sessions)}</td><td class="v hide-s">${F.tok(tot)}</td><td class="v hide-m">${d.requests ? F.pct1(d.cacheHitRate) : '—'}</td><td class="v">${F.usd(d.costUsd)}</td><td class="bar hide-s">${G.bar(d.costUsd / mx, 4)}</td></tr>` +
+    return `<tr ${attrs}${d.requests ? '' : ' style="opacity:.45"'}><td class="k">${d.requests ? '<span class="tw">▸</span>' : '<span class="tw"></span>'}${esc(F.dfull(d.date))}</td><td class="v hide-s">${F.n(d.requests)}</td><td class="v hide-s">${F.n(d.sessions)}</td><td class="v">${F.tok(tot)}</td><td class="v hide-m">${d.requests ? F.pct1(d.cacheHitRate) : '—'}</td><td class="v">${F.usd(d.costUsd)}</td><td class="bar hide-s">${G.bar(d.costUsd / mx, 4)}</td></tr>` +
       (d.requests > 0 ? `<tr class="xd" id="xd-${key}" hidden><td colspan="7"><div class="box" data-slot></div></td></tr>` : '');
   }).join('');
 }
