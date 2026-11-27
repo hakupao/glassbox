@@ -2,8 +2,13 @@
 
 Claude: the statusline tap (scripts/statusline-tap.sh) appends the statusline's
 `rate_limits` to a JSONL file. Codex: token_count events in its transcripts carry
-`rate_limits`. Idle sessions report stale (lower) values, but usage only grows within
+`rate_limits`. Idle sessions report stale (lower) values, and usage only grows within
 one reset window, so each window is reported as a running maximum.
+
+The exception is a reset inside a window (the user resets the limit by hand: usage falls,
+the reset time stays). A session that reports a value different from its own last one has
+news; when one session has such news well below the maximum twice, a minute or more apart,
+the window was reset and the maximum starts again there (see _envelope).
 """
 import hashlib
 import json
@@ -47,19 +52,56 @@ def codex_account():
     return (_read_json("~/.codex/auth.json").get("tokens") or {}).get("account_id")
 
 
+DROP = 5            # points that count as far from the maximum: less is two sessions reporting a moment apart
+HOLD = 60           # seconds a far value must last: a session that wakes shows an old number for a second or two
+
+
 def _envelope(samples):
-    """samples: (sampledAt epoch, window, usedPct, resetsAt epoch). Keep a running maximum per
-    (window, resetsAt) and only the points where it rises, plus the last point of each window."""
-    out, best, last = [], {}, {}
-    for t, w, pct, reset in sorted(samples):
+    """samples: (sampledAt epoch, window, usedPct, resetsAt epoch[, session]). Per (window, resetsAt): a running
+    maximum, the points where it rises, and its last point.
+
+    A reset inside the window is read from "news" only: a session reporting a value different from its own last
+    one. News DROP or more below the maximum puts that session in doubt; when the same session has news that low
+    again HOLD seconds or more later, and nobody had news that was not low in between, the window was reset: the
+    old run is closed on its last point and the maximum starts again from that value. (One low value is not
+    enough: a waking session first shows a number from earlier, then corrects it.)
+    Every other sample (a session's first, a repeat, one without a session id) can only raise the maximum, and
+    after a reset is not read at all, as it may be a number from before the reset. After a reset, news far above
+    the maximum is taken at once from a session already heard in the new run, and from any other session only
+    once it has lasted HOLD seconds in the same way."""
+    out, st = [], {}
+    for t, w, pct, reset, *rest in sorted(samples, key=lambda x: x[:4]):
+        sid = rest[0] if rest else None
         k = (w, round(reset / 60))                     # reset times jitter by seconds
-        if pct > best.get(k, -1):
-            best[k] = pct
+        z = st.setdefault(k, {"best": -1, "last": None, "prev": {}, "reset": False, "doubt": {}, "run": set()})
+        prev = z["prev"].get(sid) if sid else None
+        if sid:
+            z["prev"][sid] = pct
+        take = False
+        if prev is None or pct == prev:                # not news: raise only, and only while no reset was seen
+            take = not z["reset"] and pct > z["best"]
+        else:
+            side = (0 if z["best"] < 0 else -1 if pct <= z["best"] - DROP
+                    else 1 if z["reset"] and sid not in z["run"] and pct >= z["best"] + DROP else 0)
+            if not side:
+                z["doubt"], take = {}, pct > z["best"]
+                z["run"].add(sid)
+            elif z["doubt"].get(sid, (0, 0))[0] != side:
+                z["doubt"][sid] = (side, t)
+            elif t - z["doubt"][sid][1] >= HOLD:       # it lasted: the window was reset (or, after one, really is that high)
+                if side < 0:
+                    out.append(z["last"])              # the last point before the fall
+                    z.update(reset=True, run=set())
+                z["doubt"], z["best"], take = {}, -1, True
+                z["run"].add(sid)
+        if take:
+            z["best"] = pct
             out.append((t, w, pct, reset))
-        last[k] = (t, w, best[k], reset)
-    seen = {(t, w) for t, w, _, _ in out}
-    out += [v for v in last.values() if (v[0], v[1]) not in seen]
-    return sorted(out)
+        if z["best"] >= 0:
+            z["last"] = (t, w, z["best"], reset)
+    out += [z["last"] for z in st.values() if z["last"]]
+    # one point per reported second and window (the hub keeps the first it gets): the later one wins
+    return sorted({(int(t), w): (t, w, pct, reset) for t, w, pct, reset in sorted(set(out))}.values())
 
 
 def claude_samples(paths, since):
@@ -74,6 +116,7 @@ def claude_samples(paths, since):
                     rec = json.loads(line)
                     ts = float(rec["ts"])
                     rl = rec["sample"]["r"]
+                    sid = rec["sample"].get("s") if isinstance(rec["sample"].get("s"), str) else None
                 except (ValueError, KeyError, TypeError):
                     continue
                 if ts < since or not isinstance(rl, dict):
@@ -82,7 +125,7 @@ def claude_samples(paths, since):
                     v = rl.get(key)
                     if isinstance(v, dict) and isinstance(v.get("used_percentage"), (int, float)) \
                             and isinstance(v.get("resets_at"), (int, float)):
-                        raw.append((ts, w, float(v["used_percentage"]), float(v["resets_at"])))
+                        raw.append((ts, w, float(v["used_percentage"]), float(v["resets_at"]), sid))
     return _envelope(raw)
 
 
@@ -116,7 +159,7 @@ def codex_samples(roots, since):
                             continue
                         w = CODEX_WINDOWS.get(v.get("window_minutes"))
                         if w and isinstance(v.get("used_percent"), (int, float)) and isinstance(v.get("resets_at"), (int, float)):
-                            raw.append((ts, w, float(v["used_percent"]), float(v["resets_at"])))
+                            raw.append((ts, w, float(v["used_percent"]), float(v["resets_at"]), str(f)))      # one transcript = one session
     return _envelope(raw)
 
 
