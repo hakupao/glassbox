@@ -207,10 +207,12 @@ button{font:inherit;color:inherit}
 .tb .bar{width:34%} .tb .bar svg{width:100%;height:6px}
 .tb .k{font:var(--fs-3) var(--mono);color:var(--ink-3);white-space:nowrap}
 .tb .t{color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
-@media (max-width:560px){.tb .bar{width:22%}.hide-s{display:none}}
+@media (max-width:560px){.tb .bar{width:16%}.hide-s{display:none}}
 @media (max-width:760px){.hide-m{display:none}
   /* the name column takes what is left and ellipsises instead of widening the table */
-  .tb td.n{max-width:0;width:100%}.tb td.n .bd{max-width:calc(100% - 18px)}.tb .bar{min-width:40px}}
+  .tb td.n{max-width:0;width:100%}.tb td.n .bd{max-width:calc(100% - 18px)}.tb .bar{min-width:40px}
+  /* a badge in the name column is never cut: it takes the whole cell when no twisty stands before it, and a long name wraps inside it */
+  .tb td.n>.bd:first-child{max-width:100%}.tb td.n .bd{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}}
 .sep{height:16px}
 .tbw{overflow-x:auto}
 
